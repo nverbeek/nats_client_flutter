@@ -42,8 +42,20 @@ class _MyHomePageState extends State<MyHomePage> {
   String port = '4222';
   String scheme = 'nats://';
   String fullUri = '';
+  int selectedIndex = 0;
 
-  List<String> items = List<String>.generate(10, (i) => 'Item $i');
+  String testCode = """
+  {
+  "deploymentId": "SomeTempDeployment",
+  "deviceId": "C6565BB1",
+  "eventTime": "2023-05-23T15:05:05.003Z",
+  "messageType": "MobileDeviceEventFact",
+  "userId": "PDV23",
+  "eventType": "WORKFLOW_STATE",
+  "eventValue": "EngineTester.MainTask.clMainTask.stWelcome"
+  }""";
+
+  List<String> items = [];
 
   void updateFullUri() {
     setState(() {
@@ -60,7 +72,8 @@ class _MyHomePageState extends State<MyHomePage> {
       debugPrint('Failed to connect');
     }
     var sub = client.sub('subject1');
-    client.pubString('subject1', 'message1');
+    client.pubString('subject1',
+        '{"deploymentId":"SomeTempDeployment","deviceId":"C6565BB1","eventTime":"2023-05-23T15:05:05.003Z","messageType":"MobileDeviceEventFact","userId":"PDV23","eventType":"WORKFLOW_STATE","eventValue":"EngineTester.MainTask.clMainTask.stWelcome"}');
     var data = await sub.stream.first;
 
     debugPrint(data.string);
@@ -139,11 +152,11 @@ class _MyHomePageState extends State<MyHomePage> {
                   ),
                 ),
                 Container(
-                    padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
-                    child: SizedBox(
+                  padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
+                  child: SizedBox(
                       height: 50,
                       child: ElevatedButton(
-                        onPressed: natsConnect, child: const Text('✔️'))),
+                          onPressed: natsConnect, child: const Text('✔️'))),
                 ),
               ],
             ),
@@ -153,19 +166,36 @@ class _MyHomePageState extends State<MyHomePage> {
             style: Theme.of(context).textTheme.bodySmall,
           ),
           Expanded(
-              child: ListView.builder(
-                itemCount: items.length,
-                prototypeItem: ListTile(
-                  title: Text(items.first),
-                ),
-                itemBuilder: (context, index) {
-                  return ListTile(
-                    title: Text(items[index]),
-              );
-            },
-          )),
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                return ListTile(
+                  title: Text(items[index]),
+                  tileColor: selectedIndex == index ? Theme.of(context).colorScheme.inversePrimary : null,
+                  onTap: () {
+                    setState(() {
+                      selectedIndex = index;
+                    });
+                  },
+                );
+              },
+            ),
+          ),
         ],
       ),
     );
   }
 }
+
+// Flexible(
+//   child: HighlightView(
+//     testCode,
+//     language: 'json',
+//     theme: atomOneDarkTheme,
+//     padding: const EdgeInsets.all(10),
+//     textStyle: const TextStyle(
+//         fontFamily:
+//             'SFMono-Regular,Consolas,Liberation Mono,Menlo,monospace'),
+//   ),
+// ),
