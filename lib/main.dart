@@ -45,6 +45,9 @@ class _MyHomePageState extends State<MyHomePage> {
   String scheme = 'nats://';
   String fullUri = '';
   int selectedIndex = 0;
+
+  // nats stuff
+  late Client natsClient;
   bool isConnected = false;
 
   String testCode = """
@@ -74,14 +77,14 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void natsConnect() async {
-    var client = Client();
+    natsClient = Client();
     debugPrint('NVB about to connect to $fullUri');
     try {
       Uri uri = Uri.parse(fullUri);
-      await client.connect(uri, retry: false);
+      await natsClient.connect(uri, retry: false);
       isConnected = true;
-      var sub = client.sub('subject1');
-      client.pubString('subject1',
+      var sub = natsClient.sub('subject1');
+      natsClient.pubString('subject1',
           '{"deploymentId":"SomeTempDeployment","deviceId":"C6565BB1","eventTime":"2023-05-23T15:05:05.003Z","messageType":"MobileDeviceEventFact","userId":"PDV23","eventType":"WORKFLOW_STATE","eventValue":"EngineTester.MainTask.clMainTask.stWelcome"}');
       var data = await sub.stream.first;
 
@@ -89,8 +92,6 @@ class _MyHomePageState extends State<MyHomePage> {
       setState(() {
         items.insert(0, data.string);
       });
-      client.unSub(sub);
-      await client.close();
     } on HttpException {
       showSnackBar('Failed to connect!');
     } on Exception {
@@ -98,6 +99,14 @@ class _MyHomePageState extends State<MyHomePage> {
     } catch (_) {
       showSnackBar('Failed to connect!');
     }
+  }
+
+  void natsDisconnect() async {
+    await natsClient.close();
+
+    setState(() {
+      isConnected = false;
+    });
   }
 
   void showSnackBar(String message) {
@@ -186,6 +195,13 @@ class _MyHomePageState extends State<MyHomePage> {
                       child: ElevatedButton(
                           onPressed: natsConnect, child: const Text('✔️'))),
                 ),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
+                  child: SizedBox(
+                      height: 50,
+                      child: ElevatedButton(
+                          onPressed: natsDisconnect, child: const Text('❌'))),
+                ),
               ],
             ),
           ),
@@ -194,17 +210,19 @@ class _MyHomePageState extends State<MyHomePage> {
               shrinkWrap: true,
               itemCount: items.length,
               itemBuilder: (context, index) {
-                return ListTile(
-                  title:
-                      Text(items[index], style: const TextStyle(fontSize: 14)),
-                  tileColor: selectedIndex == index
-                      ? Theme.of(context).colorScheme.inversePrimary
-                      : null,
-                  onTap: () {
-                    setState(() {
-                      selectedIndex = index;
-                    });
-                  },
+                return Material(
+                  child: ListTile(
+                    title: Text(items[index],
+                        style: const TextStyle(fontSize: 14)),
+                    tileColor: selectedIndex == index
+                        ? Theme.of(context).colorScheme.inversePrimary
+                        : null,
+                    onTap: () {
+                      setState(() {
+                        selectedIndex = index;
+                      });
+                    },
+                  ),
                 );
               },
             ),
