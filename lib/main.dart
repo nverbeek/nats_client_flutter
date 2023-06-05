@@ -193,14 +193,16 @@ class _MyHomePageState extends State<MyHomePage> {
                   child: SizedBox(
                       height: 50,
                       child: ElevatedButton(
-                          onPressed: natsConnect, child: const Text('✔️'))),
+                          onPressed: isConnected ? null : natsConnect,
+                          child: const Text('✔️'))),
                 ),
                 Container(
                   padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
                   child: SizedBox(
                       height: 50,
                       child: ElevatedButton(
-                          onPressed: natsDisconnect, child: const Text('❌'))),
+                          onPressed: isConnected ? natsDisconnect : null,
+                          child: const Text('❌'))),
                 ),
               ],
             ),
