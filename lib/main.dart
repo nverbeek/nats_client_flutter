@@ -1,7 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:dart_nats/dart_nats.dart';
 
-void main() {
+void main() async {
   runApp(const MyApp());
 }
 
@@ -43,6 +45,7 @@ class _MyHomePageState extends State<MyHomePage> {
   String scheme = 'nats://';
   String fullUri = '';
   int selectedIndex = 0;
+  bool isConnected = false;
 
   String testCode = """
   {
@@ -63,25 +66,48 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
+  String getConnectedString() {
+    if (isConnected) {
+      return 'Connected';
+    }
+    return 'Disconnected';
+  }
+
   void natsConnect() async {
     var client = Client();
     debugPrint('NVB about to connect to $fullUri');
     try {
-      await client.connect(Uri.parse(fullUri), retry: false);
-    } on NatsException {
-      debugPrint('Failed to connect');
-    }
-    var sub = client.sub('subject1');
-    client.pubString('subject1',
-        '{"deploymentId":"SomeTempDeployment","deviceId":"C6565BB1","eventTime":"2023-05-23T15:05:05.003Z","messageType":"MobileDeviceEventFact","userId":"PDV23","eventType":"WORKFLOW_STATE","eventValue":"EngineTester.MainTask.clMainTask.stWelcome"}');
-    var data = await sub.stream.first;
+      Uri uri = Uri.parse(fullUri);
+      await client.connect(uri, retry: false);
+      isConnected = true;
+      var sub = client.sub('subject1');
+      client.pubString('subject1',
+          '{"deploymentId":"SomeTempDeployment","deviceId":"C6565BB1","eventTime":"2023-05-23T15:05:05.003Z","messageType":"MobileDeviceEventFact","userId":"PDV23","eventType":"WORKFLOW_STATE","eventValue":"EngineTester.MainTask.clMainTask.stWelcome"}');
+      var data = await sub.stream.first;
 
-    debugPrint(data.string);
-    setState(() {
-      items.insert(0, data.string);
-    });
-    client.unSub(sub);
-    await client.close();
+      debugPrint(data.string);
+      setState(() {
+        items.insert(0, data.string);
+      });
+      client.unSub(sub);
+      await client.close();
+    } on HttpException {
+      showSnackBar('Failed to connect!');
+    } on Exception {
+      showSnackBar('Failed to connect!');
+    } catch (_) {
+      showSnackBar('Failed to connect!');
+    }
+  }
+
+  void showSnackBar(String message) {
+    var snackBar = SnackBar(
+      content: Text(message),
+    );
+
+    // Find the ScaffoldMessenger in the widget tree
+    // and use it to show a SnackBar.
+    ScaffoldMessenger.of(context).showSnackBar(snackBar);
   }
 
   @override
@@ -114,10 +140,12 @@ class _MyHomePageState extends State<MyHomePage> {
                         child: Text(value),
                       );
                     }).toList(),
+                    value: scheme,
                     onChanged: (value) {
                       scheme = value!;
                       updateFullUri();
                     },
+                    hint: const Text('Scheme'),
                   ),
                 ),
                 Flexible(
@@ -161,18 +189,17 @@ class _MyHomePageState extends State<MyHomePage> {
               ],
             ),
           ),
-          Text(
-            fullUri,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
           Expanded(
             child: ListView.builder(
               shrinkWrap: true,
               itemCount: items.length,
               itemBuilder: (context, index) {
                 return ListTile(
-                  title: Text(items[index]),
-                  tileColor: selectedIndex == index ? Theme.of(context).colorScheme.inversePrimary : null,
+                  title:
+                      Text(items[index], style: const TextStyle(fontSize: 14)),
+                  tileColor: selectedIndex == index
+                      ? Theme.of(context).colorScheme.inversePrimary
+                      : null,
                   onTap: () {
                     setState(() {
                       selectedIndex = index;
@@ -180,6 +207,18 @@ class _MyHomePageState extends State<MyHomePage> {
                   },
                 );
               },
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(5, 2, 5, 2),
+            color: isConnected ? Colors.green[700] : const Color(0xff474747),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: <Widget>[
+                Text('URL: $fullUri'),
+                const Text(' | '),
+                Text('Status: ${getConnectedString()}'),
+              ],
             ),
           ),
         ],
