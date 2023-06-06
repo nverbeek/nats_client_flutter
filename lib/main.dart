@@ -55,11 +55,39 @@ class _MyHomePageState extends State<MyHomePage> {
   String scheme = 'nats://';
   String fullUri = '';
   int selectedIndex = -1;
+  String currentFilter = '';
+  List<Message> filteredItems = [];
   List<Message> items = [];
 
   // nats stuff
   late Client natsClient;
   bool isConnected = false;
+
+  @override
+  initState() {
+    filteredItems = items;
+    super.initState();
+  }
+
+  void _runFilter() {
+    List<Message<dynamic>> results = [];
+    if (currentFilter.isEmpty) {
+      // if the search field is empty or only contains white-space, we'll display all items
+      results = items;
+    } else {
+      results = items
+          .where((message) => message.string
+              .toLowerCase()
+              .contains(currentFilter.toLowerCase()))
+          .toList();
+      // we use the toLowerCase() method to make it case-insensitive
+    }
+
+    // Refresh the UI
+    setState(() {
+      filteredItems = results;
+    });
+  }
 
   void updateFullUri() {
     setState(() {
@@ -93,6 +121,7 @@ class _MyHomePageState extends State<MyHomePage> {
         setState(() {
           items.insert(0, event);
           selectedIndex += 1;
+          _runFilter();
         });
       });
     } on HttpException {
@@ -127,6 +156,7 @@ class _MyHomePageState extends State<MyHomePage> {
   void clearMessageList() {
     setState(() {
       items.clear();
+      filteredItems.clear();
     });
   }
 
@@ -298,12 +328,12 @@ class _MyHomePageState extends State<MyHomePage> {
           Expanded(
             child: ListView.builder(
               shrinkWrap: true,
-              itemCount: items.length,
+              itemCount: filteredItems.length,
               itemBuilder: (context, index) {
                 return Material(
                   child: ListTile(
                     title: Text(
-                      items[index].string,
+                      filteredItems[index].string,
                       style: const TextStyle(fontSize: 14),
                       maxLines: 5,
                     ),
@@ -328,7 +358,8 @@ class _MyHomePageState extends State<MyHomePage> {
                       children: <Widget>[
                         Tooltip(
                           message: 'Subject',
-                          child: Chip(label: Text(items[index].subject!)),
+                          child:
+                              Chip(label: Text(filteredItems[index].subject!)),
                         ),
                         PopupMenuButton(
                           itemBuilder: (context) {
@@ -350,12 +381,13 @@ class _MyHomePageState extends State<MyHomePage> {
                           onSelected: (String value) async {
                             switch (value) {
                               case 'copy':
-                                await Clipboard.setData(
-                                    ClipboardData(text: items[index].string));
+                                await Clipboard.setData(ClipboardData(
+                                    text: filteredItems[index].string));
                                 showSnackBar('Copied to clipboard!');
                                 break;
                               case 'detail':
-                                var json = jsonDecode(items[index].string);
+                                var json =
+                                    jsonDecode(filteredItems[index].string);
                                 var encoder =
                                     const JsonEncoder.withIndent("  ");
                                 var formattedJson = encoder.convert(json);
@@ -363,8 +395,9 @@ class _MyHomePageState extends State<MyHomePage> {
                                 break;
                               case 'replay':
                                 if (isConnected) {
-                                  natsClient.pubString(items[index].subject!,
-                                      items[index].string);
+                                  natsClient.pubString(
+                                      filteredItems[index].subject!,
+                                      filteredItems[index].string);
                                 } else {
                                   showSnackBar(
                                       'Not connected, cannot replay message');
@@ -393,6 +426,22 @@ class _MyHomePageState extends State<MyHomePage> {
                           size: 18,
                         ))),
               ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 5, 10, 5),
+                  child: TextFormField(
+                    onChanged: (value) {
+                      currentFilter = value;
+                      _runFilter();
+                    },
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Filter',
+                      suffixIcon: Icon(Icons.filter_list)
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
           Container(
@@ -401,6 +450,7 @@ class _MyHomePageState extends State<MyHomePage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: <Widget>[
+                Text('Total Messages: ${items.length}, Showing: ${filteredItems.length}  |  '),
                 Text('URL: $fullUri'),
                 const Text('  |  '),
                 Text('Status: ${getConnectedString()}'),
