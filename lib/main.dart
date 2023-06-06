@@ -87,7 +87,6 @@ class _MyHomePageState extends State<MyHomePage> {
           items.insert(0, event.string);
         });
       });
-
     } on HttpException {
       showSnackBar('Failed to connect!');
       isConnected = false;
@@ -105,6 +104,12 @@ class _MyHomePageState extends State<MyHomePage> {
 
     setState(() {
       isConnected = false;
+    });
+  }
+
+  void clearMessageList() {
+    setState(() {
+      items.clear();
     });
   }
 
@@ -169,96 +174,99 @@ class _MyHomePageState extends State<MyHomePage> {
         children: <Widget>[
           Container(
             margin: const EdgeInsets.fromLTRB(10, 0, 10, 0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Flexible(
-                  flex: 1,
-                  child: DropdownButtonFormField<String>(
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                    ),
-                    items: <String>['ws://', 'nats://'].map((String value) {
-                      return DropdownMenuItem<String>(
-                        value: value,
-                        child: Text(value),
-                      );
-                    }).toList(),
-                    value: scheme,
-                    onChanged: (value) {
-                      scheme = value!;
-                      updateFullUri();
-                    },
-                    hint: const Text('Scheme'),
-                  ),
-                ),
-                Flexible(
-                  flex: 3,
-                  child: Padding(
-                    padding: const EdgeInsets.all(10.0),
-                    child: TextFormField(
-                      initialValue: host,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(0, 10, 0, 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  Flexible(
+                    flex: 1,
+                    child: DropdownButtonFormField<String>(
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                      ),
+                      items: <String>['ws://', 'nats://'].map((String value) {
+                        return DropdownMenuItem<String>(
+                          value: value,
+                          child: Text(value),
+                        );
+                      }).toList(),
+                      value: scheme,
                       onChanged: (value) {
-                        host = value;
+                        scheme = value!;
+                        updateFullUri();
+                      },
+                      hint: const Text('Scheme'),
+                    ),
+                  ),
+                  Flexible(
+                    flex: 3,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
+                      child: TextFormField(
+                        initialValue: host,
+                        onChanged: (value) {
+                          host = value;
+                          updateFullUri();
+                        },
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          hintText: 'Host',
+                        ),
+                        readOnly: isConnected,
+                      ),
+                    ),
+                  ),
+                  Flexible(
+                    flex: 1,
+                    child: TextFormField(
+                      initialValue: port,
+                      onChanged: (value) {
+                        port = value;
                         updateFullUri();
                       },
                       decoration: const InputDecoration(
                         border: OutlineInputBorder(),
-                        hintText: 'Host',
+                        hintText: 'Port',
                       ),
                       readOnly: isConnected,
                     ),
                   ),
-                ),
-                Flexible(
-                  flex: 1,
-                  child: TextFormField(
-                    initialValue: port,
-                    onChanged: (value) {
-                      port = value;
-                      updateFullUri();
-                    },
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      hintText: 'Port',
+                  Flexible(
+                    flex: 1,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
+                      child: TextFormField(
+                        initialValue: subject,
+                        onChanged: (value) {
+                          subject = value;
+                        },
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          hintText: 'Subject',
+                        ),
+                        readOnly: isConnected,
+                      ),
                     ),
-                    readOnly: isConnected,
                   ),
-                ),
-                Flexible(
-                  flex: 1,
-                  child: Padding(
+                  Container(
                     padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
-                    child: TextFormField(
-                      initialValue: subject,
-                      onChanged: (value) {
-                        subject = value;
-                      },
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        hintText: 'Subject',
-                      ),
-                      readOnly: isConnected,
-                    ),
+                    child: SizedBox(
+                        height: 50,
+                        child: ElevatedButton(
+                            onPressed: isConnected ? null : natsConnect,
+                            child: const Icon(Icons.check))),
                   ),
-                ),
-                Container(
-                  padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
-                  child: SizedBox(
-                      height: 50,
-                      child: ElevatedButton(
-                          onPressed: isConnected ? null : natsConnect,
-                          child: const Text('✔️'))),
-                ),
-                Container(
-                  padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
-                  child: SizedBox(
-                      height: 50,
-                      child: ElevatedButton(
-                          onPressed: isConnected ? natsDisconnect : null,
-                          child: const Text('✖️'))),
-                ),
-              ],
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
+                    child: SizedBox(
+                        height: 50,
+                        child: ElevatedButton(
+                            onPressed: isConnected ? natsDisconnect : null,
+                            child: const Icon(Icons.close))),
+                  ),
+                ],
+              ),
             ),
           ),
           Expanded(
@@ -314,6 +322,21 @@ class _MyHomePageState extends State<MyHomePage> {
                 );
               },
             ),
+          ),
+          Row(
+            children: <Widget>[
+              Container(
+                padding: const EdgeInsets.all(5),
+                child: SizedBox(
+                    height: 50,
+                    child: ElevatedButton(
+                        onPressed: clearMessageList,
+                        child: const Icon(
+                          Icons.delete,
+                          size: 18,
+                        ))),
+              ),
+            ],
           ),
           Container(
             padding: const EdgeInsets.fromLTRB(5, 2, 5, 4),
