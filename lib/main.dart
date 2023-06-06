@@ -358,8 +358,11 @@ class _MyHomePageState extends State<MyHomePage> {
                       children: <Widget>[
                         Tooltip(
                           message: 'Subject',
-                          child:
-                              Chip(label: Text(filteredItems[index].subject!)),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(0, 0, 5, 0),
+                            child: Chip(
+                                label: Text(filteredItems[index].subject!)),
+                          ),
                         ),
                         PopupMenuButton(
                           itemBuilder: (context) {
@@ -435,10 +438,9 @@ class _MyHomePageState extends State<MyHomePage> {
                       _runFilter();
                     },
                     decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      hintText: 'Filter',
-                      suffixIcon: Icon(Icons.filter_list)
-                    ),
+                        border: OutlineInputBorder(),
+                        hintText: 'Filter',
+                        suffixIcon: Icon(Icons.filter_list)),
                   ),
                 ),
               ),
@@ -450,7 +452,8 @@ class _MyHomePageState extends State<MyHomePage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: <Widget>[
-                Text('Total Messages: ${items.length}, Showing: ${filteredItems.length}  |  '),
+                Text(
+                    'Total Messages: ${items.length}, Showing: ${filteredItems.length}  |  '),
                 Text('URL: $fullUri'),
                 const Text('  |  '),
                 Text('Status: ${getConnectedString()}'),
