@@ -260,6 +260,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
                       child: TextFormField(
+                        enabled: !isConnected,
                         initialValue: host,
                         onChanged: (value) {
                           host = value;
@@ -269,13 +270,13 @@ class _MyHomePageState extends State<MyHomePage> {
                           border: OutlineInputBorder(),
                           hintText: 'Host',
                         ),
-                        readOnly: isConnected,
                       ),
                     ),
                   ),
                   Flexible(
                     flex: 1,
                     child: TextFormField(
+                      enabled: !isConnected,
                       initialValue: port,
                       onChanged: (value) {
                         port = value;
@@ -285,7 +286,6 @@ class _MyHomePageState extends State<MyHomePage> {
                         border: OutlineInputBorder(),
                         hintText: 'Port',
                       ),
-                      readOnly: isConnected,
                     ),
                   ),
                   Flexible(
@@ -293,6 +293,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
                       child: TextFormField(
+                        enabled: !isConnected,
                         initialValue: subject,
                         onChanged: (value) {
                           subject = value;
@@ -301,7 +302,6 @@ class _MyHomePageState extends State<MyHomePage> {
                           border: OutlineInputBorder(),
                           hintText: 'Subject',
                         ),
-                        readOnly: isConnected,
                       ),
                     ),
                   ),
