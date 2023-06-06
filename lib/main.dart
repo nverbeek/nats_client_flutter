@@ -92,6 +92,7 @@ class _MyHomePageState extends State<MyHomePage> {
         debugPrint(event.string);
         setState(() {
           items.insert(0, event);
+          selectedIndex+=1;
         });
       });
     } on HttpException {
@@ -306,9 +307,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       style: const TextStyle(fontSize: 14),
                       maxLines: 5,
                     ),
-                    tileColor: selectedIndex == index
-                        ? Theme.of(context).colorScheme.inversePrimary
-                        : null,
+                    tileColor: index % 2 == 0 ? Colors.grey[900] : null,
                     onTap: () {
                       setState(() {
                         selectedIndex = index;
