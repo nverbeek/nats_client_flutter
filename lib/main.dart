@@ -52,7 +52,7 @@ class _MyHomePageState extends State<MyHomePage> {
   String scheme = 'nats://';
   String fullUri = '';
   int selectedIndex = 0;
-  List<String> items = [];
+  List<Message> items = [];
 
   // nats stuff
   late Client natsClient;
@@ -84,7 +84,7 @@ class _MyHomePageState extends State<MyHomePage> {
       sub.stream.listen((event) {
         debugPrint(event.string);
         setState(() {
-          items.insert(0, event.string);
+          items.insert(0, event);
         });
       });
     } on HttpException {
@@ -277,7 +277,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 return Material(
                   child: ListTile(
                     title: Text(
-                      items[index],
+                      items[index].string,
                       style: const TextStyle(fontSize: 14),
                       maxLines: 5,
                     ),
@@ -289,34 +289,41 @@ class _MyHomePageState extends State<MyHomePage> {
                         selectedIndex = index;
                       });
                     },
-                    trailing: PopupMenuButton(
-                      itemBuilder: (context) {
-                        return [
-                          const PopupMenuItem(
-                            value: 'copy',
-                            child: Text('Copy'),
-                          ),
-                          const PopupMenuItem(
-                            value: 'detail',
-                            child: Text('Detail'),
-                          )
-                        ];
-                      },
-                      onSelected: (String value) async {
-                        switch (value) {
-                          case 'copy':
-                            await Clipboard.setData(
-                                ClipboardData(text: items[index]));
-                            showSnackBar('Copied to clipboard!');
-                            break;
-                          case 'detail':
-                            var json = jsonDecode(items[index]);
-                            var encoder = const JsonEncoder.withIndent("  ");
-                            var formattedJson = encoder.convert(json);
-                            showDetailDialog(formattedJson);
-                            break;
-                        }
-                      },
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Chip(label: Text(items[index].subject!)),
+                        PopupMenuButton(
+                          itemBuilder: (context) {
+                            return [
+                              const PopupMenuItem(
+                                value: 'copy',
+                                child: Text('Copy'),
+                              ),
+                              const PopupMenuItem(
+                                value: 'detail',
+                                child: Text('Detail'),
+                              )
+                            ];
+                          },
+                          onSelected: (String value) async {
+                            switch (value) {
+                              case 'copy':
+                                await Clipboard.setData(
+                                    ClipboardData(text: items[index].string));
+                                showSnackBar('Copied to clipboard!');
+                                break;
+                              case 'detail':
+                                var json = jsonDecode(items[index].string);
+                                var encoder =
+                                    const JsonEncoder.withIndent("  ");
+                                var formattedJson = encoder.convert(json);
+                                showDetailDialog(formattedJson);
+                                break;
+                            }
+                          },
+                        ),
+                      ],
                     ),
                   ),
                 );
