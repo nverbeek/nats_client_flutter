@@ -54,7 +54,7 @@ class _MyHomePageState extends State<MyHomePage> {
   var availableSchemes = <String>['ws://', 'nats://'];
   String scheme = 'nats://';
   String fullUri = '';
-  int selectedIndex = 0;
+  int selectedIndex = -1;
   List<Message> items = [];
 
   // nats stuff
@@ -92,7 +92,7 @@ class _MyHomePageState extends State<MyHomePage> {
         debugPrint(event.string);
         setState(() {
           items.insert(0, event);
-          selectedIndex+=1;
+          selectedIndex += 1;
         });
       });
     } on HttpException {
@@ -183,7 +183,7 @@ class _MyHomePageState extends State<MyHomePage> {
     // if running in a browser, remove the option for nats://.
     // browsers only support web sockets, so TCP connections aren't possible.
     // to avoid confusion, only offer web socket connection variants.
-    if(kIsWeb) {
+    if (kIsWeb) {
       scheme = 'ws://';
       availableSchemes.remove('nats://');
     }
@@ -307,10 +307,20 @@ class _MyHomePageState extends State<MyHomePage> {
                       style: const TextStyle(fontSize: 14),
                       maxLines: 5,
                     ),
-                    tileColor: index % 2 == 0 ? Colors.grey[900] : null,
+                    tileColor: selectedIndex == index
+                        ? Theme.of(context).colorScheme.inversePrimary
+                        : index % 2 == 0
+                            ? Colors.grey[900]
+                            : null,
                     onTap: () {
                       setState(() {
-                        selectedIndex = index;
+                        if (index == selectedIndex) {
+                          // user tapped the already-selected item.
+                          // un-select it
+                          selectedIndex = -1;
+                        } else {
+                          selectedIndex = index;
+                        }
                       });
                     },
                     trailing: Row(
@@ -352,10 +362,12 @@ class _MyHomePageState extends State<MyHomePage> {
                                 showDetailDialog(formattedJson);
                                 break;
                               case 'replay':
-                                if(isConnected) {
-                                  natsClient.pubString(items[index].subject!, items[index].string);
+                                if (isConnected) {
+                                  natsClient.pubString(items[index].subject!,
+                                      items[index].string);
                                 } else {
-                                  showSnackBar('Not connected, cannot replay message');
+                                  showSnackBar(
+                                      'Not connected, cannot replay message');
                                 }
                                 break;
                             }
