@@ -1,7 +1,13 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:dart_nats/dart_nats.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_highlighter/flutter_highlighter.dart';
+import 'package:flutter_highlighter/themes/atelier-cave-dark.dart';
+
+//'{"web-app":{"servlet":[{"servlet-name":"cofaxCDS","servlet-class":"org.cofax.cds.CDSServlet","init-param":{"configGlossary:installationAt":"Philadelphia, PA","configGlossary:adminEmail":"ksm@pobox.com","configGlossary:poweredBy":"Cofax","configGlossary:poweredByIcon":"/images/cofax.gif","configGlossary:staticPath":"/content/static","templateProcessorClass":"org.cofax.WysiwygTemplate","templateLoaderClass":"org.cofax.FilesTemplateLoader","templatePath":"templates","templateOverridePath":"","defaultListTemplate":"listTemplate.htm","defaultFileTemplate":"articleTemplate.htm","useJSP":false,"jspListTemplate":"listTemplate.jsp","jspFileTemplate":"articleTemplate.jsp","cachePackageTagsTrack":200,"cachePackageTagsStore":200,"cachePackageTagsRefresh":60,"cacheTemplatesTrack":100,"cacheTemplatesStore":50,"cacheTemplatesRefresh":15,"cachePagesTrack":200,"cachePagesStore":100,"cachePagesRefresh":10,"cachePagesDirtyRead":10,"searchEngineListTemplate":"forSearchEnginesList.htm","searchEngineFileTemplate":"forSearchEngines.htm","searchEngineRobotsDb":"WEB-INF/robots.db","useDataStore":true,"dataStoreClass":"org.cofax.SqlDataStore","redirectionClass":"org.cofax.SqlRedirection","dataStoreName":"cofax","dataStoreDriver":"com.microsoft.jdbc.sqlserver.SQLServerDriver","dataStoreUrl":"jdbc:microsoft:sqlserver://LOCALHOST:1433;DatabaseName=goon","dataStoreUser":"sa","dataStorePassword":"dataStoreTestQuery","dataStoreTestQuery":"SET NOCOUNT ON;select test=\'test\';","dataStoreLogFile":"/usr/local/tomcat/logs/datastore.log","dataStoreInitConns":10,"dataStoreMaxConns":100,"dataStoreConnUsageLimit":100,"dataStoreLogLevel":"debug","maxUrlLength":500}},{"servlet-name":"cofaxEmail","servlet-class":"org.cofax.cds.EmailServlet","init-param":{"mailHost":"mail1","mailHostOverride":"mail2"}},{"servlet-name":"cofaxAdmin","servlet-class":"org.cofax.cds.AdminServlet"},{"servlet-name":"fileServlet","servlet-class":"org.cofax.cds.FileServlet"},{"servlet-name":"cofaxTools","servlet-class":"org.cofax.cms.CofaxToolsServlet","init-param":{"templatePath":"toolstemplates/","log":1,"logLocation":"/usr/local/tomcat/logs/CofaxTools.log","logMaxSize":"","dataLog":1,"dataLogLocation":"/usr/local/tomcat/logs/dataLog.log","dataLogMaxSize":"","removePageCache":"/content/admin/remove?cache=pages&id=","removeTemplateCache":"/content/admin/remove?cache=templates&id=","fileTransferFolder":"/usr/local/tomcat/webapps/content/fileTransferFolder","lookInContext":1,"adminGroupID":4,"betaServer":true}}],"servlet-mapping":{"cofaxCDS":"/","cofaxEmail":"/cofaxutil/aemail/*","cofaxAdmin":"/admin/*","fileServlet":"/static/*","cofaxTools":"/tools/*"},"taglib":{"taglib-uri":"cofax.tld","taglib-location":"/WEB-INF/tlds/cofax.tld"}}}');
 
 void main() async {
   runApp(const MyApp());
@@ -45,23 +51,11 @@ class _MyHomePageState extends State<MyHomePage> {
   String scheme = 'nats://';
   String fullUri = '';
   int selectedIndex = 0;
+  List<String> items = [];
 
   // nats stuff
   late Client natsClient;
   bool isConnected = false;
-
-  String testCode = """
-  {
-  "deploymentId": "SomeTempDeployment",
-  "deviceId": "C6565BB1",
-  "eventTime": "2023-05-23T15:05:05.003Z",
-  "messageType": "MobileDeviceEventFact",
-  "userId": "PDV23",
-  "eventType": "WORKFLOW_STATE",
-  "eventValue": "EngineTester.MainTask.clMainTask.stWelcome"
-  }""";
-
-  List<String> items = [];
 
   void updateFullUri() {
     setState(() {
@@ -78,7 +72,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void natsConnect() async {
     natsClient = Client();
-    debugPrint('NVB about to connect to $fullUri');
+    debugPrint('About to connect to $fullUri');
     try {
       Uri uri = Uri.parse(fullUri);
       await natsClient.connect(uri, retry: false);
@@ -94,10 +88,13 @@ class _MyHomePageState extends State<MyHomePage> {
       });
     } on HttpException {
       showSnackBar('Failed to connect!');
+      isConnected = false;
     } on Exception {
       showSnackBar('Failed to connect!');
+      isConnected = false;
     } catch (_) {
       showSnackBar('Failed to connect!');
+      isConnected = false;
     }
   }
 
@@ -117,6 +114,42 @@ class _MyHomePageState extends State<MyHomePage> {
     // Find the ScaffoldMessenger in the widget tree
     // and use it to show a SnackBar.
     ScaffoldMessenger.of(context).showSnackBar(snackBar);
+  }
+
+  Future<void> showDetailDialog(String json) async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false, // user must tap button!
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Message Detail'),
+          content: SingleChildScrollView(
+            child: ListBody(
+              children: <Widget>[
+                HighlightView(
+                  json,
+                  language: 'json',
+                  theme: atelierCaveDarkTheme,
+                  padding: const EdgeInsets.all(10),
+                  textStyle: const TextStyle(
+                      fontSize: 14,
+                      fontFamily:
+                          'SFMono-Regular,Consolas,Liberation Mono,Menlo,monospace'),
+                ),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Close'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -202,7 +235,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       height: 50,
                       child: ElevatedButton(
                           onPressed: isConnected ? natsDisconnect : null,
-                          child: const Text('❌'))),
+                          child: const Text('✖️'))),
                 ),
               ],
             ),
@@ -214,8 +247,11 @@ class _MyHomePageState extends State<MyHomePage> {
               itemBuilder: (context, index) {
                 return Material(
                   child: ListTile(
-                    title: Text(items[index],
-                        style: const TextStyle(fontSize: 14)),
+                    title: Text(
+                      items[index],
+                      style: const TextStyle(fontSize: 14),
+                      maxLines: 5,
+                    ),
                     tileColor: selectedIndex == index
                         ? Theme.of(context).colorScheme.inversePrimary
                         : null,
@@ -224,6 +260,35 @@ class _MyHomePageState extends State<MyHomePage> {
                         selectedIndex = index;
                       });
                     },
+                    trailing: PopupMenuButton(
+                      itemBuilder: (context) {
+                        return [
+                          const PopupMenuItem(
+                            value: 'copy',
+                            child: Text('Copy'),
+                          ),
+                          const PopupMenuItem(
+                            value: 'detail',
+                            child: Text('Detail'),
+                          )
+                        ];
+                      },
+                      onSelected: (String value) async {
+                        switch (value) {
+                          case 'copy':
+                            await Clipboard.setData(
+                                ClipboardData(text: items[index]));
+                            showSnackBar('Copied to clipboard!');
+                            break;
+                          case 'detail':
+                            var json = jsonDecode(items[index]);
+                            var encoder = const JsonEncoder.withIndent("  ");
+                            var formattedJson = encoder.convert(json);
+                            showDetailDialog(formattedJson);
+                            break;
+                        }
+                      },
+                    ),
                   ),
                 );
               },
@@ -246,15 +311,3 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 }
-
-// Flexible(
-//   child: HighlightView(
-//     testCode,
-//     language: 'json',
-//     theme: atomOneDarkTheme,
-//     padding: const EdgeInsets.all(10),
-//     textStyle: const TextStyle(
-//         fontFamily:
-//             'SFMono-Regular,Consolas,Liberation Mono,Menlo,monospace'),
-//   ),
-// ),
