@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:dart_nats/dart_nats.dart';
 import 'package:flutter/services.dart';
@@ -50,6 +51,7 @@ class _MyHomePageState extends State<MyHomePage> {
   String host = '35.196.236.50';
   String port = '4222';
   String subject = 'dwe.*';
+  var availableSchemes = <String>['ws://', 'nats://'];
   String scheme = 'nats://';
   String fullUri = '';
   int selectedIndex = 0;
@@ -177,6 +179,14 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     updateFullUri();
 
+    // if running in a browser, remove the option for nats://.
+    // browsers only support web sockets, so TCP connections aren't possible.
+    // to avoid confusion, only offer web socket connection variants.
+    if(kIsWeb) {
+      scheme = 'ws://';
+      availableSchemes.remove('nats://');
+    }
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
@@ -200,7 +210,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       decoration: const InputDecoration(
                         border: OutlineInputBorder(),
                       ),
-                      items: <String>['ws://', 'nats://'].map((String value) {
+                      items: availableSchemes.map((String value) {
                         return DropdownMenuItem<String>(
                           value: value,
                           child: Text(value),
