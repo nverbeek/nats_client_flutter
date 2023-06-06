@@ -292,7 +292,10 @@ class _MyHomePageState extends State<MyHomePage> {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: <Widget>[
-                        Chip(label: Text(items[index].subject!)),
+                        Tooltip(
+                          message: 'Subject',
+                          child: Chip(label: Text(items[index].subject!)),
+                        ),
                         PopupMenuButton(
                           itemBuilder: (context) {
                             return [
