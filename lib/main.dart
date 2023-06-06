@@ -196,6 +196,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   Flexible(
                     flex: 1,
                     child: DropdownButtonFormField<String>(
+                      isExpanded: true,
                       decoration: const InputDecoration(
                         border: OutlineInputBorder(),
                       ),
@@ -320,6 +321,10 @@ class _MyHomePageState extends State<MyHomePage> {
                               const PopupMenuItem(
                                 value: 'detail',
                                 child: Text('Detail'),
+                              ),
+                              const PopupMenuItem(
+                                value: 'replay',
+                                child: Text('Replay'),
                               )
                             ];
                           },
@@ -336,6 +341,13 @@ class _MyHomePageState extends State<MyHomePage> {
                                     const JsonEncoder.withIndent("  ");
                                 var formattedJson = encoder.convert(json);
                                 showDetailDialog(formattedJson);
+                                break;
+                              case 'replay':
+                                if(isConnected) {
+                                  natsClient.pubString(items[index].subject!, items[index].string);
+                                } else {
+                                  showSnackBar('Not connected, cannot replay message');
+                                }
                                 break;
                             }
                           },
