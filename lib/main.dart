@@ -48,6 +48,7 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   String host = '35.196.236.50';
   String port = '4222';
+  String subject = 'dwe.*';
   String scheme = 'nats://';
   String fullUri = '';
   int selectedIndex = 0;
@@ -77,15 +78,16 @@ class _MyHomePageState extends State<MyHomePage> {
       Uri uri = Uri.parse(fullUri);
       await natsClient.connect(uri, retry: false);
       isConnected = true;
-      var sub = natsClient.sub('subject1');
-      natsClient.pubString('subject1',
+      var sub = natsClient.sub('dwe.*');
+      natsClient.pubString('dwe.analytics',
           '{"deploymentId":"SomeTempDeployment","deviceId":"C6565BB1","eventTime":"2023-05-23T15:05:05.003Z","messageType":"MobileDeviceEventFact","userId":"PDV23","eventType":"WORKFLOW_STATE","eventValue":"EngineTester.MainTask.clMainTask.stWelcome"}');
-      var data = await sub.stream.first;
-
-      debugPrint(data.string);
-      setState(() {
-        items.insert(0, data.string);
+      sub.stream.listen((event) {
+        debugPrint(event.string);
+        setState(() {
+          items.insert(0, event.string);
+        });
       });
+
     } on HttpException {
       showSnackBar('Failed to connect!');
       isConnected = false;
@@ -204,6 +206,7 @@ class _MyHomePageState extends State<MyHomePage> {
                         border: OutlineInputBorder(),
                         hintText: 'Host',
                       ),
+                      readOnly: isConnected,
                     ),
                   ),
                 ),
@@ -218,6 +221,24 @@ class _MyHomePageState extends State<MyHomePage> {
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
                       hintText: 'Port',
+                    ),
+                    readOnly: isConnected,
+                  ),
+                ),
+                Flexible(
+                  flex: 1,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
+                    child: TextFormField(
+                      initialValue: subject,
+                      onChanged: (value) {
+                        subject = value;
+                      },
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        hintText: 'Subject',
+                      ),
+                      readOnly: isConnected,
                     ),
                   ),
                 ),
@@ -295,13 +316,13 @@ class _MyHomePageState extends State<MyHomePage> {
             ),
           ),
           Container(
-            padding: const EdgeInsets.fromLTRB(5, 2, 5, 2),
+            padding: const EdgeInsets.fromLTRB(5, 2, 5, 4),
             color: isConnected ? Colors.green[700] : const Color(0xff474747),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: <Widget>[
                 Text('URL: $fullUri'),
-                const Text(' | '),
+                const Text('  |  '),
                 Text('Status: ${getConnectedString()}'),
               ],
             ),
