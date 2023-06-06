@@ -248,7 +248,7 @@ class _MyHomePageState extends State<MyHomePage> {
                         );
                       }).toList(),
                       value: scheme,
-                      onChanged: (value) {
+                      onChanged: isConnected ? null : (value) {
                         scheme = value!;
                         updateFullUri();
                       },
@@ -447,7 +447,7 @@ class _MyHomePageState extends State<MyHomePage> {
             ],
           ),
           Container(
-            padding: const EdgeInsets.fromLTRB(5, 2, 5, 4),
+            padding: const EdgeInsets.fromLTRB(5, 2, 10, 4),
             color: isConnected ? Colors.green[700] : const Color(0xff474747),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
