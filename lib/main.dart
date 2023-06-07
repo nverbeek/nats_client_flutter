@@ -520,7 +520,7 @@ class _MyHomePageState extends State<MyHomePage> {
           Row(
             children: <Widget>[
               Container(
-                padding: const EdgeInsets.all(5),
+                padding: const EdgeInsets.fromLTRB(5, 5, 5, 10),
                 child: SizedBox(
                     height: 50,
                     child: ElevatedButton(
@@ -532,7 +532,7 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 5, 10, 5),
+                  padding: const EdgeInsets.fromLTRB(0, 5, 10, 10),
                   child: TextFormField(
                     controller: filterBoxController,
                     onChanged: (value) {
@@ -559,7 +559,7 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 5, 10, 5),
+                  padding: const EdgeInsets.fromLTRB(0, 5, 10, 10),
                   child: TextFormField(
                     controller: matchBoxController,
                     decoration: InputDecoration(
