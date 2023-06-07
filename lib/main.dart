@@ -146,8 +146,28 @@ class _MyHomePageState extends State<MyHomePage> {
     debugPrint('About to connect to $fullUri');
     try {
       Uri uri = Uri.parse(fullUri);
+      natsClient.statusStream.listen((Status event) {
+        debugPrint('Connection status event $event');
+
+        switch(event) {
+          case Status.connected:
+            setStateConnected();
+            break;
+          case Status.closed:
+          case Status.disconnected:
+            setStateDisconnected();
+            break;
+          case Status.tlsHandshake:
+            break;
+          case Status.infoHandshake:
+            break;
+          case Status.reconnecting:
+            break;
+          case Status.connecting:
+            break;
+        }
+      });
       await natsClient.connect(uri, retry: false);
-      setStateConnected();
       var sub = natsClient.sub('dwe.*');
       sub.stream.listen((event) {
         debugPrint(event.string);
