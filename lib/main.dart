@@ -299,9 +299,16 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  Future<void> showSendMessageDialog() async {
-    var subjectBoxController = TextEditingController(text: 'dwe.analytics');
+  Future<void> showSendMessageDialog(String? subject, String? data) async {
+    var subjectBoxController = TextEditingController();
     var dataBoxController = TextEditingController();
+
+    if (subject != null && subject.isNotEmpty) {
+      subjectBoxController.text = subject;
+    }
+    if (data != null && data.isNotEmpty) {
+      dataBoxController.text = data;
+    }
 
     return showDialog<void>(
       context: context,
@@ -537,6 +544,10 @@ class _MyHomePageState extends State<MyHomePage> {
                               const PopupMenuItem(
                                 value: 'replay',
                                 child: Text('Replay'),
+                              ),
+                              const PopupMenuItem(
+                                value: 'edit_and_send',
+                                child: Text('Edit & Send'),
                               )
                             ];
                           },
@@ -565,6 +576,15 @@ class _MyHomePageState extends State<MyHomePage> {
                                       'Not connected, cannot replay message');
                                 }
                                 break;
+                              case 'edit_and_send':
+                                if (isConnected) {
+                                  showSendMessageDialog(
+                                      filteredItems[index].subject!,
+                                      filteredItems[index].string);
+                                } else {
+                                  showSnackBar(
+                                      'Not connected, cannot send message');
+                                }
                             }
                           },
                         ),
@@ -593,7 +613,11 @@ class _MyHomePageState extends State<MyHomePage> {
                 child: SizedBox(
                     height: 50,
                     child: ElevatedButton(
-                        onPressed: isConnected ? showSendMessageDialog : null,
+                        onPressed: isConnected
+                            ? () {
+                                showSendMessageDialog(null, null);
+                              }
+                            : null,
                         child: const Icon(
                           Icons.send,
                           size: 18,
