@@ -7,10 +7,30 @@ import 'package:dart_nats/dart_nats.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_highlighter/flutter_highlighter.dart';
 import 'package:flutter_highlighter/themes/atelier-cave-dark.dart';
+import 'package:flutter_highlighter/themes/atelier-cave-light.dart';
 import 'package:loader_overlay/loader_overlay.dart';
+import 'package:provider/provider.dart';
 
 void main() async {
   runApp(const MyApp());
+}
+
+class ThemeModel with ChangeNotifier {
+  ThemeMode _mode;
+  ThemeMode get mode => _mode;
+  ThemeModel({ThemeMode mode = ThemeMode.dark}) : _mode = mode;
+
+  void toggleMode() {
+    _mode = _mode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
+    notifyListeners();
+  }
+
+  bool isDark() {
+    if (_mode == ThemeMode.dark) {
+      return true;
+    }
+    return false;
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -19,11 +39,21 @@ class MyApp extends StatelessWidget {
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'NATS Client',
-      theme: ThemeData.dark(useMaterial3: true),
-      home: const LoaderOverlay(
-        child: MyHomePage(title: 'NATS Client'),
+    return ChangeNotifierProvider<ThemeModel>(
+      create: (_) => ThemeModel(),
+      child: Consumer<ThemeModel>(
+        builder: (_, model, __) {
+          return MaterialApp(
+            title: 'NATS Client',
+            debugShowCheckedModeBanner: false,
+            theme: ThemeData.light(useMaterial3: true),
+            darkTheme: ThemeData.dark(useMaterial3: true),
+            themeMode: model.mode,
+            home: const LoaderOverlay(
+              child: MyHomePage(title: 'NATS Client'),
+            ),
+          );
+        },
       ),
     );
   }
@@ -48,7 +78,8 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  String host = '35.196.236.50';
+  //String host = '35.196.236.50';
+  String host = '10.0.0.38';
   String port = '4222';
   String subject = 'dwe.*';
   var availableSchemes = <String>['ws://', 'nats://'];
@@ -92,6 +123,7 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
+  // ignore: unused_element
   void _runMatch() {}
 
   void updateFullUri() {
@@ -188,7 +220,9 @@ class _MyHomePageState extends State<MyHomePage> {
                 HighlightView(
                   json,
                   language: 'json',
-                  theme: atelierCaveDarkTheme,
+                  theme: Provider.of<ThemeModel>(context, listen: false).isDark()
+                      ? atelierCaveDarkTheme
+                      : atelierCaveLightTheme,
                   padding: const EdgeInsets.all(10),
                   textStyle: const TextStyle(
                       fontSize: 14,
@@ -229,6 +263,12 @@ class _MyHomePageState extends State<MyHomePage> {
         // Here we take the value from the MyHomePage object that was created by
         // the App.build method, and use it to set our appbar title.
         title: Text(widget.title),
+        actions: [
+          IconButton(
+              icon: const Icon(Icons.lightbulb),
+              onPressed: () =>
+                  Provider.of<ThemeModel>(context, listen: false).toggleMode()),
+        ],
       ),
       body: Column(
         children: <Widget>[
@@ -347,7 +387,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     tileColor: selectedIndex == index
                         ? Theme.of(context).colorScheme.inversePrimary
                         : index % 2 == 0
-                            ? Colors.grey[900]
+                            ? Theme.of(context).colorScheme.surfaceVariant
                             : null,
                     onTap: () {
                       setState(() {
@@ -488,7 +528,7 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
           Container(
             padding: const EdgeInsets.fromLTRB(5, 2, 10, 4),
-            color: isConnected ? Colors.green[700] : const Color(0xff474747),
+            color: Provider.of<ThemeModel>(context, listen: false).isDark() ? isConnected ? Colors.green[700] : const Color(0xff474747) : isConnected ? Colors.green[400] : Colors.grey[400],
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: <Widget>[
