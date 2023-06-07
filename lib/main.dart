@@ -520,7 +520,7 @@ class _MyHomePageState extends State<MyHomePage> {
           Row(
             children: <Widget>[
               Container(
-                padding: const EdgeInsets.fromLTRB(5, 5, 5, 10),
+                padding: const EdgeInsets.fromLTRB(10, 5, 5, 10),
                 child: SizedBox(
                     height: 50,
                     child: ElevatedButton(
