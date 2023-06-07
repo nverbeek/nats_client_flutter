@@ -140,46 +140,67 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void natsConnect() async {
-    context.loaderOverlay.show();
     natsClient = Client();
+
+    showLoadingSpinner();
     debugPrint('About to connect to $fullUri');
     try {
       Uri uri = Uri.parse(fullUri);
       await natsClient.connect(uri, retry: false);
-      isConnected = true;
-      if (context.mounted) {
-        context.loaderOverlay.hide();
-      }
+      setStateConnected();
       var sub = natsClient.sub('dwe.*');
-      natsClient.pubString('dwe.analytics',
-          '{"deploymentId":"SomeTempDeployment","deviceId":"C6565BB1","eventTime":"2023-05-23T15:05:05.003Z","messageType":"MobileDeviceEventFact","userId":"PDV23","eventType":"WORKFLOW_STATE","eventValue":"EngineTester.MainTask.clMainTask.stWelcome"}');
       sub.stream.listen((event) {
         debugPrint(event.string);
         setState(() {
           items.insert(0, event);
-          selectedIndex += 1;
+          // if an item is selected, we need to move the selection since
+          // we just put a new item in the list
+          if (selectedIndex > -1) {
+            selectedIndex += 1;
+          }
           _runFilter();
         });
       });
     } on HttpException {
       showSnackBar('Failed to connect!');
-      isConnected = false;
-      if (context.mounted) {
-        context.loaderOverlay.hide();
-      }
+      setStateDisconnected();
     } on Exception {
       showSnackBar('Failed to connect!');
-      isConnected = false;
-      if (context.mounted) {
-        context.loaderOverlay.hide();
-      }
+      setStateDisconnected();
     } catch (_) {
       showSnackBar('Failed to connect!');
+      setStateDisconnected();
+    }
+  }
+
+  void showLoadingSpinner() {
+    setState(() {
+      context.loaderOverlay.show();
+    });
+  }
+
+  void hideLoadingSpinner() {
+    setState(() {
+      context.loaderOverlay.hide();
+    });
+  }
+
+  void setStateConnected() {
+    setState(() {
+      isConnected = true;
+      if (context.mounted) {
+        hideLoadingSpinner();
+      }
+    });
+  }
+
+  void setStateDisconnected() {
+    setState(() {
       isConnected = false;
       if (context.mounted) {
-        context.loaderOverlay.hide();
+        hideLoadingSpinner();
       }
-    }
+    });
   }
 
   void natsDisconnect() async {
