@@ -151,7 +151,7 @@ class _MyHomePageState extends State<MyHomePage> {
         debugPrint('Connection status event $event');
         String stateString = '';
 
-        switch(event) {
+        switch (event) {
           case Status.connected:
             setStateConnected();
             stateString = 'Connected';
@@ -264,7 +264,6 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> showDetailDialog(String json) async {
     return showDialog<void>(
       context: context,
-      barrierDismissible: false, // user must tap button!
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Message Detail'),
@@ -274,9 +273,10 @@ class _MyHomePageState extends State<MyHomePage> {
                 HighlightView(
                   json,
                   language: 'json',
-                  theme: Provider.of<ThemeModel>(context, listen: false).isDark()
-                      ? atelierCaveDarkTheme
-                      : atelierCaveLightTheme,
+                  theme:
+                      Provider.of<ThemeModel>(context, listen: false).isDark()
+                          ? atelierCaveDarkTheme
+                          : atelierCaveLightTheme,
                   padding: const EdgeInsets.all(10),
                   textStyle: const TextStyle(
                       fontSize: 14,
@@ -290,6 +290,64 @@ class _MyHomePageState extends State<MyHomePage> {
             TextButton(
               child: const Text('Close'),
               onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> showSendMessageDialog() async {
+    var subjectBoxController = TextEditingController(text: 'dwe.analytics');
+    var dataBoxController = TextEditingController();
+
+    return showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Send Message'),
+          content: Column(
+            children: <Widget>[
+              TextFormField(
+                maxLines: null,
+                controller: subjectBoxController,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  hintText: 'Subject',
+                ),
+              ),
+              Expanded(
+                flex: 3,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
+                  child: TextFormField(
+                    expands: true,
+                    controller: dataBoxController,
+                    maxLines: null,
+                    textAlignVertical: TextAlignVertical.top,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Data',
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Close'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: const Text('Send'),
+              onPressed: () {
+                natsClient.pubString(subjectBoxController.value.text,
+                    dataBoxController.value.text);
                 Navigator.of(context).pop();
               },
             ),
@@ -530,6 +588,17 @@ class _MyHomePageState extends State<MyHomePage> {
                           size: 18,
                         ))),
               ),
+              Container(
+                padding: const EdgeInsets.fromLTRB(0, 5, 5, 10),
+                child: SizedBox(
+                    height: 50,
+                    child: ElevatedButton(
+                        onPressed: isConnected ? showSendMessageDialog : null,
+                        child: const Icon(
+                          Icons.send,
+                          size: 18,
+                        ))),
+              ),
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(0, 5, 10, 10),
@@ -582,7 +651,13 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
           Container(
             padding: const EdgeInsets.fromLTRB(5, 2, 10, 4),
-            color: Provider.of<ThemeModel>(context, listen: false).isDark() ? isConnected ? Colors.green[700] : const Color(0xff474747) : isConnected ? Colors.green[400] : Colors.grey[400],
+            color: Provider.of<ThemeModel>(context, listen: false).isDark()
+                ? isConnected
+                    ? Colors.green[700]
+                    : const Color(0xff474747)
+                : isConnected
+                    ? Colors.green[400]
+                    : Colors.grey[400],
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: <Widget>[
