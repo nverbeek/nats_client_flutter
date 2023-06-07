@@ -93,7 +93,7 @@ class _MyHomePageState extends State<MyHomePage> {
   // nats stuff
   late Client natsClient;
   bool isConnected = false;
-  String connectionStateString = '';
+  String connectionStateString = 'Disconnected';
 
   var filterBoxController = TextEditingController();
   var matchBoxController = TextEditingController();
