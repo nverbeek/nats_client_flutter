@@ -93,6 +93,7 @@ class _MyHomePageState extends State<MyHomePage> {
   // nats stuff
   late Client natsClient;
   bool isConnected = false;
+  String connectionStateString = '';
 
   var filterBoxController = TextEditingController();
   var matchBoxController = TextEditingController();
@@ -148,24 +149,35 @@ class _MyHomePageState extends State<MyHomePage> {
       Uri uri = Uri.parse(fullUri);
       natsClient.statusStream.listen((Status event) {
         debugPrint('Connection status event $event');
+        String stateString = '';
 
         switch(event) {
           case Status.connected:
             setStateConnected();
+            stateString = 'Connected';
             break;
           case Status.closed:
           case Status.disconnected:
             setStateDisconnected();
+            stateString = 'Disconnected';
             break;
           case Status.tlsHandshake:
+            stateString = 'TLS Handshake';
             break;
           case Status.infoHandshake:
+            stateString = 'Info Handshake';
             break;
           case Status.reconnecting:
+            stateString = 'Reconnecting';
             break;
           case Status.connecting:
+            stateString = 'Connecting';
             break;
         }
+
+        setState(() {
+          connectionStateString = stateString;
+        });
       });
       await natsClient.connect(uri, retry: false);
       var sub = natsClient.sub('dwe.*');
@@ -217,6 +229,7 @@ class _MyHomePageState extends State<MyHomePage> {
   void setStateDisconnected() {
     setState(() {
       isConnected = false;
+      connectionStateString = 'Disconnected';
       if (context.mounted) {
         hideLoadingSpinner();
       }
@@ -577,7 +590,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     'Total Messages: ${items.length}, Showing: ${filteredItems.length}  |  '),
                 Text('URL: $fullUri'),
                 const Text('  |  '),
-                Text('Status: ${getConnectedString()}'),
+                Text('Status: $connectionStateString'),
               ],
             ),
           ),
