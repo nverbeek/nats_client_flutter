@@ -63,6 +63,9 @@ class _MyHomePageState extends State<MyHomePage> {
   late Client natsClient;
   bool isConnected = false;
 
+  var filterBoxController = TextEditingController();
+  var matchBoxController = TextEditingController();
+
   @override
   initState() {
     filteredItems = items;
@@ -88,6 +91,8 @@ class _MyHomePageState extends State<MyHomePage> {
       filteredItems = results;
     });
   }
+
+  void _runMatch() {}
 
   void updateFullUri() {
     setState(() {
@@ -248,10 +253,12 @@ class _MyHomePageState extends State<MyHomePage> {
                         );
                       }).toList(),
                       value: scheme,
-                      onChanged: isConnected ? null : (value) {
-                        scheme = value!;
-                        updateFullUri();
-                      },
+                      onChanged: isConnected
+                          ? null
+                          : (value) {
+                              scheme = value!;
+                              updateFullUri();
+                            },
                       hint: const Text('Scheme'),
                     ),
                   ),
@@ -433,14 +440,47 @@ class _MyHomePageState extends State<MyHomePage> {
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(0, 5, 10, 5),
                   child: TextFormField(
+                    controller: filterBoxController,
                     onChanged: (value) {
                       currentFilter = value;
                       _runFilter();
                     },
-                    decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        hintText: 'Filter',
-                        suffixIcon: Icon(Icons.filter_list)),
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      hintText: 'Filter',
+                      prefixIcon: const Icon(Icons.filter_list),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          setState(() {
+                            filterBoxController.clear();
+                            currentFilter = '';
+                            _runFilter();
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 5, 10, 5),
+                  child: TextFormField(
+                    controller: matchBoxController,
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      hintText: 'Match',
+                      prefixIcon: const Icon(Icons.highlight),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          setState(() {
+                            matchBoxController.clear();
+                          });
+                        },
+                      ),
+                    ),
                   ),
                 ),
               ),
