@@ -8,7 +8,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_highlighter/flutter_highlighter.dart';
 import 'package:flutter_highlighter/themes/atelier-cave-dark.dart';
 import 'package:flutter_highlighter/themes/atelier-cave-light.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:loader_overlay/loader_overlay.dart';
+import 'package:nats_client_flutter/constants.dart';
 import 'package:provider/provider.dart';
 
 void main() async {
@@ -364,6 +366,27 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
+  Future<void> showHelpDialog() async {
+
+    return showDialog<void>(
+      context: context,
+      builder: (BuildContext ctx) => const Dialog(
+        child: Padding(
+            padding: EdgeInsets.all(20),
+            child: SingleChildScrollView(
+              child: ListBody(
+                children: [
+                  MarkdownBody(
+                    data: helpMarkdown,
+                    shrinkWrap: true,
+                  ),
+                ],
+              ),
+            )),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     updateFullUri();
@@ -387,6 +410,12 @@ class _MyHomePageState extends State<MyHomePage> {
               icon: const Icon(Icons.lightbulb),
               onPressed: () =>
                   Provider.of<ThemeModel>(context, listen: false).toggleMode()),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(0, 0, 10, 0),
+            child: IconButton(
+                icon: const Icon(Icons.question_mark),
+                onPressed: () => showHelpDialog()),
+          )
         ],
       ),
       body: Column(

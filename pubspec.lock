@@ -182,6 +182,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.0.1"
+  flutter_markdown:
+    dependency: "direct main"
+    description:
+      name: flutter_markdown
+      sha256: dc6d5258653f6857135b32896ccda7f7af0c54dcec832495ad6835154c6c77c0
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.6.15"
   flutter_test:
     dependency: "direct dev"
     description: flutter
@@ -235,6 +243,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.0"
+  markdown:
+    dependency: transitive
+    description:
+      name: markdown
+      sha256: "8e332924094383133cee218b676871f42db2514f1f6ac617b6cf6152a7faab8e"
+      url: "https://pub.dev"
+    source: hosted
+    version: "7.1.0"
   matcher:
     dependency: transitive
     description:
@@ -402,4 +418,4 @@ packages:
     version: "3.1.2"
 sdks:
   dart: ">=3.0.2 <4.0.0"
-  flutter: ">=1.16.0"
+  flutter: ">=3.3.0"
