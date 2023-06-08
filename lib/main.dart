@@ -93,9 +93,8 @@ class _MyHomePageState extends State<MyHomePage> {
   List<Message> items = [];
 
   // nats stuff
-  late Client? natsClient;
+  late Client natsClient;
   bool isConnected = false;
-  Status currentStatus = Status.disconnected;
   String connectionStateString = 'Disconnected';
 
   var filterBoxController = TextEditingController();
@@ -150,9 +149,8 @@ class _MyHomePageState extends State<MyHomePage> {
     debugPrint('About to connect to $fullUri');
     try {
       Uri uri = Uri.parse(fullUri);
-      natsClient?.statusStream.listen((Status event) {
+      natsClient.statusStream.listen((Status event) {
         debugPrint('Connection status event $event');
-        currentStatus = event;
         String stateString = '';
 
         switch (event) {
@@ -183,9 +181,9 @@ class _MyHomePageState extends State<MyHomePage> {
           connectionStateString = stateString;
         });
       });
-      await natsClient?.connect(uri, retry: true, retryCount: -1);
-      var sub = natsClient?.sub('dwe.*');
-      sub?.stream.listen((event) {
+      await natsClient.connect(uri, retry: false);
+      var sub = natsClient.sub('dwe.*');
+      sub.stream.listen((event) {
         debugPrint(event.string);
         setState(() {
           items.insert(0, event);
@@ -241,8 +239,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void natsDisconnect() async {
-    await natsClient?.close();
-    natsClient = null;
+    await natsClient.close();
 
     setState(() {
       isConnected = false;
@@ -358,7 +355,7 @@ class _MyHomePageState extends State<MyHomePage> {
             TextButton(
               child: const Text('Send'),
               onPressed: () {
-                natsClient?.pubString(subjectBoxController.value.text,
+                natsClient.pubString(subjectBoxController.value.text,
                     dataBoxController.value.text);
                 Navigator.of(context).pop();
               },
@@ -444,7 +441,7 @@ class _MyHomePageState extends State<MyHomePage> {
                         );
                       }).toList(),
                       value: scheme,
-                      onChanged: (currentStatus != Status.disconnected)
+                      onChanged: isConnected
                           ? null
                           : (value) {
                               scheme = value!;
@@ -458,7 +455,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
                       child: TextFormField(
-                        enabled: (currentStatus == Status.disconnected),
+                        enabled: !isConnected,
                         initialValue: host,
                         onChanged: (value) {
                           host = value;
@@ -474,7 +471,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   Flexible(
                     flex: 1,
                     child: TextFormField(
-                      enabled: (currentStatus == Status.disconnected),
+                      enabled: !isConnected,
                       initialValue: port,
                       onChanged: (value) {
                         port = value;
@@ -491,7 +488,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
                       child: TextFormField(
-                        enabled: (currentStatus == Status.disconnected),
+                        enabled: !isConnected,
                         initialValue: subject,
                         onChanged: (value) {
                           subject = value;
@@ -508,7 +505,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: SizedBox(
                         height: 50,
                         child: ElevatedButton(
-                            onPressed: (currentStatus == Status.disconnected) ? natsConnect : null,
+                            onPressed: isConnected ? null : natsConnect,
                             child: const Icon(Icons.check))),
                   ),
                   Container(
@@ -516,7 +513,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: SizedBox(
                         height: 50,
                         child: ElevatedButton(
-                            onPressed: (currentStatus == Status.connected) ? natsDisconnect : null,
+                            onPressed: isConnected ? natsDisconnect : null,
                             child: const Icon(Icons.close))),
                   ),
                 ],
@@ -604,8 +601,8 @@ class _MyHomePageState extends State<MyHomePage> {
                                 showDetailDialog(formattedJson);
                                 break;
                               case 'replay':
-                                if (currentStatus == Status.connected) {
-                                  natsClient?.pubString(
+                                if (isConnected) {
+                                  natsClient.pubString(
                                       filteredItems[index].subject!,
                                       filteredItems[index].string);
                                 } else {
@@ -614,7 +611,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                 }
                                 break;
                               case 'edit_and_send':
-                                if (currentStatus == Status.connected) {
+                                if (isConnected) {
                                   showSendMessageDialog(
                                       filteredItems[index].subject!,
                                       filteredItems[index].string);
