@@ -588,11 +588,16 @@ class _MyHomePageState extends State<MyHomePage> {
                                 showSnackBar('Copied to clipboard!');
                                 break;
                               case 'detail':
-                                var json =
-                                    jsonDecode(filteredItems[index].string);
-                                var encoder =
-                                    const JsonEncoder.withIndent("  ");
-                                var formattedJson = encoder.convert(json);
+                                var formattedJson = '';
+                                try {
+                                  var json =
+                                  jsonDecode(filteredItems[index].string);
+                                  var encoder =
+                                  const JsonEncoder.withIndent("  ");
+                                  formattedJson = encoder.convert(json);
+                                } on FormatException {
+                                  formattedJson = filteredItems[index].string;
+                                }
                                 showDetailDialog(formattedJson);
                                 break;
                               case 'replay':

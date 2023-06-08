@@ -1,63 +1,63 @@
 const String helpMarkdown = """
-## Headers
+# NATS Client
+This NATS client is a cross-platform client intended for use with non-Jetstream NATS servers. This client only supports WebSocket and plain NATS connection schemes.
 
-# This is a Heading h1
-## This is a Heading h2 
-###### This is a Heading h6
+This client supports Windows, macOS and browser platforms, with the possibility of adding Android and iOS at a later time.
 
-## Emphasis
+# Theme
+The application has two themes, **light** and **dark**. The theme may be changed by using the 💡 toggle.
 
-*This text will be italic*  
-_This will also be italic_
+# Connection
+## Schemes
+The following schemes are supported:
 
-**This text will be bold**  
-__This will also be bold__
+- **nats://** - Plain TCP socket (no Jetstream)
+- **ws://** - WebSocket variant, see note below
 
-_You **can** combine them_
+**NOTE:** The ws:// scheme **requires WebSocket to be enabled on your NATS server instance.** By default, NATS server does not enable WebSocket support. You must manually configure the server instance to open WS on the port of your choosing. 
 
-## Lists
+Additionally, the nats:// scheme is unavailable when this client is running in a browser. This is because browsers do not support TCP sockets, and thus we cannot use the normal NATS connection scheme. For browsers, we only can use WebSocket connections, which requires enabling the server-side support in the above note.
 
-### Unordered
+## Other Connection Info
+The rest of the connection information is straightforward:
 
-* Item 1
-* Item 2
-* Item 2a
-* Item 2b
+- **Host**: IP or DNS address of the NATS server host
+- **Port**: Associated NATS port
+- **Subject**: The desired subject (or wildcard) you'd like to subscribe to. At this time, only one subject definition is available.
 
-### Ordered
+## Connection Status
+The connection status is shown on the bottom right of the application in the status bar at all times. 
 
-1. Item 1
-1. Item 2
-1. Item 3
-  1. Item 3a
-  1. Item 3b
+All connection definition entry widgets are disabled when a connection is active. You must disconnect the active connection to edit the connection details.
 
-## Links
+# Message List
+Incoming messages are displayed as they arrive in the message list. The list is in newest to oldest order (newest on top).
 
-You may be using [Markdown Live Preview](https://markdownlivepreview.com/).
+Each message has the following information/options:
 
-## Blockquotes
+- The data of the message is displayed (clipped after 5 vertical lines).
+- On the right, in a "chip" widget is the subject of the message
+- On the right, a 3 dot menu button is available, with the following options:
 
-> Markdown is a lightweight markup language with plain-text-formatting syntax, created in 2004 by John Gruber with Aaron Swartz.
->
->> Markdown is often used to format readme files, for writing messages in online discussion forums, and to create rich text using a plain text editor.
+    - **Copy**: Copies the message data to the clipboard
+    - **Detail**: If the message is JSON based, opens a dialog and displays a formatted view. Otherwise, the dialog will just show the original content.
+    - **Replay**: Re-sends the message exactly as defined, with the same subject and data.
+    - **Edit & Send** - Opens a dialog pre-filled with the message's subject and data, allowing you to edit prior to sending again.
 
-## Tables
+# Tools
+At the bottom of the window are several tools:
 
-| Left columns  | Right columns |
-| ------------- |:-------------:|
-| left foo      | right foo     |
-| left bar      | right bar     |
-| left baz      | right baz     |
+- **Clear**: Removes all current messages from the view. This is a permanent operation.
+- **Send Message**: Opens a dialog with subject and data fields, allowing the user to send a custom message.
+- **Filter**: This field filters the message list upon each character typed in the box. The filter operation is a **case-insensitive contains** on the message data only.
+- **Match** (Not Implemented): This field will highlight results found in the message data. Searches all items and highlights matches within the list.
 
-## Blocks of code
+# Status Bar
+The status bar displays relevant information about the application, and also the current connection status. The bar will be **green** when the connection is active, and **grey** all other times.
 
-```
-let message = 'Hello world';
-alert(message);
-```
+The bar also shows:
 
-## Inline code
-
-This web site is using `markedjs/marked`.
+- **Message Count**: Displays the total number of messages currently in the list, as well as how many are displaying (if a filter is applied)
+- **URL**: The current fully-qualified URL being used
+- **Status**: Current connection status
 """;
