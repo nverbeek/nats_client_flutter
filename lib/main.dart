@@ -11,6 +11,7 @@ import 'package:flutter_highlighter/themes/atelier-cave-light.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:loader_overlay/loader_overlay.dart';
 import 'package:nats_client_flutter/constants.dart';
+import 'package:nats_client_flutter/regex_text_highlight.dart';
 import 'package:provider/provider.dart';
 
 void main() async {
@@ -89,8 +90,9 @@ class _MyHomePageState extends State<MyHomePage> {
   String fullUri = '';
   int selectedIndex = -1;
   String currentFilter = '';
-  List<Message> filteredItems = [];
-  List<Message> items = [];
+  String currentFind = '';
+  List<Message<dynamic>> filteredItems = [];
+  List<Message<dynamic>> items = [];
 
   // nats stuff
   late Client natsClient;
@@ -98,7 +100,7 @@ class _MyHomePageState extends State<MyHomePage> {
   String connectionStateString = 'Disconnected';
 
   var filterBoxController = TextEditingController();
-  var matchBoxController = TextEditingController();
+  var findBoxController = TextEditingController();
 
   @override
   initState() {
@@ -125,9 +127,6 @@ class _MyHomePageState extends State<MyHomePage> {
       filteredItems = results;
     });
   }
-
-  // ignore: unused_element
-  void _runMatch() {}
 
   void updateFullUri() {
     setState(() {
@@ -527,10 +526,12 @@ class _MyHomePageState extends State<MyHomePage> {
               itemBuilder: (context, index) {
                 return Material(
                   child: ListTile(
-                    title: Text(
-                      filteredItems[index].string,
-                      style: const TextStyle(fontSize: 14),
-                      maxLines: 5,
+                    title: RegexTextHighlight(
+                      text: filteredItems[index].string,
+                      searchTerm: currentFind,
+                      highlightStyle: TextStyle(
+                        background: Paint()..color = Theme.of(context).colorScheme.inversePrimary,
+                      ),
                     ),
                     tileColor: selectedIndex == index
                         ? Theme.of(context).colorScheme.inversePrimary
@@ -632,7 +633,7 @@ class _MyHomePageState extends State<MyHomePage> {
           Row(
             children: <Widget>[
               Container(
-                padding: const EdgeInsets.fromLTRB(10, 5, 5, 10),
+                padding: const EdgeInsets.fromLTRB(10, 10, 5, 10),
                 child: SizedBox(
                     height: 50,
                     child: ElevatedButton(
@@ -643,7 +644,7 @@ class _MyHomePageState extends State<MyHomePage> {
                         ))),
               ),
               Container(
-                padding: const EdgeInsets.fromLTRB(0, 5, 5, 10),
+                padding: const EdgeInsets.fromLTRB(0, 10, 5, 10),
                 child: SizedBox(
                     height: 50,
                     child: ElevatedButton(
@@ -659,7 +660,7 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 5, 10, 10),
+                  padding: const EdgeInsets.fromLTRB(0, 10, 10, 10),
                   child: TextFormField(
                     controller: filterBoxController,
                     onChanged: (value) {
@@ -686,18 +687,24 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 5, 10, 10),
+                  padding: const EdgeInsets.fromLTRB(0, 10, 10, 10),
                   child: TextFormField(
-                    controller: matchBoxController,
+                    controller: findBoxController,
+                    onChanged: (value) {
+                      setState(() {
+                        currentFind = value;
+                      });
+                    },
                     decoration: InputDecoration(
                       border: const OutlineInputBorder(),
-                      hintText: 'Match',
-                      prefixIcon: const Icon(Icons.highlight),
+                      hintText: 'Find',
+                      prefixIcon: const Icon(Icons.search),
                       suffixIcon: IconButton(
                         icon: const Icon(Icons.clear),
                         onPressed: () {
                           setState(() {
-                            matchBoxController.clear();
+                            findBoxController.clear();
+                            currentFind = '';
                           });
                         },
                       ),

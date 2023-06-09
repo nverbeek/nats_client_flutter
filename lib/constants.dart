@@ -50,7 +50,7 @@ At the bottom of the window are several tools:
 - **Clear**: Removes all current messages from the view. This is a permanent operation.
 - **Send Message**: Opens a dialog with subject and data fields, allowing the user to send a custom message.
 - **Filter**: This field filters the message list upon each character typed in the box. The filter operation is a **case-insensitive contains** on the message data only.
-- **Match** (Not Implemented): This field will highlight results found in the message data. Searches all items and highlights matches within the list.
+- **Find**: This field will highlight results found in the message data. Searches all items and highlights matches within the list.
 
 # Status Bar
 The status bar displays relevant information about the application, and also the current connection status. The bar will be **green** when the connection is active, and **grey** all other times.
