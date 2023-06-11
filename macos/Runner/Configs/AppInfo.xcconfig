@@ -8,7 +8,7 @@
 PRODUCT_NAME = NATS Client
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.dematic.natsClientFlutter
+PRODUCT_BUNDLE_IDENTIFIER = com.nverbeek.natsClientFlutter
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2023 com.dematic. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2023 com.nverbeek. All rights reserved.
