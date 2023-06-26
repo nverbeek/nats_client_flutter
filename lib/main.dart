@@ -81,10 +81,9 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  //String host = '35.196.236.50';
-  String host = '10.0.0.38';
+  String host = '127.0.0.1';
   String port = '4222';
-  String subject = 'dwe.*';
+  String subject = '>';
   var availableSchemes = <String>['ws://', 'nats://'];
   String scheme = 'nats://';
   String fullUri = '';
@@ -181,7 +180,7 @@ class _MyHomePageState extends State<MyHomePage> {
         });
       });
       await natsClient.connect(uri, retry: false);
-      var sub = natsClient.sub('dwe.*');
+      var sub = natsClient.sub(subject);
       sub.stream.listen((event) {
         debugPrint(event.string);
         setState(() {
