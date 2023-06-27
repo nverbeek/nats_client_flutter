@@ -180,19 +180,20 @@ class _MyHomePageState extends State<MyHomePage> {
         });
       });
       await natsClient.connect(uri, retry: false);
-      var sub = natsClient.sub(subject);
-      sub.stream.listen((event) {
-        debugPrint(event.string);
-        setState(() {
-          items.insert(0, event);
-          // if an item is selected, we need to move the selection since
-          // we just put a new item in the list
-          if (selectedIndex > -1) {
-            selectedIndex += 1;
-          }
-          _runFilter();
-        });
-      });
+
+      // process the subjects, see if there are more than one
+      if (subject.contains(',')) {
+        // there are more than one subject to listen to
+        var subjects = subject.split(',');
+
+        for(String subject in subjects) {
+          subscribeToSubject(subject.trim());
+        }
+      }
+      else {
+        subscribeToSubject(subject.trim());
+      }
+
     } on HttpException {
       showSnackBar('Failed to connect!');
       setStateDisconnected();
@@ -203,6 +204,28 @@ class _MyHomePageState extends State<MyHomePage> {
       showSnackBar('Failed to connect!');
       setStateDisconnected();
     }
+  }
+
+  void subscribeToSubject(subject) {
+    debugPrint('Subscribing to $subject');
+    var sub = natsClient.sub(subject);
+
+    sub.stream.listen((event) {
+      handleIncomingMessage(event);
+    });
+  }
+
+  void handleIncomingMessage(event) {
+    debugPrint(event.string);
+    setState(() {
+      items.insert(0, event);
+      // if an item is selected, we need to move the selection since
+      // we just put a new item in the list
+      if (selectedIndex > -1) {
+        selectedIndex += 1;
+      }
+      _runFilter();
+    });
   }
 
   void showLoadingSpinner() {
@@ -299,12 +322,17 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  Future<void> showSendMessageDialog(String? subject, String? data) async {
+  Future<void> showSendMessageDialog(
+      String? subject, String? replyToSubject, String? data) async {
     var subjectBoxController = TextEditingController();
+    var replyToSubjectBoxController = TextEditingController();
     var dataBoxController = TextEditingController();
 
     if (subject != null && subject.isNotEmpty) {
       subjectBoxController.text = subject;
+    }
+    if (replyToSubject != null && replyToSubject.isNotEmpty) {
+      replyToSubjectBoxController.text = replyToSubject;
     }
     if (data != null && data.isNotEmpty) {
       dataBoxController.text = data;
@@ -323,6 +351,17 @@ class _MyHomePageState extends State<MyHomePage> {
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
                   hintText: 'Subject',
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
+                child: TextFormField(
+                  maxLines: null,
+                  controller: replyToSubjectBoxController,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    hintText: 'Reply To Subject',
+                  ),
                 ),
               ),
               Expanded(
@@ -354,7 +393,8 @@ class _MyHomePageState extends State<MyHomePage> {
               child: const Text('Send'),
               onPressed: () {
                 natsClient.pubString(subjectBoxController.value.text,
-                    dataBoxController.value.text);
+                    dataBoxController.value.text,
+                    replyTo: replyToSubjectBoxController.value.text);
                 Navigator.of(context).pop();
               },
             ),
@@ -365,7 +405,6 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> showHelpDialog() async {
-
     return showDialog<void>(
       context: context,
       builder: (BuildContext ctx) => const Dialog(
@@ -449,7 +488,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                   ),
                   Flexible(
-                    flex: 3,
+                    flex: 2,
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
                       child: TextFormField(
@@ -482,7 +521,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                   ),
                   Flexible(
-                    flex: 1,
+                    flex: 3,
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
                       child: TextFormField(
@@ -529,7 +568,9 @@ class _MyHomePageState extends State<MyHomePage> {
                       text: filteredItems[index].string,
                       searchTerm: currentFind,
                       highlightStyle: TextStyle(
-                        background: Paint()..color = Theme.of(context).colorScheme.inversePrimary,
+                        background: Paint()
+                          ..color =
+                              Theme.of(context).colorScheme.inversePrimary,
                       ),
                     ),
                     tileColor: selectedIndex == index
@@ -559,7 +600,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                 label: Text(filteredItems[index].subject!)),
                           ),
                         ),
-                        PopupMenuButton(
+                        PopupMenuButton<String>(
                           itemBuilder: (context) {
                             return [
                               const PopupMenuItem(
@@ -577,6 +618,10 @@ class _MyHomePageState extends State<MyHomePage> {
                               const PopupMenuItem(
                                 value: 'edit_and_send',
                                 child: Text('Edit & Send'),
+                              ),
+                              const PopupMenuItem(
+                                value: 'reply_to',
+                                child: Text('Reply To'),
                               )
                             ];
                           },
@@ -591,9 +636,9 @@ class _MyHomePageState extends State<MyHomePage> {
                                 var formattedJson = '';
                                 try {
                                   var json =
-                                  jsonDecode(filteredItems[index].string);
+                                      jsonDecode(filteredItems[index].string);
                                   var encoder =
-                                  const JsonEncoder.withIndent("  ");
+                                      const JsonEncoder.withIndent("  ");
                                   formattedJson = encoder.convert(json);
                                 } on FormatException {
                                   formattedJson = filteredItems[index].string;
@@ -614,7 +659,16 @@ class _MyHomePageState extends State<MyHomePage> {
                                 if (isConnected) {
                                   showSendMessageDialog(
                                       filteredItems[index].subject!,
+                                      null,
                                       filteredItems[index].string);
+                                } else {
+                                  showSnackBar(
+                                      'Not connected, cannot send message');
+                                }
+                              case 'reply_to':
+                                if (isConnected) {
+                                  showSendMessageDialog(
+                                      filteredItems[index].replyTo, null, null);
                                 } else {
                                   showSnackBar(
                                       'Not connected, cannot send message');
@@ -649,7 +703,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: ElevatedButton(
                         onPressed: isConnected
                             ? () {
-                                showSendMessageDialog(null, null);
+                                showSendMessageDialog(null, null, null);
                               }
                             : null,
                         child: const Icon(
