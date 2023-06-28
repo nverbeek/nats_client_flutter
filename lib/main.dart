@@ -327,7 +327,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 if (headerVersion.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
-                    child: Text(headerVersion),
+                    child: SelectableText(headerVersion),
                   ),
                 if (headers.isNotEmpty)
                   const Padding(
@@ -340,7 +340,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 if (headers.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
-                    child: Text(headerText),
+                    child: SelectableText(headerText),
                   ),
                 const Padding(
                   padding: EdgeInsets.fromLTRB(0, 10, 0, 0),
@@ -384,14 +384,10 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> showSendMessageDialog(
       String? subject, String? replyToSubject, String? data) async {
     var subjectBoxController = TextEditingController();
-    var replyToSubjectBoxController = TextEditingController();
     var dataBoxController = TextEditingController();
 
     if (subject != null && subject.isNotEmpty) {
       subjectBoxController.text = subject;
-    }
-    if (replyToSubject != null && replyToSubject.isNotEmpty) {
-      replyToSubjectBoxController.text = replyToSubject;
     }
     if (data != null && data.isNotEmpty) {
       dataBoxController.text = data;
@@ -410,17 +406,6 @@ class _MyHomePageState extends State<MyHomePage> {
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
                   hintText: 'Subject',
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
-                child: TextFormField(
-                  maxLines: null,
-                  controller: replyToSubjectBoxController,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    hintText: 'Reply To Subject',
-                  ),
                 ),
               ),
               Expanded(
@@ -452,8 +437,7 @@ class _MyHomePageState extends State<MyHomePage> {
               child: const Text('Send'),
               onPressed: () {
                 natsClient.pubString(subjectBoxController.value.text,
-                    dataBoxController.value.text,
-                    replyTo: replyToSubjectBoxController.value.text);
+                    dataBoxController.value.text);
                 Navigator.of(context).pop();
               },
             ),
