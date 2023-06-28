@@ -10,7 +10,6 @@ import 'package:flutter_highlighter/themes/atelier-cave-dark.dart';
 import 'package:flutter_highlighter/themes/atelier-cave-light.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:loader_overlay/loader_overlay.dart';
-import 'package:nats_client_flutter/constants.dart';
 import 'package:nats_client_flutter/regex_text_highlight.dart';
 import 'package:provider/provider.dart';
 
@@ -448,18 +447,24 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> showHelpDialog() async {
+    //var help = DefaultAssetBundle.of(context).loadString('assets/app_help.md');
     return showDialog<void>(
       context: context,
-      builder: (BuildContext ctx) => const Dialog(
+      builder: (BuildContext ctx) => Dialog(
         child: Padding(
-            padding: EdgeInsets.all(20),
+            padding: const EdgeInsets.all(20),
             child: SingleChildScrollView(
               child: ListBody(
                 children: [
-                  MarkdownBody(
-                    data: helpMarkdown,
-                    shrinkWrap: true,
-                  ),
+                  FutureBuilder(
+                      future: DefaultAssetBundle.of(context)
+                          .loadString('assets/app_help.md'),
+                      builder: (context, snapshot) {
+                        return MarkdownBody(
+                          data: snapshot.data ?? '',
+                          shrinkWrap: true,
+                        );
+                      }),
                 ],
               ),
             )),

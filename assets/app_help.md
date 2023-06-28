@@ -1,8 +1,7 @@
-const String helpMarkdown = """
 # NATS Client
-This NATS client is a cross-platform client intended for use with non-Jetstream NATS servers. This client only supports WebSocket and plain NATS connection schemes.
+This NATS client is a cross-platform client intended for use with NATS servers. This client only supports WebSocket and plain NATS connection schemes.
 
-This client supports Windows, macOS and browser platforms, with the possibility of adding Android and iOS at a later time.
+This client supports Windows, macOS and Web platforms.
 
 # Theme
 The application has two themes, **light** and **dark**. The theme may be changed by using the 💡 toggle.
@@ -11,10 +10,10 @@ The application has two themes, **light** and **dark**. The theme may be changed
 ## Schemes
 The following schemes are supported:
 
-- **nats://** - Plain TCP socket (no Jetstream)
+- **nats://** - Plain TCP socket
 - **ws://** - WebSocket variant, see note below
 
-**NOTE:** The ws:// scheme **requires WebSocket to be enabled on your NATS server instance.** By default, NATS server does not enable WebSocket support. You must manually configure the server instance to open WS on the port of your choosing. 
+**NOTE:** The ws:// scheme **requires WebSocket to be enabled on your NATS server instance.** By default, NATS server does not enable WebSocket support. You must manually configure the server instance to open WS on the port of your choosing.
 
 Additionally, the nats:// scheme is unavailable when this client is running in a browser. This is because browsers do not support TCP sockets, and thus we cannot use the normal NATS connection scheme. For browsers, we only can use WebSocket connections, which requires enabling the server-side support in the above note.
 
@@ -26,7 +25,7 @@ The rest of the connection information is straightforward:
 - **Subjects**: The desired subjects you'd like to subscribe to. This allows a comma-separated list of subjects to be defined, ie `test.*, test.*.*`
 
 ## Connection Status
-The connection status is shown on the bottom right of the application in the status bar at all times. 
+The connection status is shown on the bottom right of the application in the status bar at all times.
 
 All connection definition entry widgets are disabled when a connection is active. You must disconnect the active connection to edit the connection details.
 
@@ -61,4 +60,3 @@ The bar also shows:
 - **Message Count**: Displays the total number of messages currently in the list, as well as how many are displaying (if a filter is applied)
 - **URL**: The current fully-qualified URL being used
 - **Status**: Current connection status
-""";

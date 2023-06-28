@@ -1,16 +1,20 @@
-# nats_client_flutter
+# NATS Client UI
+This NATS client is a cross-platform desktop application written in Flutter. The client allows users to easily watch & manage NATS messages.
 
-NATS Client written in Flutter
+# Platforms
+This application currently supports Windows, Linux, macOS and Web platforms. 
 
-## Getting Started
+# Main Features
+- Connect to a single NATS server using either plain (`nats://`) or WebSocket (`ws://`) schemes
+- Subscribe to multiple subjects
+- Filter received messages
+- Find text in received messages
+- Send custom messages
+- See message details, such as headers, subject and payload. JSON payloads are automatically formatted and syntax highlighted as well!
+- Light and Dark themes
 
-This project is a starting point for a Flutter application.
+# Application Usage
+See the [help documentation](./assets/app_help.md) for more details on how to use the application.
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+# License
+This project is licensed under the [MIT License](./LICENSE).
