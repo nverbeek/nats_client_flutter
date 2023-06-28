@@ -282,7 +282,32 @@ class _MyHomePageState extends State<MyHomePage> {
     ScaffoldMessenger.of(context).showSnackBar(snackBar);
   }
 
-  Future<void> showDetailDialog(String json) async {
+  Future<void> showDetailDialog(Message message) async {
+    var headerVersion = '';
+    Map<String, String> headers = <String, String>{};
+
+    // process the headers, if they exist
+    if (message.header != null) {
+      headerVersion = message.header?.version ?? '';
+      headers = message.header?.headers ?? <String, String>{};
+    }
+
+    String headerText = '';
+    if (headers.isNotEmpty) {
+      headers.forEach((k, v) => headerText += '$k: $v\n');
+      headerText = headerText.trim();
+    }
+
+    // format the data, if we can
+    var formattedJson = '';
+    try {
+      var json = jsonDecode(message.string);
+      var encoder = const JsonEncoder.withIndent("  ");
+      formattedJson = encoder.convert(json);
+    } on FormatException {
+      formattedJson = message.string;
+    }
+
     return showDialog<void>(
       context: context,
       builder: (BuildContext context) {
@@ -291,18 +316,54 @@ class _MyHomePageState extends State<MyHomePage> {
           content: SingleChildScrollView(
             child: ListBody(
               children: <Widget>[
-                HighlightView(
-                  json,
-                  language: 'json',
-                  theme:
-                      Provider.of<ThemeModel>(context, listen: false).isDark()
-                          ? atelierCaveDarkTheme
-                          : atelierCaveLightTheme,
-                  padding: const EdgeInsets.all(10),
-                  textStyle: const TextStyle(
-                      fontSize: 14,
-                      fontFamily:
-                          'SFMono-Regular,Consolas,Liberation Mono,Menlo,monospace'),
+                if (headerVersion.isNotEmpty)
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(0, 10, 0, 0),
+                    child: Text(
+                      'Header Version',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                if (headerVersion.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
+                    child: Text(headerVersion),
+                  ),
+                if (headers.isNotEmpty)
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(0, 10, 0, 0),
+                    child: Text(
+                      'Headers',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                if (headers.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
+                    child: Text(headerText),
+                  ),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(0, 10, 0, 0),
+                  child: Text(
+                    'Payload',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
+                  child: HighlightView(
+                    formattedJson,
+                    language: 'json',
+                    theme:
+                        Provider.of<ThemeModel>(context, listen: false).isDark()
+                            ? atelierCaveDarkTheme
+                            : atelierCaveLightTheme,
+                    padding: const EdgeInsets.all(10),
+                    textStyle: const TextStyle(
+                        fontSize: 14,
+                        fontFamily:
+                            'SFMono-Regular,Consolas,Liberation Mono,Menlo,monospace'),
+                  ),
                 ),
               ],
             ),
@@ -635,17 +696,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                 showSnackBar('Copied to clipboard!');
                                 break;
                               case 'detail':
-                                var formattedJson = '';
-                                try {
-                                  var json =
-                                      jsonDecode(filteredItems[index].string);
-                                  var encoder =
-                                      const JsonEncoder.withIndent("  ");
-                                  formattedJson = encoder.convert(json);
-                                } on FormatException {
-                                  formattedJson = filteredItems[index].string;
-                                }
-                                showDetailDialog(formattedJson);
+                                showDetailDialog(filteredItems[index]);
                                 break;
                               case 'replay':
                                 if (isConnected) {
@@ -669,9 +720,14 @@ class _MyHomePageState extends State<MyHomePage> {
                                 }
                               case 'reply_to':
                                 if (isConnected) {
-                                  if (filteredItems[index].replyTo != null && filteredItems[index].replyTo!.isNotEmpty) {
+                                  if (filteredItems[index].replyTo != null &&
+                                      filteredItems[index]
+                                          .replyTo!
+                                          .isNotEmpty) {
                                     showSendMessageDialog(
-                                        filteredItems[index].replyTo, null, null);
+                                        filteredItems[index].replyTo,
+                                        null,
+                                        null);
                                   } else {
                                     showSnackBar(
                                         'This message has no replyTo subject');
