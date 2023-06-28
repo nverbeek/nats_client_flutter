@@ -124,10 +124,11 @@ packages:
   dart_nats:
     dependency: "direct main"
     description:
-      name: dart_nats
-      sha256: "5648db420453b41f93f83e835d12bc7e1607441a7548b1af29ba0b544e0dea6b"
-      url: "https://pub.dev"
-    source: hosted
+      path: "."
+      ref: HEAD
+      resolved-ref: "26d78c8feaf6a70e59e9f6f2b7bacb828c70a604"
+      url: "https://github.com/CoryHagerman/dart-nats.git"
+    source: git
     version: "0.6.1"
   ed25519_edwards:
     dependency: transitive
