@@ -23,7 +23,7 @@ The rest of the connection information is straightforward:
 
 - **Host**: IP or DNS address of the NATS server host
 - **Port**: Associated NATS port
-- **Subject**: The desired subject (or wildcard) you'd like to subscribe to. At this time, only one subject definition is available.
+- **Subjects**: The desired subjects you'd like to subscribe to. This allows a comma-separated list of subjects to be defined, ie `test.*, test.*.*`
 
 ## Connection Status
 The connection status is shown on the bottom right of the application in the status bar at all times. 
@@ -43,6 +43,7 @@ Each message has the following information/options:
     - **Detail**: If the message is JSON based, opens a dialog and displays a formatted view. Otherwise, the dialog will just show the original content.
     - **Replay**: Re-sends the message exactly as defined, with the same subject and data.
     - **Edit & Send** - Opens a dialog pre-filled with the message's subject and data, allowing you to edit prior to sending again.
+    - **Reply To** - If the selected message has a replyTo subject defined, this option opens a send message box where the subject is pre-filled with the replyTo subject.
 
 # Tools
 At the bottom of the window are several tools:

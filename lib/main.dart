@@ -186,14 +186,12 @@ class _MyHomePageState extends State<MyHomePage> {
         // there are more than one subject to listen to
         var subjects = subject.split(',');
 
-        for(String subject in subjects) {
+        for (String subject in subjects) {
           subscribeToSubject(subject.trim());
         }
-      }
-      else {
+      } else {
         subscribeToSubject(subject.trim());
       }
-
     } on HttpException {
       showSnackBar('Failed to connect!');
       setStateDisconnected();
@@ -592,12 +590,16 @@ class _MyHomePageState extends State<MyHomePage> {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: <Widget>[
-                        Tooltip(
-                          message: 'Subject',
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(0, 0, 5, 0),
-                            child: Chip(
-                                label: Text(filteredItems[index].subject!)),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 450),
+                          child: Tooltip(
+                            message: filteredItems[index].subject!,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(0, 0, 5, 0),
+                              child: Chip(
+                                  label: Text(filteredItems[index].subject!,
+                                      overflow: TextOverflow.ellipsis)),
+                            ),
                           ),
                         ),
                         PopupMenuButton<String>(
@@ -667,8 +669,13 @@ class _MyHomePageState extends State<MyHomePage> {
                                 }
                               case 'reply_to':
                                 if (isConnected) {
-                                  showSendMessageDialog(
-                                      filteredItems[index].replyTo, null, null);
+                                  if (filteredItems[index].replyTo != null && filteredItems[index].replyTo!.isNotEmpty) {
+                                    showSendMessageDialog(
+                                        filteredItems[index].replyTo, null, null);
+                                  } else {
+                                    showSnackBar(
+                                        'This message has no replyTo subject');
+                                  }
                                 } else {
                                   showSnackBar(
                                       'Not connected, cannot send message');
