@@ -102,7 +102,7 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: "859a6f2e05bad630125c98df8639734140fe32e0"
+      resolved-ref: ca09bb8d1272ff397273b3ee89b5975baa33498a
       url: "https://github.com/CoryHagerman/dart-nats.git"
     source: git
     version: "0.6.2"
@@ -155,10 +155,10 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_markdown
-      sha256: dc6d5258653f6857135b32896ccda7f7af0c54dcec832495ad6835154c6c77c0
+      sha256: "9e0202b5339cd88ac0f109abae8502681bfab0b13a8e02a0e7158124610b5d98"
       url: "https://pub.dev"
     source: hosted
-    version: "0.6.15"
+    version: "0.6.15+1"
   flutter_test:
     dependency: "direct dev"
     description: flutter
@@ -339,4 +339,4 @@ packages:
     version: "2.4.0"
 sdks:
   dart: ">=3.0.2 <4.0.0"
-  flutter: ">=3.3.0"
+  flutter: ">=3.10.0"
