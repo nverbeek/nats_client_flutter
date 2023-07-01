@@ -1,5 +1,9 @@
-import 'package:flutter/cupertino.dart';
+//import 'package:flutter/cupertino.dart';
 
+import 'package:flutter/material.dart';
+
+/// Widget that applies [highlightStyle] to the provided [text] when any portion
+/// of the text matches the [searchTerm]. Text is limited to [maxLines].
 class RegexTextHighlight extends StatelessWidget {
   final String text;
   final String searchTerm;
@@ -14,11 +18,13 @@ class RegexTextHighlight extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // if text is empty, return the default text style
     if (text.isEmpty) {
       return Text("",
           style: DefaultTextStyle.of(context).style);
     }
 
+    // if the search term is empty, return the default text style
     if (searchTerm.isEmpty) {
       return Text(text,
           maxLines: maxLines,
@@ -29,6 +35,7 @@ class RegexTextHighlight extends StatelessWidget {
     int start = 0;
     while (true) {
 
+      // set up the regex, this is a simple match for now
       var highlightRegex = RegExp('($searchTerm)', caseSensitive: false);
 
       final String? highlight =

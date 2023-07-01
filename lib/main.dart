@@ -13,20 +13,27 @@ import 'package:loader_overlay/loader_overlay.dart';
 import 'package:nats_client_flutter/regex_text_highlight.dart';
 import 'package:provider/provider.dart';
 
+import 'constants.dart' as constants;
+
 void main() async {
   runApp(const MyApp());
 }
 
+/// Class to handle theme changes
 class ThemeModel with ChangeNotifier {
   ThemeMode _mode;
+
   ThemeMode get mode => _mode;
+
   ThemeModel({ThemeMode mode = ThemeMode.dark}) : _mode = mode;
 
+  /// Toggles the theme between dark and light
   void toggleMode() {
     _mode = _mode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
     notifyListeners();
   }
 
+  /// Returns [true] if the current theme is dark
   bool isDark() {
     if (_mode == ThemeMode.dark) {
       return true;
@@ -35,10 +42,11 @@ class ThemeModel with ChangeNotifier {
   }
 }
 
+/// Main application starting point
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
+  /// Root UI of the entire application
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<ThemeModel>(
@@ -95,7 +103,7 @@ class _MyHomePageState extends State<MyHomePage> {
   // nats stuff
   late Client natsClient;
   bool isConnected = false;
-  String connectionStateString = 'Disconnected';
+  String connectionStateString = constants.disconnected;
 
   var filterBoxController = TextEditingController();
   var findBoxController = TextEditingController();
@@ -134,9 +142,9 @@ class _MyHomePageState extends State<MyHomePage> {
 
   String getConnectedString() {
     if (isConnected) {
-      return 'Connected';
+      return constants.connected;
     }
-    return 'Disconnected';
+    return constants.disconnected;
   }
 
   void natsConnect() async {
@@ -153,24 +161,24 @@ class _MyHomePageState extends State<MyHomePage> {
         switch (event) {
           case Status.connected:
             setStateConnected();
-            stateString = 'Connected';
+            stateString = constants.connected;
             break;
           case Status.closed:
           case Status.disconnected:
             setStateDisconnected();
-            stateString = 'Disconnected';
+            stateString = constants.disconnected;
             break;
           case Status.tlsHandshake:
-            stateString = 'TLS Handshake';
+            stateString = constants.tlsHandshake;
             break;
           case Status.infoHandshake:
-            stateString = 'Info Handshake';
+            stateString = constants.infoHandshake;
             break;
           case Status.reconnecting:
-            stateString = 'Reconnecting';
+            stateString = constants.reconnecting;
             break;
           case Status.connecting:
-            stateString = 'Connecting';
+            stateString = constants.connecting;
             break;
         }
 
@@ -192,13 +200,13 @@ class _MyHomePageState extends State<MyHomePage> {
         subscribeToSubject(subject.trim());
       }
     } on HttpException {
-      showSnackBar('Failed to connect!');
+      showSnackBar(constants.connectionFailure);
       setStateDisconnected();
     } on Exception {
-      showSnackBar('Failed to connect!');
+      showSnackBar(constants.connectionFailure);
       setStateDisconnected();
     } catch (_) {
-      showSnackBar('Failed to connect!');
+      showSnackBar(constants.connectionFailure);
       setStateDisconnected();
     }
   }
@@ -249,7 +257,7 @@ class _MyHomePageState extends State<MyHomePage> {
   void setStateDisconnected() {
     setState(() {
       isConnected = false;
-      connectionStateString = 'Disconnected';
+      connectionStateString = constants.disconnected;
       if (context.mounted) {
         hideLoadingSpinner();
       }
@@ -281,6 +289,7 @@ class _MyHomePageState extends State<MyHomePage> {
     ScaffoldMessenger.of(context).showSnackBar(snackBar);
   }
 
+  /// Shows a dialog containing [Message] details including headers and payload.
   Future<void> showDetailDialog(Message message) async {
     var headerVersion = '';
     Map<String, String> headers = <String, String>{};
@@ -380,6 +389,9 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
+  /// Displays a dialog allowing a user to send a custom message.
+  /// Subject box will be pre-filled with [subject] or [replyToSubject] if provided.
+  /// Data box will be pre-filled with [data] if provided.
   Future<void> showSendMessageDialog(
       String? subject, String? replyToSubject, String? data) async {
     var subjectBoxController = TextEditingController();
@@ -446,8 +458,8 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
+  /// Displays an application help dialog containing a syntax-highlighted markdown document.
   Future<void> showHelpDialog() async {
-    //var help = DefaultAssetBundle.of(context).loadString('assets/app_help.md');
     return showDialog<void>(
       context: context,
       builder: (BuildContext ctx) => Dialog(
@@ -823,11 +835,11 @@ class _MyHomePageState extends State<MyHomePage> {
             padding: const EdgeInsets.fromLTRB(5, 2, 10, 4),
             color: Provider.of<ThemeModel>(context, listen: false).isDark()
                 ? isConnected
-                    ? Colors.green[700]
-                    : const Color(0xff474747)
+                    ? constants.connectedLight
+                    : constants.disconnectedLight
                 : isConnected
-                    ? Colors.green[400]
-                    : Colors.grey[400],
+                    ? constants.connectedDark
+                    : constants.disconnectedDark,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: <Widget>[
