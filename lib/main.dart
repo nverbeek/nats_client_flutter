@@ -97,6 +97,7 @@ class _MyHomePageState extends State<MyHomePage> {
   int selectedIndex = -1;
   String currentFilter = '';
   String currentFind = '';
+  Status currentStatus = Status.disconnected;
   List<Message<dynamic>> filteredItems = [];
   List<Message<dynamic>> items = [];
 
@@ -140,22 +141,15 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  String getConnectedString() {
-    if (isConnected) {
-      return constants.connected;
-    }
-    return constants.disconnected;
-  }
-
   void natsConnect() async {
     natsClient = Client();
 
-    showLoadingSpinner();
     debugPrint('About to connect to $fullUri');
     try {
       Uri uri = Uri.parse(fullUri);
       natsClient.statusStream.listen((Status event) {
         debugPrint('Connection status event $event');
+        currentStatus = event;
         String stateString = '';
 
         switch (event) {
@@ -166,6 +160,7 @@ class _MyHomePageState extends State<MyHomePage> {
           case Status.closed:
           case Status.disconnected:
             setStateDisconnected();
+            currentStatus = Status.disconnected;
             stateString = constants.disconnected;
             break;
           case Status.tlsHandshake:
@@ -186,7 +181,6 @@ class _MyHomePageState extends State<MyHomePage> {
           connectionStateString = stateString;
         });
       });
-      await natsClient.connect(uri, retry: false);
 
       // process the subjects, see if there are more than one
       if (subject.contains(',')) {
@@ -199,6 +193,10 @@ class _MyHomePageState extends State<MyHomePage> {
       } else {
         subscribeToSubject(subject.trim());
       }
+
+      // finally, make the connection attempt
+      await natsClient.connect(uri, retry: true, retryCount: -1);
+
     } on HttpException {
       showSnackBar(constants.connectionFailure);
       setStateDisconnected();
@@ -233,23 +231,10 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  void showLoadingSpinner() {
-    setState(() {
-      context.loaderOverlay.show();
-    });
-  }
-
-  void hideLoadingSpinner() {
-    setState(() {
-      context.loaderOverlay.hide();
-    });
-  }
-
   void setStateConnected() {
     setState(() {
       isConnected = true;
       if (context.mounted) {
-        hideLoadingSpinner();
       }
     });
   }
@@ -259,13 +244,12 @@ class _MyHomePageState extends State<MyHomePage> {
       isConnected = false;
       connectionStateString = constants.disconnected;
       if (context.mounted) {
-        hideLoadingSpinner();
       }
     });
   }
 
   void natsDisconnect() async {
-    await natsClient.close();
+    await natsClient.forceClose();
 
     setState(() {
       isConnected = false;
@@ -538,7 +522,7 @@ class _MyHomePageState extends State<MyHomePage> {
                         );
                       }).toList(),
                       value: scheme,
-                      onChanged: isConnected
+                      onChanged: (currentStatus != Status.disconnected)
                           ? null
                           : (value) {
                               scheme = value!;
@@ -552,7 +536,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
                       child: TextFormField(
-                        enabled: !isConnected,
+                        enabled: (currentStatus == Status.disconnected),
                         initialValue: host,
                         onChanged: (value) {
                           host = value;
@@ -568,7 +552,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   Flexible(
                     flex: 1,
                     child: TextFormField(
-                      enabled: !isConnected,
+                      enabled: (currentStatus == Status.disconnected),
                       initialValue: port,
                       onChanged: (value) {
                         port = value;
@@ -585,7 +569,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
                       child: TextFormField(
-                        enabled: !isConnected,
+                        enabled: (currentStatus == Status.disconnected),
                         initialValue: subject,
                         onChanged: (value) {
                           subject = value;
@@ -602,7 +586,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: SizedBox(
                         height: 50,
                         child: ElevatedButton(
-                            onPressed: isConnected ? null : natsConnect,
+                            onPressed: (currentStatus == Status.disconnected) ? natsConnect : null,
                             child: const Icon(Icons.check))),
                   ),
                   Container(
@@ -610,7 +594,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: SizedBox(
                         height: 50,
                         child: ElevatedButton(
-                            onPressed: isConnected ? natsDisconnect : null,
+                            onPressed: (currentStatus != Status.disconnected) ? natsDisconnect : null,
                             child: const Icon(Icons.close))),
                   ),
                 ],
@@ -700,7 +684,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                 showDetailDialog(filteredItems[index]);
                                 break;
                               case 'replay':
-                                if (isConnected) {
+                                if (currentStatus == Status.connected) {
                                   natsClient.pubString(
                                       filteredItems[index].subject!,
                                       filteredItems[index].string);
@@ -710,7 +694,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                 }
                                 break;
                               case 'edit_and_send':
-                                if (isConnected) {
+                                if (currentStatus == Status.connected) {
                                   showSendMessageDialog(
                                       filteredItems[index].subject!,
                                       null,
@@ -720,7 +704,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                       'Not connected, cannot send message');
                                 }
                               case 'reply_to':
-                                if (isConnected) {
+                                if (currentStatus == Status.connected) {
                                   if (filteredItems[index].replyTo != null &&
                                       filteredItems[index]
                                           .replyTo!
@@ -765,7 +749,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 child: SizedBox(
                     height: 50,
                     child: ElevatedButton(
-                        onPressed: isConnected
+                        onPressed: currentStatus == Status.connected
                             ? () {
                                 showSendMessageDialog(null, null, null);
                               }

@@ -29,6 +29,8 @@ The connection status is shown on the bottom right of the application in the sta
 
 All connection definition entry widgets are disabled when a connection is active. You must disconnect the active connection to edit the connection details.
 
+If a connection is lost or unavailable at request time, the client will indefinitely attempt reconnection on a short interval. To stop reconnecting, simply select the Disconnect button.
+
 # Message List
 Incoming messages are displayed as they arrive in the message list. The list is in newest to oldest order (newest on top).
 

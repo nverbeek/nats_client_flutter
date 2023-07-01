@@ -7,6 +7,7 @@ This application currently supports Windows, Linux, macOS and Web platforms.
 # Main Features
 - Connect to a single NATS server using either plain (`nats://`) or WebSocket (`ws://`) schemes
 - Subscribe to multiple subjects
+- Automatic re-connect upon lost connection
 - Filter received messages
 - Find text in received messages
 - Send custom messages
