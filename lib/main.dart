@@ -12,20 +12,50 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:loader_overlay/loader_overlay.dart';
 import 'package:nats_client_flutter/regex_text_highlight.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'constants.dart' as constants;
 
 void main() async {
-  runApp(const MyApp());
+  // must wait for widgets to initialize before we are able to use SharedPreferences
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // setup a reference to the shared preferences instance
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+
+  // attempt to read previous connection info from preferences
+  String? tempScheme = prefs.getString(constants.prefScheme);
+  String? tempHost = prefs.getString(constants.prefHost);
+  String? tempPort = prefs.getString(constants.prefPort);
+  String? tempSubject = prefs.getString(constants.prefSubject);
+  String? tempTheme = prefs.getString(constants.prefTheme);
+
+  // if needed, default the values
+  tempScheme ??= constants.defaultScheme;
+  tempHost ??= constants.defaultHost;
+  tempPort ??= constants.defaultPort;
+  tempSubject ??= constants.defaultSubject;
+  tempTheme ??= constants.darkTheme;
+
+  // run the ui
+  runApp(MyApp(tempScheme, tempHost, tempPort, tempSubject, tempTheme));
 }
 
 /// Class to handle theme changes
 class ThemeModel with ChangeNotifier {
-  ThemeMode _mode;
+  ThemeMode _mode = ThemeMode.dark;
 
   ThemeMode get mode => _mode;
 
-  ThemeModel({ThemeMode mode = ThemeMode.dark}) : _mode = mode;
+  ThemeModel(String defaultTheme) {
+    // set the initial theme
+    // this will be the last theme used by the user, or the default (dark)
+    if (defaultTheme == constants.darkTheme) {
+      _mode = ThemeMode.dark;
+    } else {
+      _mode = ThemeMode.light;
+    }
+  }
 
   /// Toggles the theme between dark and light
   void toggleMode() {
@@ -44,13 +74,20 @@ class ThemeModel with ChangeNotifier {
 
 /// Main application starting point
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp(this.scheme, this.host, this.port, this.subject, this.theme,
+      {super.key});
+
+  final String scheme;
+  final String host;
+  final String port;
+  final String subject;
+  final String theme;
 
   /// Root UI of the entire application
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<ThemeModel>(
-      create: (_) => ThemeModel(),
+      create: (_) => ThemeModel(theme),
       child: Consumer<ThemeModel>(
         builder: (_, model, __) {
           return MaterialApp(
@@ -59,8 +96,8 @@ class MyApp extends StatelessWidget {
             theme: ThemeData.light(useMaterial3: true),
             darkTheme: ThemeData.dark(useMaterial3: true),
             themeMode: model.mode,
-            home: const LoaderOverlay(
-              child: MyHomePage(title: 'NATS Client'),
+            home: LoaderOverlay(
+              child: MyHomePage('NATS Client', scheme, host, port, subject),
             ),
           );
         },
@@ -70,7 +107,8 @@ class MyApp extends StatelessWidget {
 }
 
 class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+  const MyHomePage(this.title, this.scheme, this.host, this.port, this.subject,
+      {super.key});
 
   // This widget is the home page of your application. It is stateful, meaning
   // that it has a State object (defined below) that contains fields that affect
@@ -82,17 +120,21 @@ class MyHomePage extends StatefulWidget {
   // always marked "final".
 
   final String title;
+  final String scheme;
+  final String host;
+  final String port;
+  final String subject;
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  String host = '127.0.0.1';
-  String port = '4222';
-  String subject = '>';
+  String host = constants.defaultHost;
+  String port = constants.defaultPort;
+  String subject = constants.defaultSubject;
   var availableSchemes = <String>['ws://', 'nats://'];
-  String scheme = 'nats://';
+  String scheme = constants.defaultScheme;
   String fullUri = '';
   int selectedIndex = -1;
   String currentFilter = '';
@@ -109,10 +151,20 @@ class _MyHomePageState extends State<MyHomePage> {
   var filterBoxController = TextEditingController();
   var findBoxController = TextEditingController();
 
+  // user preferences
+  late SharedPreferences prefs;
+
   @override
   initState() {
+    initializePreferences();
     filteredItems = items;
+    scheme = widget.scheme;
     super.initState();
+  }
+
+  /// initialize the shared preferences instance
+  initializePreferences() async {
+    prefs = await SharedPreferences.getInstance();
   }
 
   void _runFilter() {
@@ -121,12 +173,13 @@ class _MyHomePageState extends State<MyHomePage> {
       // if the search field is empty or only contains white-space, we'll display all items
       results = items;
     } else {
+      // filter the items based on the message payload against the search term
       results = items
           .where((message) => message.string
               .toLowerCase()
+              // we use the toLowerCase() method to make it case-insensitive
               .contains(currentFilter.toLowerCase()))
           .toList();
-      // we use the toLowerCase() method to make it case-insensitive
     }
 
     // Refresh the UI
@@ -143,6 +196,13 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void natsConnect() async {
     natsClient = Client();
+
+    // save the user's connection properties to preferences.
+    // we can read these out at startup.
+    await prefs.setString(constants.prefScheme, scheme);
+    await prefs.setString(constants.prefHost, host);
+    await prefs.setString(constants.prefPort, port);
+    await prefs.setString(constants.prefSubject, subject);
 
     debugPrint('About to connect to $fullUri');
     try {
@@ -196,7 +256,6 @@ class _MyHomePageState extends State<MyHomePage> {
 
       // finally, make the connection attempt
       await natsClient.connect(uri, retry: true, retryCount: -1);
-
     } on HttpException {
       showSnackBar(constants.connectionFailure);
       setStateDisconnected();
@@ -234,8 +293,7 @@ class _MyHomePageState extends State<MyHomePage> {
   void setStateConnected() {
     setState(() {
       isConnected = true;
-      if (context.mounted) {
-      }
+      if (context.mounted) {}
     });
   }
 
@@ -243,8 +301,7 @@ class _MyHomePageState extends State<MyHomePage> {
     setState(() {
       isConnected = false;
       connectionStateString = constants.disconnected;
-      if (context.mounted) {
-      }
+      if (context.mounted) {}
     });
   }
 
@@ -489,8 +546,16 @@ class _MyHomePageState extends State<MyHomePage> {
         actions: [
           IconButton(
               icon: const Icon(Icons.lightbulb),
-              onPressed: () =>
-                  Provider.of<ThemeModel>(context, listen: false).toggleMode()),
+              onPressed: () {
+                ThemeModel themeModel =
+                    Provider.of<ThemeModel>(context, listen: false);
+                themeModel.toggleMode();
+                if (themeModel.isDark()) {
+                  prefs.setString(constants.prefTheme, constants.darkTheme);
+                } else {
+                  prefs.setString(constants.prefTheme, constants.lightTheme);
+                }
+              }),
           Padding(
             padding: const EdgeInsets.fromLTRB(0, 0, 10, 0),
             child: IconButton(
@@ -537,7 +602,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
                       child: TextFormField(
                         enabled: (currentStatus == Status.disconnected),
-                        initialValue: host,
+                        initialValue: widget.host,
                         onChanged: (value) {
                           host = value;
                           updateFullUri();
@@ -553,7 +618,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     flex: 1,
                     child: TextFormField(
                       enabled: (currentStatus == Status.disconnected),
-                      initialValue: port,
+                      initialValue: widget.port,
                       onChanged: (value) {
                         port = value;
                         updateFullUri();
@@ -570,7 +635,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
                       child: TextFormField(
                         enabled: (currentStatus == Status.disconnected),
-                        initialValue: subject,
+                        initialValue: widget.subject,
                         onChanged: (value) {
                           subject = value;
                         },
@@ -586,7 +651,9 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: SizedBox(
                         height: 50,
                         child: ElevatedButton(
-                            onPressed: (currentStatus == Status.disconnected) ? natsConnect : null,
+                            onPressed: (currentStatus == Status.disconnected)
+                                ? natsConnect
+                                : null,
                             child: const Icon(Icons.check))),
                   ),
                   Container(
@@ -594,7 +661,9 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: SizedBox(
                         height: 50,
                         child: ElevatedButton(
-                            onPressed: (currentStatus != Status.disconnected) ? natsDisconnect : null,
+                            onPressed: (currentStatus != Status.disconnected)
+                                ? natsDisconnect
+                                : null,
                             child: const Icon(Icons.close))),
                   ),
                 ],
