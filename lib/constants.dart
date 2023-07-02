@@ -14,3 +14,9 @@ var connectedDark = Colors.green[400];
 var connectedLight = Colors.green[700];
 var disconnectedDark = Colors.grey[400];
 var disconnectedLight = Colors.grey[800];
+
+// preference keys
+const String prefScheme = "SCHEME";
+const String prefHost = "HOST";
+const String prefPort = "PORT";
+const String prefSubject = "SUBJECT";

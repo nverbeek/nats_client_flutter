@@ -12,6 +12,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:loader_overlay/loader_overlay.dart';
 import 'package:nats_client_flutter/regex_text_highlight.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'constants.dart' as constants;
 
@@ -108,10 +109,17 @@ class _MyHomePageState extends State<MyHomePage> {
 
   var filterBoxController = TextEditingController();
   var findBoxController = TextEditingController();
+  var hostBoxController = TextEditingController();
+  var portBoxController = TextEditingController();
+  var subjectBoxController = TextEditingController();
+
+  // user preferences
+  late SharedPreferences prefs;
 
   @override
   initState() {
     filteredItems = items;
+    setup();
     super.initState();
   }
 
@@ -143,6 +151,13 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void natsConnect() async {
     natsClient = Client();
+
+    // save the user's connection properties to preferences.
+    // we can read these out at startup.
+    await prefs.setString(constants.prefScheme, scheme);
+    await prefs.setString(constants.prefHost, host);
+    await prefs.setString(constants.prefPort, port);
+    await prefs.setString(constants.prefSubject, subject);
 
     debugPrint('About to connect to $fullUri');
     try {
@@ -468,6 +483,36 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
+  setup() async {
+    // setup a reference to the shared preferences instance
+    prefs = await SharedPreferences.getInstance();
+
+    // pre-fill connection info from the last run
+    setState(() {
+      // pre-fill connection info from the last run
+      String? tempScheme = prefs.getString(constants.prefScheme);
+      if (tempScheme != null) {
+        scheme = tempScheme;
+      }
+      String? tempHost = prefs.getString(constants.prefHost);
+      if (tempHost != null) {
+        host = tempHost;
+        hostBoxController.text = tempHost;
+      }
+      String? tempPort = prefs.getString(constants.prefPort);
+      if (tempPort != null) {
+        port = tempPort;
+        portBoxController.text = tempPort;
+      }
+      String? tempSubject = prefs.getString(constants.prefSubject);
+      if (tempSubject != null) {
+        subject = tempSubject;
+        subjectBoxController.text = tempSubject;
+      }
+    });
+
+  }
+
   @override
   Widget build(BuildContext context) {
     updateFullUri();
@@ -537,7 +582,8 @@ class _MyHomePageState extends State<MyHomePage> {
                       padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
                       child: TextFormField(
                         enabled: (currentStatus == Status.disconnected),
-                        initialValue: host,
+                        controller: hostBoxController,
+                        //initialValue: host,
                         onChanged: (value) {
                           host = value;
                           updateFullUri();
@@ -553,7 +599,8 @@ class _MyHomePageState extends State<MyHomePage> {
                     flex: 1,
                     child: TextFormField(
                       enabled: (currentStatus == Status.disconnected),
-                      initialValue: port,
+                      controller: portBoxController,
+                      //initialValue: port,
                       onChanged: (value) {
                         port = value;
                         updateFullUri();
@@ -570,7 +617,8 @@ class _MyHomePageState extends State<MyHomePage> {
                       padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
                       child: TextFormField(
                         enabled: (currentStatus == Status.disconnected),
-                        initialValue: subject,
+                        controller: subjectBoxController,
+                        //initialValue: subject,
                         onChanged: (value) {
                           subject = value;
                         },
