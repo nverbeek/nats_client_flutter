@@ -1,5 +1,5 @@
 # NATS Client UI
-This NATS client is a cross-platform desktop application written in Flutter. The client allows users to easily watch & manage NATS messages.
+This NATS client is a cross-platform desktop & web application written in Flutter. The client allows users to easily watch & manage NATS messages.
 
 # Platforms
 This application currently supports Windows, Linux, macOS and Web platforms. 
@@ -22,6 +22,14 @@ This application currently supports Windows, Linux, macOS and Web platforms.
 # Application Usage
 See the [help documentation](./assets/app_help.md) for more details on how to use the application.
 
+# Docker
+This application is also available via [Docker Hub](https://hub.docker.com/repository/docker/nverbeek/nats-client-flutter). Please note that running the application in Docker means you're running the web flavor. Only the `ws://` scheme is available in the browser as explained in the [help documentation](./assets/app_help.md). Be sure to enable WebSocket support on your target NATS server if you intend to use the Docker version.
+
+To install and run via Docker:
+```
+docker run -d -p 8080:80 --name nats-client nverbeek/nats-client-flutter
+```
+
 # Building
 To build NATS Client UI, you must first [install Flutter](https://docs.flutter.dev/get-started/install) for your platform, [and get an editor](https://docs.flutter.dev/get-started/editor). I highly recommend Android Studio for building, but VS Code is a great second option.
 
@@ -36,16 +44,10 @@ flutter build linux
 flutter build web
 ```
 
-## Docker
-A [sample Dockerfile](./Dockerfile) is provided if you'd prefer to build the client as a Docker image and run it that way.
-
+## Docker Build
 To build a docker version of the client, run the following command (from the root of the source code):
 ```
-docker build -t nats-client-image .
-```
-To run a container with this image:
-```
-docker run -d -p 8080:80 --name nats-client-ui nats-client-image
+docker build -t nats-client-flutter .
 ```
 
 # Contributing
