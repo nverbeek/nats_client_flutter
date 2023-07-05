@@ -30,6 +30,8 @@ To install and run via Docker:
 docker run -d -p 8080:80 --name nats-client nverbeek/nats-client-flutter
 ```
 
+You may then access the application in your favorite browser at http://localhost:8080.
+
 # Building
 To build NATS Client UI, you must first [install Flutter](https://docs.flutter.dev/get-started/install) for your platform, [and get an editor](https://docs.flutter.dev/get-started/editor). I highly recommend Android Studio for building, but VS Code is a great second option.
 
