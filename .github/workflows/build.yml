@@ -8,11 +8,11 @@ jobs:
         with:
           channel: 'stable'
       - name: Install project dependencies
-      - run: flutter pub get
+        run: flutter pub get
       - name: Generate intermediates
         run: flutter pub run build_runner build --delete-conflicting-outputs
       - name: Build artifacts
-      - run: flutter build web --release
+        run: flutter build web --release
       - name: Archive Release
         uses: thedoctor0/zip-release@master
         with:
