@@ -11,6 +11,7 @@ import 'package:flutter_highlighter/themes/atelier-cave-light.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:loader_overlay/loader_overlay.dart';
 import 'package:nats_client_flutter/regex_text_highlight.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -37,8 +38,13 @@ void main() async {
   tempSubject ??= constants.defaultSubject;
   tempTheme ??= constants.darkTheme;
 
+  // get the application's version number
+  PackageInfo packageInfo = await PackageInfo.fromPlatform();
+  String appVersion = packageInfo.version;
+
   // run the ui
-  runApp(MyApp(tempScheme, tempHost, tempPort, tempSubject, tempTheme));
+  runApp(MyApp(
+      appVersion, tempScheme, tempHost, tempPort, tempSubject, tempTheme));
 }
 
 /// Class to handle theme changes
@@ -74,9 +80,11 @@ class ThemeModel with ChangeNotifier {
 
 /// Main application starting point
 class MyApp extends StatelessWidget {
-  const MyApp(this.scheme, this.host, this.port, this.subject, this.theme,
+  const MyApp(this.appVersion, this.scheme, this.host, this.port, this.subject,
+      this.theme,
       {super.key});
 
+  final String appVersion;
   final String scheme;
   final String host;
   final String port;
@@ -97,7 +105,8 @@ class MyApp extends StatelessWidget {
             darkTheme: ThemeData.dark(useMaterial3: true),
             themeMode: model.mode,
             home: LoaderOverlay(
-              child: MyHomePage('NATS Client', scheme, host, port, subject),
+              child: MyHomePage(
+                  appVersion, 'NATS Client', scheme, host, port, subject),
             ),
           );
         },
@@ -107,7 +116,8 @@ class MyApp extends StatelessWidget {
 }
 
 class MyHomePage extends StatefulWidget {
-  const MyHomePage(this.title, this.scheme, this.host, this.port, this.subject,
+  const MyHomePage(this.appVersion, this.title, this.scheme, this.host,
+      this.port, this.subject,
       {super.key});
 
   // This widget is the home page of your application. It is stateful, meaning
@@ -119,6 +129,7 @@ class MyHomePage extends StatefulWidget {
   // used by the build method of the State. Fields in a Widget subclass are
   // always marked "final".
 
+  final String appVersion;
   final String title;
   final String scheme;
   final String host;
@@ -511,7 +522,9 @@ class _MyHomePageState extends State<MyHomePage> {
                 children: [
                   FutureBuilder(
                       future: DefaultAssetBundle.of(context)
-                          .loadString('assets/app_help.md'),
+                          .loadString('assets/app_help.md')
+                          .then((value) => value.replaceFirst(
+                              '%APP_VERSION%', widget.appVersion)),
                       builder: (context, snapshot) {
                         return MarkdownBody(
                           data: snapshot.data ?? '',

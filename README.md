@@ -13,6 +13,7 @@ This application currently supports Windows, Linux, macOS and Web platforms.
 - Send custom messages
 - See message details, such as headers, subject and payload. JSON payloads are automatically formatted and syntax highlighted as well!
 - Light and Dark themes
+- Most recent connection information & theme are persisted between app runs
 
 # Screenshots
 ![Message View](./images/Messages.png)

@@ -1,10 +1,10 @@
-# NATS Client
+# NATS Client (v%APP_VERSION%)
 This NATS client is a cross-platform client intended for use with NATS servers. This client only supports WebSocket and plain NATS connection schemes.
 
 This client supports Windows, macOS and Web platforms.
 
 # Theme
-The application has two themes, **light** and **dark**. The theme may be changed by using the 💡 toggle.
+The application has two themes, **light** and **dark**. The theme may be changed by using the 💡 toggle. The last-used theme is persisted between application runs.
 
 # Connection
 ## Schemes
@@ -22,7 +22,9 @@ The rest of the connection information is straightforward:
 
 - **Host**: IP or DNS address of the NATS server host
 - **Port**: Associated NATS port
-- **Subjects**: The desired subjects you'd like to subscribe to. This allows a comma-separated list of subjects to be defined, ie `test.*, test.*.*`
+- **Subjects**: The desired subjects you'd like to subscribe to. This allows a comma-separated list of subjects to be defined, ie `test.*, test.*.*`.
+
+Each time the Connect button is pressed, the current connection information is persisted and remembered for the next time the application runs.
 
 ## Connection Status
 The connection status is shown on the bottom right of the application in the status bar at all times.
