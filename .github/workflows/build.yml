@@ -78,7 +78,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: build/linux/x64/release/bundle/NATSClientUI-${{github.ref_name}}-linux.zip
-  build-and-release-macos:
+  build-macos:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v3
@@ -104,3 +104,37 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: build/macos/Build/Products/Release/NATSClientUI-${{github.ref_name}}-macos.zip
+  build-docker:
+    runs-on: ubuntu-latest
+    env:
+      IMG_NAME: nverbeek/nats-client-flutter
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Debug
+        run: |
+          echo "github.ref -> {{ github.ref }}"
+  
+      - name: Docker metadata
+        id: metadata
+        uses: docker/metadata-action@v3
+        with:
+          images: ${{ env.IMG_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value={{sha}}
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v1
+        if: ${{ github.ref_type == 'tag' }}
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          push: ${{ github.event.base_ref =='refs/heads/main' && github.ref_type == 'tag' && !startsWith(github.ref, 'refs/tags/v0.')}}
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
