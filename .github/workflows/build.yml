@@ -131,7 +131,7 @@ jobs:
           images: ${{ env.IMG_NAME }}
           tags: |
             type=semver,pattern={{version}}
-            type=raw,value={{sha}}
+            type=raw,value={{sha}},enable=${{ github.ref_type != 'tag' }}
       - name: Log in to Docker Hub
         uses: docker/login-action@v1
         if: ${{ github.ref_type == 'tag' }}
