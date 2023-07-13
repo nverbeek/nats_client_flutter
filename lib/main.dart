@@ -170,6 +170,10 @@ class _MyHomePageState extends State<MyHomePage> {
     initializePreferences();
     filteredItems = items;
     scheme = widget.scheme;
+    host = widget.host;
+    port = widget.port;
+    subject = widget.subject;
+    updateFullUri();
     super.initState();
   }
 
