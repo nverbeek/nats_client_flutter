@@ -126,7 +126,7 @@ jobs:
   
       - name: Docker metadata
         id: metadata
-        uses: docker/metadata-action@v3
+        uses: docker/metadata-action@v4
         with:
           images: ${{ env.IMG_NAME }}
           tags: |
