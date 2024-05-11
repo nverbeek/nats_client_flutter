@@ -161,6 +161,7 @@ class _MyHomePageState extends State<MyHomePage> {
   String currentFilter = '';
   String currentFind = '';
   Status currentStatus = Status.disconnected;
+  bool tlsConnection = false;
   List<Message<dynamic>> filteredItems = [];
   List<Message<dynamic>> items = [];
 
@@ -241,6 +242,11 @@ class _MyHomePageState extends State<MyHomePage> {
           case Status.connected:
             setStateConnected();
             stateString = constants.connected;
+            if (natsClient.info?.tlsRequired == true) {
+              tlsConnection = true;
+            } else {
+              tlsConnection = false;
+            }
             break;
           case Status.closed:
           case Status.disconnected:
@@ -536,28 +542,51 @@ class _MyHomePageState extends State<MyHomePage> {
           title: const Text('Send Message'),
           content: Column(
             children: <Widget>[
-              TextFormField(
-                maxLines: null,
-                controller: subjectBoxController,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  hintText: 'Subject',
-                  labelText: 'Subject',
+              CallbackShortcuts(
+                bindings: {
+                  const SingleActivator(LogicalKeyboardKey.enter,
+                          control: true):
+                      () => {
+                            sendMessage(subjectBoxController.value.text,
+                                dataBoxController.value.text)
+                          },
+                },
+                child: Focus(
+                  autofocus: true,
+                  child: TextFormField(
+                    maxLines: null,
+                    controller: subjectBoxController,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Subject',
+                      labelText: 'Subject',
+                    ),
+                  ),
                 ),
               ),
               Expanded(
                 flex: 3,
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
-                  child: TextFormField(
-                    expands: true,
-                    controller: dataBoxController,
-                    maxLines: null,
-                    textAlignVertical: TextAlignVertical.top,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      hintText: 'Data',
-                      labelText: 'Data',
+                  child: CallbackShortcuts(
+                    bindings: {
+                      const SingleActivator(LogicalKeyboardKey.enter,
+                              control: true):
+                          () => {
+                                sendMessage(subjectBoxController.value.text,
+                                    dataBoxController.value.text)
+                              },
+                    },
+                    child: TextFormField(
+                      expands: true,
+                      controller: dataBoxController,
+                      maxLines: null,
+                      textAlignVertical: TextAlignVertical.top,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        hintText: 'Data',
+                        labelText: 'Data',
+                      ),
                     ),
                   ),
                 ),
@@ -571,18 +600,27 @@ class _MyHomePageState extends State<MyHomePage> {
                 Navigator.of(context).pop();
               },
             ),
-            TextButton(
-              child: const Text('Send'),
-              onPressed: () {
-                natsClient.pubString(subjectBoxController.value.text,
-                    dataBoxController.value.text);
-                Navigator.of(context).pop();
-              },
+            Tooltip(
+              message: 'Hint: Ctrl+Enter to send',
+              child: TextButton(
+                child: const Text('Send'),
+                onPressed: () {
+                  sendMessage(subjectBoxController.value.text,
+                      dataBoxController.value.text);
+                },
+              ),
             ),
           ],
         );
       },
     );
+  }
+
+  /// Intended for use only from the send message dialog.
+  /// Sends the message and closes the dialog.
+  void sendMessage(String subject, String data) {
+    natsClient.pubString(subject, data);
+    Navigator.of(context).pop();
   }
 
   /// Displays an application help dialog containing a syntax-highlighted markdown document.
@@ -838,16 +876,6 @@ class _MyHomePageState extends State<MyHomePage> {
       prefs.setString(constants.prefPrivateKey, base64.encode(gZipBytes));
       prefs.setString(constants.prefPrivateKeyName, fileName);
     }
-  }
-
-  bool isTlsConnection() {
-    if (natsClient.connected && natsClient.info != null) {
-      if (natsClient.info?.tlsRequired != null &&
-          natsClient.info?.tlsRequired == true) {
-        return true;
-      }
-    }
-    return false;
   }
 
   @override
@@ -1238,10 +1266,12 @@ class _MyHomePageState extends State<MyHomePage> {
                 Text(
                     'Total Messages: ${items.length}, Showing: ${filteredItems.length}  |  '),
                 Text('URL: $fullUri'),
-                if (isTlsConnection())
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(5, 2, 0, 0),
-                    child: Icon(Icons.lock_outline, size: 15),
+                if (isConnected && tlsConnection)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(5, 2, 0, 0),
+                    child: Icon(Icons.lock_outline,
+                        size: 15,
+                        color: Theme.of(context).colorScheme.onSurface),
                   ),
                 const Text('  |  '),
                 Text('Status: $connectionStateString'),
