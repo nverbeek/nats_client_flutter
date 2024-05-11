@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:dart_nats/dart_nats.dart';
@@ -101,8 +102,17 @@ class MyApp extends StatelessWidget {
           return MaterialApp(
             title: 'NATS Client',
             debugShowCheckedModeBanner: false,
-            theme: ThemeData.light(useMaterial3: true),
-            darkTheme: ThemeData.dark(useMaterial3: true),
+            theme: ThemeData(
+              useMaterial3: true,
+              colorScheme:
+                  ColorScheme.fromSeed(seedColor: Colors.lightBlue.shade900),
+            ),
+            darkTheme: ThemeData(
+              useMaterial3: true,
+              colorScheme: ColorScheme.fromSeed(
+                  brightness: Brightness.dark,
+                  seedColor: Colors.lightBlue.shade900),
+            ),
             themeMode: model.mode,
             home: LoaderOverlay(
               child: MyHomePage(
@@ -269,8 +279,15 @@ class _MyHomePageState extends State<MyHomePage> {
         subscribeToSubject(subject.trim());
       }
 
+      // get the security context if applicable
+      SecurityContext? securityContext = getSecurityContext();
+
       // finally, make the connection attempt
-      await natsClient.connect(uri, retry: true, retryCount: -1);
+      await natsClient.connect(uri,
+          retry: true, retryCount: -1, securityContext: securityContext);
+    } on TlsException {
+      showSnackBar(constants.connectionFailure);
+      setStateDisconnected();
     } on HttpException {
       showSnackBar(constants.connectionFailure);
       setStateDisconnected();
@@ -281,6 +298,38 @@ class _MyHomePageState extends State<MyHomePage> {
       showSnackBar(constants.connectionFailure);
       setStateDisconnected();
     }
+  }
+
+  /// Creates a SecurityContext instance based on the currently configured
+  /// certificates. Returns a null [SecurityContext] if no certificates
+  /// are configured.
+  SecurityContext? getSecurityContext() {
+    // raed out the certificate paths from preferences
+    var savedTrustedCertificate =
+        prefs.getString(constants.prefTrustedCertificate);
+    var savedCertificateChain = prefs.getString(constants.prefCertificateChain);
+    var savedPrivateKey = prefs.getString(constants.prefPrivateKey);
+
+    // create a new SecurityContext
+    SecurityContext? securityContext = SecurityContext();
+    var useSecurityContext = false;
+    if (savedTrustedCertificate != null) {
+      securityContext.setTrustedCertificates(savedTrustedCertificate);
+      useSecurityContext = true;
+    }
+    if (savedCertificateChain != null) {
+      securityContext.useCertificateChain(savedCertificateChain);
+      useSecurityContext = true;
+    }
+    if (savedPrivateKey != null) {
+      securityContext.usePrivateKey(savedPrivateKey);
+      useSecurityContext = true;
+    }
+
+    if (!useSecurityContext) {
+      securityContext = null;
+    }
+    return securityContext;
   }
 
   void subscribeToSubject(subject) {
@@ -473,6 +522,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
                   hintText: 'Subject',
+                  labelText: 'Subject',
                 ),
               ),
               Expanded(
@@ -487,6 +537,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
                       hintText: 'Data',
+                      labelText: 'Data',
                     ),
                   ),
                 ),
@@ -542,6 +593,176 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
+  /// Displays a dialog allowing a user to select certificates.
+  Future<void> showSecuritySettingsDialog() async {
+    var trustedCertificateController = TextEditingController();
+    var certificateChainController = TextEditingController();
+    var privateKeyController = TextEditingController();
+
+    // grab the certificate locations out of preferences
+    var savedTrustedCertificate =
+        prefs.getString(constants.prefTrustedCertificate);
+    var savedCertificateChain = prefs.getString(constants.prefCertificateChain);
+    var savedPrivateKey = prefs.getString(constants.prefPrivateKey);
+
+    // set the value of each entry box to the saved value
+    if (savedTrustedCertificate != null) {
+      trustedCertificateController.text = savedTrustedCertificate;
+    }
+    if (savedCertificateChain != null) {
+      certificateChainController.text = savedCertificateChain;
+    }
+    if (savedPrivateKey != null) {
+      privateKeyController.text = savedPrivateKey;
+    }
+
+    return showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Security Settings'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Row(
+                children: [
+                  Flexible(
+                    child: Padding(
+                        padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
+                        child: TextFormField(
+                          maxLines: null,
+                          readOnly: true,
+                          controller: trustedCertificateController,
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            hintText: 'Trusted Certificate',
+                            labelText: 'Trusted Certificate',
+                          ),
+                        )),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
+                    child: SizedBox(
+                        height: 50,
+                        child: ElevatedButton(
+                            onPressed: () {
+                              pickFile().then((chosenFile) => {
+                                    if (chosenFile != '')
+                                      {
+                                        trustedCertificateController.text =
+                                            chosenFile
+                                      }
+                                  });
+                            },
+                            child: const Icon(Icons.folder_open))),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  Flexible(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
+                      child: TextFormField(
+                        maxLines: null,
+                        readOnly: true,
+                        controller: certificateChainController,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          hintText: 'Certificate Chain',
+                          labelText: 'Certificate Chain',
+                        ),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
+                    child: SizedBox(
+                        height: 50,
+                        child: ElevatedButton(
+                            onPressed: () {
+                              pickFile().then((chosenFile) => {
+                                    if (chosenFile != '')
+                                      {
+                                        certificateChainController.text =
+                                            chosenFile
+                                      }
+                                  });
+                            },
+                            child: const Icon(Icons.folder_open))),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  Flexible(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
+                      child: TextFormField(
+                        maxLines: null,
+                        readOnly: true,
+                        controller: privateKeyController,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          hintText: 'Private Key',
+                          labelText: 'Private Key',
+                        ),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
+                    child: SizedBox(
+                        height: 50,
+                        child: ElevatedButton(
+                            onPressed: () {
+                              pickFile().then((chosenFile) => {
+                                    if (chosenFile != '')
+                                      {privateKeyController.text = chosenFile}
+                                  });
+                            },
+                            child: const Icon(Icons.folder_open))),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Close'),
+              onPressed: () {
+                prefs.setString(constants.prefTrustedCertificate,
+                    trustedCertificateController.text);
+                prefs.setString(constants.prefCertificateChain,
+                    certificateChainController.text);
+                prefs.setString(
+                    constants.prefPrivateKey, privateKeyController.text);
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Prompts the user to pick a certificate file
+  Future<String> pickFile() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pem'],
+    );
+
+    if (result != null) {
+      File file = File(result.files.single.path!);
+      return file.path;
+    } else {
+      // User canceled the picker
+    }
+
+    return '';
+  }
+
   @override
   Widget build(BuildContext context) {
     updateFullUri();
@@ -595,8 +816,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     child: DropdownButtonFormField<String>(
                       isExpanded: true,
                       decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                      ),
+                          border: OutlineInputBorder(), labelText: 'Scheme'),
                       items: availableSchemes.map((String value) {
                         return DropdownMenuItem<String>(
                           value: value,
@@ -613,6 +833,16 @@ class _MyHomePageState extends State<MyHomePage> {
                       hint: const Text('Scheme'),
                     ),
                   ),
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
+                    child: SizedBox(
+                        height: 50,
+                        child: ElevatedButton(
+                            onPressed: (currentStatus == Status.disconnected)
+                                ? showSecuritySettingsDialog
+                                : null,
+                            child: const Icon(Icons.lock))),
+                  ),
                   Flexible(
                     flex: 2,
                     child: Padding(
@@ -627,6 +857,7 @@ class _MyHomePageState extends State<MyHomePage> {
                         decoration: const InputDecoration(
                           border: OutlineInputBorder(),
                           hintText: 'Host',
+                          labelText: 'Host',
                         ),
                       ),
                     ),
@@ -643,6 +874,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       decoration: const InputDecoration(
                         border: OutlineInputBorder(),
                         hintText: 'Port',
+                        labelText: 'Port',
                       ),
                     ),
                   ),
@@ -658,7 +890,8 @@ class _MyHomePageState extends State<MyHomePage> {
                         },
                         decoration: const InputDecoration(
                           border: OutlineInputBorder(),
-                          hintText: 'Subject',
+                          hintText: 'Subjects',
+                          labelText: 'Subjects',
                         ),
                       ),
                     ),
@@ -857,6 +1090,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     decoration: InputDecoration(
                       border: const OutlineInputBorder(),
                       hintText: 'Filter',
+                      labelText: 'Filter',
                       prefixIcon: const Icon(Icons.filter_list),
                       suffixIcon: IconButton(
                         icon: const Icon(Icons.clear),
@@ -885,6 +1119,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     decoration: InputDecoration(
                       border: const OutlineInputBorder(),
                       hintText: 'Find',
+                      labelText: 'Find',
                       prefixIcon: const Icon(Icons.search),
                       suffixIcon: IconButton(
                         icon: const Icon(Icons.clear),

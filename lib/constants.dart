@@ -31,3 +31,6 @@ const String prefHost = "HOST";
 const String prefPort = "PORT";
 const String prefSubject = "SUBJECT";
 const String prefTheme = "THEME";
+const String prefTrustedCertificate = "TRUSTED_CERTIFICATE";
+const String prefCertificateChain = "CERTIFICATE_CHAIN";
+const String prefPrivateKey = "PRIVATE_KEY";

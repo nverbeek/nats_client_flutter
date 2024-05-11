@@ -135,3 +135,4 @@ tf/.terraform
 tf/.terraform.lock.hcl
 *.tfstate
 tf/terraform.tfstate.backup
+cert
