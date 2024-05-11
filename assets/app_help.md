@@ -1,5 +1,5 @@
 # NATS Client (v%APP_VERSION%)
-This NATS client is a cross-platform client intended for use with NATS servers. This client only supports WebSocket and plain NATS connection schemes.
+This NATS client is a cross-platform client intended for use with NATS servers. This client supports WebSocket and TCP NATS connection schemes, including TLS and Mutual TLS connections.
 
 This client supports Windows, macOS and Web platforms.
 
@@ -10,12 +10,12 @@ The application has two themes, **light** and **dark**. The theme may be changed
 ## Schemes
 The following schemes are supported:
 
-- **nats://** - Plain TCP socket
+- **nats://** - Plain TCP socket. This scheme will auto-adjust to TLS if the server requires it. See TLS Notes below.
 - **ws://** - WebSocket variant, see note below
 
-**NOTE:** The ws:// scheme **requires WebSocket to be enabled on your NATS server instance.** By default, NATS server does not enable WebSocket support. You must manually configure the server instance to open WS on the port of your choosing.
+**NOTE:** The `ws://` scheme **requires WebSocket to be enabled on your NATS server instance.** By default, NATS server does not enable WebSocket support. You must manually configure the server instance to open WS on the port of your choosing.
 
-Additionally, the nats:// scheme is unavailable when this client is running in a browser. This is because browsers do not support TCP sockets, and thus we cannot use the normal NATS connection scheme. For browsers, we only can use WebSocket connections, which requires enabling the server-side support in the above note.
+Additionally, the `nats://` scheme is unavailable when this client is running in a browser. This is because browsers do not support TCP sockets, and thus we cannot use the normal NATS connection scheme. For browsers, we only can use WebSocket connections, which requires enabling the server-side support in the above note.
 
 ## Other Connection Info
 The rest of the connection information is straightforward:
@@ -25,6 +25,15 @@ The rest of the connection information is straightforward:
 - **Subjects**: The desired subjects you'd like to subscribe to. This allows a comma-separated list of subjects to be defined, ie `test.*, test.*.*`.
 
 Each time the Connect button is pressed, the current connection information is persisted and remembered for the next time the application runs.
+
+## TLS Notes
+When the **nats://** scheme is used, the application will automatically attempt a TLS connection (including Mutual TLS) when the server requires it. By default, the security context falls back on the host OS for certificates. However, this behavior can be customized using the 🔒 button next to the scheme selection box.
+
+The Security Settings dialog allows the user to specify the certificates and keys used to establish the connection with the server. At this time, only files of PEM type are supported. The following settings are available:
+
+- **Trusted Certificate**: Path to a PEM file containing X509 certificates, usually root certificates from certificate authorities.
+- **Certificate Chain**: Path to a PEM file containing X509 certificates, starting with the root authority and intermediate authorities forming the signed chain to the server certificate, and ending with the server certificate. The private key for this certificate is set with **Private Key** setting.
+- **Private Key**: Path to a PEM file containing an encrypted private key.
 
 ## Connection Status
 The connection status is shown on the bottom right of the application in the status bar at all times.

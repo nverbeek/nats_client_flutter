@@ -6,6 +6,7 @@ This application currently supports Windows, Linux, macOS and Web platforms.
 
 # Main Features
 - Connect to a single NATS server using either plain (`nats://`) or WebSocket (`ws://`) schemes
+- TLS connection support with optional custom certificates
 - Subscribe to multiple subjects
 - Automatic re-connect upon lost connection
 - Filter received messages
@@ -16,8 +17,16 @@ This application currently supports Windows, Linux, macOS and Web platforms.
 - Most recent connection information & theme are persisted between app runs
 
 # Screenshots
+<br/>
+
 ![Message View](./images/Messages.png)
+
+<br/>
+
 ![Filter & Sort](./images/Filter%20and%20Sort.png)
+
+<br/>
+
 ![Message View](./images/Message%20Detail.png)
 
 # Application Usage
