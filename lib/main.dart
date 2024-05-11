@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -305,24 +306,44 @@ class _MyHomePageState extends State<MyHomePage> {
   /// are configured.
   SecurityContext? getSecurityContext() {
     // raed out the certificate paths from preferences
+
+    // trusted certificate
     var savedTrustedCertificate =
         prefs.getString(constants.prefTrustedCertificate);
+    List<int>? savedTrustedCertificateBytes;
+    if (savedTrustedCertificate != null) {
+      savedTrustedCertificateBytes =
+          gzip.decode(base64.decode(savedTrustedCertificate));
+    }
+
+    // certificate chain
     var savedCertificateChain = prefs.getString(constants.prefCertificateChain);
+    List<int>? savedCertificateChainBytes;
+    if (savedCertificateChain != null) {
+      savedCertificateChainBytes =
+          gzip.decode(base64.decode(savedCertificateChain));
+    }
+
+    // private key
     var savedPrivateKey = prefs.getString(constants.prefPrivateKey);
+    List<int>? savedPrivateKeyBytes;
+    if (savedPrivateKey != null) {
+      savedPrivateKeyBytes = gzip.decode(base64.decode(savedPrivateKey));
+    }
 
     // create a new SecurityContext
     SecurityContext? securityContext = SecurityContext();
     var useSecurityContext = false;
-    if (savedTrustedCertificate != null) {
-      securityContext.setTrustedCertificates(savedTrustedCertificate);
+    if (savedTrustedCertificateBytes != null) {
+      securityContext.setTrustedCertificatesBytes(savedTrustedCertificateBytes);
       useSecurityContext = true;
     }
-    if (savedCertificateChain != null) {
-      securityContext.useCertificateChain(savedCertificateChain);
+    if (savedCertificateChainBytes != null) {
+      securityContext.useCertificateChainBytes(savedCertificateChainBytes);
       useSecurityContext = true;
     }
-    if (savedPrivateKey != null) {
-      securityContext.usePrivateKey(savedPrivateKey);
+    if (savedPrivateKeyBytes != null) {
+      securityContext.usePrivateKeyBytes(savedPrivateKeyBytes);
       useSecurityContext = true;
     }
 
@@ -600,20 +621,21 @@ class _MyHomePageState extends State<MyHomePage> {
     var privateKeyController = TextEditingController();
 
     // grab the certificate locations out of preferences
-    var savedTrustedCertificate =
-        prefs.getString(constants.prefTrustedCertificate);
-    var savedCertificateChain = prefs.getString(constants.prefCertificateChain);
-    var savedPrivateKey = prefs.getString(constants.prefPrivateKey);
+    var savedTrustedCertificateName =
+        prefs.getString(constants.prefTrustedCertificateName);
+    var savedCertificateChainName =
+        prefs.getString(constants.prefCertificateChainName);
+    var savedPrivateKeyName = prefs.getString(constants.prefPrivateKeyName);
 
     // set the value of each entry box to the saved value
-    if (savedTrustedCertificate != null) {
-      trustedCertificateController.text = savedTrustedCertificate;
+    if (savedTrustedCertificateName != null) {
+      trustedCertificateController.text = savedTrustedCertificateName;
     }
-    if (savedCertificateChain != null) {
-      certificateChainController.text = savedCertificateChain;
+    if (savedCertificateChainName != null) {
+      certificateChainController.text = savedCertificateChainName;
     }
-    if (savedPrivateKey != null) {
-      privateKeyController.text = savedPrivateKey;
+    if (savedPrivateKeyName != null) {
+      privateKeyController.text = savedPrivateKeyName;
     }
 
     return showDialog<void>(
@@ -628,7 +650,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 children: [
                   Flexible(
                     child: Padding(
-                        padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
+                        padding: const EdgeInsets.fromLTRB(0, 20, 0, 0),
                         child: TextFormField(
                           maxLines: null,
                           readOnly: true,
@@ -641,17 +663,16 @@ class _MyHomePageState extends State<MyHomePage> {
                         )),
                   ),
                   Container(
-                    padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
+                    padding: const EdgeInsets.fromLTRB(10, 20, 0, 0),
                     child: SizedBox(
                         height: 50,
                         child: ElevatedButton(
                             onPressed: () {
                               pickFile().then((chosenFile) => {
-                                    if (chosenFile != '')
-                                      {
-                                        trustedCertificateController.text =
-                                            chosenFile
-                                      }
+                                    handleTrustedCertificateFile(
+                                        chosenFile.$1,
+                                        chosenFile.$2,
+                                        trustedCertificateController)
                                   });
                             },
                             child: const Icon(Icons.folder_open))),
@@ -662,7 +683,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 children: [
                   Flexible(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
+                      padding: const EdgeInsets.fromLTRB(0, 20, 0, 0),
                       child: TextFormField(
                         maxLines: null,
                         readOnly: true,
@@ -676,17 +697,16 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
+                    padding: const EdgeInsets.fromLTRB(10, 20, 0, 0),
                     child: SizedBox(
                         height: 50,
                         child: ElevatedButton(
                             onPressed: () {
                               pickFile().then((chosenFile) => {
-                                    if (chosenFile != '')
-                                      {
-                                        certificateChainController.text =
-                                            chosenFile
-                                      }
+                                    handleCertificateChainFile(
+                                        chosenFile.$1,
+                                        chosenFile.$2,
+                                        certificateChainController)
                                   });
                             },
                             child: const Icon(Icons.folder_open))),
@@ -697,7 +717,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 children: [
                   Flexible(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
+                      padding: const EdgeInsets.fromLTRB(0, 20, 0, 0),
                       child: TextFormField(
                         maxLines: null,
                         readOnly: true,
@@ -711,14 +731,14 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
+                    padding: const EdgeInsets.fromLTRB(10, 20, 0, 0),
                     child: SizedBox(
                         height: 50,
                         child: ElevatedButton(
                             onPressed: () {
                               pickFile().then((chosenFile) => {
-                                    if (chosenFile != '')
-                                      {privateKeyController.text = chosenFile}
+                                    handlePrivateKeyFile(chosenFile.$1,
+                                        chosenFile.$2, privateKeyController)
                                   });
                             },
                             child: const Icon(Icons.folder_open))),
@@ -731,12 +751,6 @@ class _MyHomePageState extends State<MyHomePage> {
             TextButton(
               child: const Text('Close'),
               onPressed: () {
-                prefs.setString(constants.prefTrustedCertificate,
-                    trustedCertificateController.text);
-                prefs.setString(constants.prefCertificateChain,
-                    certificateChainController.text);
-                prefs.setString(
-                    constants.prefPrivateKey, privateKeyController.text);
                 Navigator.of(context).pop();
               },
             ),
@@ -747,20 +761,94 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   /// Prompts the user to pick a certificate file
-  Future<String> pickFile() async {
+  Future<(Uint8List?, String)> pickFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pem'],
     );
 
     if (result != null) {
-      File file = File(result.files.single.path!);
-      return file.path;
+      // user selected a file, get a reference to it
+      PlatformFile file = result.files.first;
+
+      // reference the name of the file, which should work on all platforms
+      String fileName = file.name;
+
+      // now get the bytes per platform
+      Uint8List? fileBytes;
+      if (kIsWeb) {
+        // on web, the bytes are automatically filled by the file picker
+        fileBytes = file.bytes;
+      } else if (file.path != null) {
+        // on other platforms, create a File instance and read the file bytes
+        File tempFile = File(file.path!);
+        fileBytes = tempFile.readAsBytesSync();
+      }
+      return (fileBytes, fileName);
     } else {
       // User canceled the picker
     }
 
-    return '';
+    return (null, '');
+  }
+
+  /// Handles the UI updates and preferences saving after a Trusted Certificate file is chosen by the user.
+  void handleTrustedCertificateFile(
+      Uint8List? fileBytes, String fileName, TextEditingController controller) {
+    if (fileBytes != null) {
+      // set the text box value to the name of the file
+      controller.text = fileName;
+
+      // compress the bytes with gzip to reduce the size
+      final gZipBytes = gzip.encode(fileBytes);
+
+      // save the bytes by base64 encoding them
+      prefs.setString(
+          constants.prefTrustedCertificate, base64.encode(gZipBytes));
+      prefs.setString(constants.prefTrustedCertificateName, fileName);
+    }
+  }
+
+  /// Handles the UI updates and preferences saving after a Certificate Chain file is chosen by the user.
+  void handleCertificateChainFile(
+      Uint8List? fileBytes, String fileName, TextEditingController controller) {
+    if (fileBytes != null) {
+      // set the text box value to the name of the file
+      controller.text = fileName;
+
+      // compress the bytes with gzip to reduce the size
+      final gZipBytes = gzip.encode(fileBytes);
+
+      // save the bytes by base64 encoding them
+      prefs.setString(constants.prefCertificateChain, base64.encode(gZipBytes));
+      prefs.setString(constants.prefCertificateChainName, fileName);
+    }
+  }
+
+  /// Handles the UI updates and preferences saving after a Private Key file is chosen by the user.
+  void handlePrivateKeyFile(
+      Uint8List? fileBytes, String fileName, TextEditingController controller) {
+    if (fileBytes != null) {
+      // set the text box value to the name of the file
+      controller.text = fileName;
+
+      // compress the bytes with gzip to reduce the size
+      final gZipBytes = gzip.encode(fileBytes);
+
+      // save the bytes by base64 encoding them
+      prefs.setString(constants.prefPrivateKey, base64.encode(gZipBytes));
+      prefs.setString(constants.prefPrivateKeyName, fileName);
+    }
+  }
+
+  bool isTlsConnection() {
+    if (natsClient.connected && natsClient.info != null) {
+      if (natsClient.info?.tlsRequired != null &&
+          natsClient.info?.tlsRequired == true) {
+        return true;
+      }
+    }
+    return false;
   }
 
   @override
@@ -1151,6 +1239,11 @@ class _MyHomePageState extends State<MyHomePage> {
                 Text(
                     'Total Messages: ${items.length}, Showing: ${filteredItems.length}  |  '),
                 Text('URL: $fullUri'),
+                if (isTlsConnection())
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(5, 2, 0, 0),
+                    child: Icon(Icons.lock_outline, size: 15),
+                  ),
                 const Text('  |  '),
                 Text('Status: $connectionStateString'),
               ],

@@ -70,6 +70,6 @@ The status bar displays relevant information about the application, and also the
 
 The bar also shows:
 
-- **Message Count**: Displays the total number of messages currently in the list, as well as how many are displaying (if a filter is applied)
-- **URL**: The current fully-qualified URL being used
-- **Status**: Current connection status
+- **Message Count**: Displays the total number of messages currently in the list, as well as how many are displaying (if a filter is applied).
+- **URL**: The current fully-qualified URL being used. If the 🔒 icon appears, it means the connection is using TLS.
+- **Status**: Current connection status.
