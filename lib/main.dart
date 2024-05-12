@@ -692,10 +692,17 @@ class _MyHomePageState extends State<MyHomePage> {
                           maxLines: null,
                           readOnly: true,
                           controller: trustedCertificateController,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
+                          decoration: InputDecoration(
+                            border: const OutlineInputBorder(),
                             hintText: 'Trusted Certificate',
                             labelText: 'Trusted Certificate',
+                            suffixIcon: IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                clearTrustedCertificate(
+                                    trustedCertificateController);
+                              },
+                            ),
                           ),
                         )),
                   ),
@@ -725,10 +732,16 @@ class _MyHomePageState extends State<MyHomePage> {
                         maxLines: null,
                         readOnly: true,
                         controller: certificateChainController,
-                        decoration: const InputDecoration(
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          border: const OutlineInputBorder(),
                           hintText: 'Certificate Chain',
                           labelText: 'Certificate Chain',
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              clearCertificateChain(certificateChainController);
+                            },
+                          ),
                         ),
                       ),
                     ),
@@ -759,10 +772,16 @@ class _MyHomePageState extends State<MyHomePage> {
                         maxLines: null,
                         readOnly: true,
                         controller: privateKeyController,
-                        decoration: const InputDecoration(
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          border: const OutlineInputBorder(),
                           hintText: 'Private Key',
                           labelText: 'Private Key',
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              clearPrivateKey(privateKeyController);
+                            },
+                          ),
                         ),
                       ),
                     ),
@@ -846,6 +865,13 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  /// Clears the trusted certificate file information from the text input and preferences
+  void clearTrustedCertificate(TextEditingController controller) {
+    controller.text = '';
+    prefs.setString(constants.prefTrustedCertificate, '');
+    prefs.setString(constants.prefTrustedCertificateName, '');
+  }
+
   /// Handles the UI updates and preferences saving after a Certificate Chain file is chosen by the user.
   void handleCertificateChainFile(
       Uint8List? fileBytes, String fileName, TextEditingController controller) {
@@ -862,6 +888,13 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  /// Clears the certificate chain file information from the text input and preferences
+  void clearCertificateChain(TextEditingController controller) {
+    controller.text = '';
+    prefs.setString(constants.prefCertificateChain, '');
+    prefs.setString(constants.prefCertificateChainName, '');
+  }
+
   /// Handles the UI updates and preferences saving after a Private Key file is chosen by the user.
   void handlePrivateKeyFile(
       Uint8List? fileBytes, String fileName, TextEditingController controller) {
@@ -876,6 +909,13 @@ class _MyHomePageState extends State<MyHomePage> {
       prefs.setString(constants.prefPrivateKey, base64.encode(gZipBytes));
       prefs.setString(constants.prefPrivateKeyName, fileName);
     }
+  }
+
+  /// Clears the private key file information from the text input and preferences
+  void clearPrivateKey(TextEditingController controller) {
+    controller.text = '';
+    prefs.setString(constants.prefPrivateKey, '');
+    prefs.setString(constants.prefPrivateKeyName, '');
   }
 
   @override
