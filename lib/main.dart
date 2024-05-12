@@ -316,7 +316,7 @@ class _MyHomePageState extends State<MyHomePage> {
     var savedTrustedCertificate =
         prefs.getString(constants.prefTrustedCertificate);
     List<int>? savedTrustedCertificateBytes;
-    if (savedTrustedCertificate != null) {
+    if (savedTrustedCertificate != null && savedTrustedCertificate.isNotEmpty) {
       savedTrustedCertificateBytes =
           gzip.decode(base64.decode(savedTrustedCertificate));
     }
@@ -324,7 +324,7 @@ class _MyHomePageState extends State<MyHomePage> {
     // certificate chain
     var savedCertificateChain = prefs.getString(constants.prefCertificateChain);
     List<int>? savedCertificateChainBytes;
-    if (savedCertificateChain != null) {
+    if (savedCertificateChain != null && savedCertificateChain.isNotEmpty) {
       savedCertificateChainBytes =
           gzip.decode(base64.decode(savedCertificateChain));
     }
@@ -332,7 +332,7 @@ class _MyHomePageState extends State<MyHomePage> {
     // private key
     var savedPrivateKey = prefs.getString(constants.prefPrivateKey);
     List<int>? savedPrivateKeyBytes;
-    if (savedPrivateKey != null) {
+    if (savedPrivateKey != null && savedPrivateKey.isNotEmpty) {
       savedPrivateKeyBytes = gzip.decode(base64.decode(savedPrivateKey));
     }
 
