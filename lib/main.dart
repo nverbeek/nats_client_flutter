@@ -310,7 +310,7 @@ class _MyHomePageState extends State<MyHomePage> {
   /// certificates. Returns a null [SecurityContext] if no certificates
   /// are configured.
   SecurityContext? getSecurityContext() {
-    // raed out the certificate paths from preferences
+    // read out the certificate paths from preferences
 
     // trusted certificate
     var savedTrustedCertificate =
