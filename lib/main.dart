@@ -15,15 +15,58 @@ import 'package:nats_client_flutter/regex_text_highlight.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'constants.dart' as constants;
 
 void main() async {
   // must wait for widgets to initialize before we are able to use SharedPreferences
   WidgetsFlutterBinding.ensureInitialized();
+  await windowManager.ensureInitialized();
 
   // setup a reference to the shared preferences instance
   SharedPreferences prefs = await SharedPreferences.getInstance();
+
+  // get the window's last size and position from the last run (if applicable)
+  var windowWidth = 1280.0;
+  var windowHeight = 720.0;
+  var lastWidth = prefs.getDouble(constants.prefLastWidth);
+  var lastHeight = prefs.getDouble(constants.prefLastHeight);
+  double? windowPositionX;
+  double? windowPositionY;
+  var lastPositionX = prefs.getDouble(constants.prefLastPositionX);
+  var lastPositionY = prefs.getDouble(constants.prefLastPositionY);
+
+  if (lastWidth != null) {
+    windowWidth = lastWidth;
+  }
+  if (lastHeight != null) {
+    windowHeight = lastHeight;
+  }
+  if (lastPositionX != null) {
+    windowPositionX = lastPositionX;
+  }
+  if (lastPositionY != null) {
+    windowPositionY = lastPositionY;
+  }
+
+  // set the window options (including size)
+  WindowOptions windowOptions = WindowOptions(
+    size: Size(windowWidth, windowHeight),
+    backgroundColor: Colors.transparent,
+    skipTaskbar: false,
+  );
+
+  // if there was a saved position, restore that
+  if (windowPositionX != null && windowPositionY != null) {
+    windowManager.setPosition(Offset(windowPositionX, windowPositionY));
+  }
+
+  // finally, show the window
+  windowManager.waitUntilReadyToShow(windowOptions, () async {
+    await windowManager.show();
+    await windowManager.focus();
+  });
 
   // attempt to read previous connection info from preferences
   String? tempScheme = prefs.getString(constants.prefScheme);
@@ -150,7 +193,7 @@ class MyHomePage extends StatefulWidget {
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
+class _MyHomePageState extends State<MyHomePage> with WindowListener {
   String host = constants.defaultHost;
   String port = constants.defaultPort;
   String subject = constants.defaultSubject;
@@ -186,6 +229,31 @@ class _MyHomePageState extends State<MyHomePage> {
     subject = widget.subject;
     updateFullUri();
     super.initState();
+
+    // add a listener for window events, such as size/position changes
+    windowManager.addListener(this);
+  }
+
+  @override
+  void dispose() {
+    windowManager.removeListener(this);
+    super.dispose();
+  }
+
+  @override
+  void onWindowResized() {
+    windowManager.getSize().then((windowSize) => {
+          prefs.setDouble(constants.prefLastWidth, windowSize.width),
+          prefs.setDouble(constants.prefLastHeight, windowSize.height)
+        });
+  }
+
+  @override
+  void onWindowMoved() {
+    windowManager.getPosition().then((windowPosition) => {
+      prefs.setDouble(constants.prefLastPositionX, windowPosition.dx),
+      prefs.setDouble(constants.prefLastPositionY, windowPosition.dy),
+    });
   }
 
   /// initialize the shared preferences instance
@@ -1094,7 +1162,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     tileColor: selectedIndex == index
                         ? Theme.of(context).colorScheme.inversePrimary
                         : index % 2 == 0
-                            ? Theme.of(context).colorScheme.surfaceVariant
+                            ? Theme.of(context).colorScheme.surfaceContainerHighest
                             : null,
                     onTap: () {
                       setState(() {

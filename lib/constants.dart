@@ -37,3 +37,7 @@ const String prefCertificateChain = "CERTIFICATE_CHAIN";
 const String prefCertificateChainName = "CERTIFICATE_CHAIN_NAME";
 const String prefPrivateKey = "PRIVATE_KEY";
 const String prefPrivateKeyName = "PRIVATE_KEY_NAME";
+const String prefLastWidth = "LAST_WIDTH";
+const String prefLastHeight = "LAST_HEIGHT";
+const String prefLastPositionX = "LAST_POSITION_X";
+const String prefLastPositionY = "LAST_POSITION_Y";
