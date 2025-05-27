@@ -59,7 +59,7 @@ jobs:
         with:
           files: build/windows/x64/runner/Release/NATSClientUI-${{github.ref_name}}-windows.zip
       - name: Build artifacts (ARM64)
-        run: flutter build windows --release --target-platform=windows-arm64
+        run: flutter build windows --release --windows-architecture=arm64
       - name: Archive Release (ARM64)
         uses: thedoctor0/zip-release@master
         with:
