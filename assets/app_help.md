@@ -6,6 +6,12 @@ This client supports Windows, macOS and Web platforms.
 # Theme
 The application has two themes, **light** and **dark**. The theme may be changed by using the 💡 toggle. The last-used theme is persisted between application runs.
 
+# Settings
+The application provides a settings dialog (⚙️ button in the toolbar) with the following options:
+
+- **Message Font Size**: Adjusts the font size of messages in the message list.
+- **Single Line Messages**: If enabled, each message in the list is displayed on a single line (with ellipsis for overflow). If disabled, messages can span multiple lines (up to 5 lines).
+
 # Connection
 ## Schemes
 The following schemes are supported:
@@ -47,7 +53,7 @@ Incoming messages are displayed as they arrive in the message list. The list is 
 
 Each message has the following information/options:
 
-- The data of the message is displayed (clipped after 5 vertical lines).
+- The data of the message is displayed (clipped after 5 vertical lines, or 1 line if single-line mode is enabled in settings).
 - On the right, in a "chip" widget is the subject of the message
 - On the right, a 3 dot menu button is available, with the following options:
 

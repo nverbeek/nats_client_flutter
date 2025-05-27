@@ -218,6 +218,8 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
 
   // user preferences
   late SharedPreferences prefs;
+  double messageFontSize = 14.0;
+  bool messageSingleLine = false;
 
   @override
   initState() {
@@ -259,6 +261,21 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
   /// initialize the shared preferences instance
   initializePreferences() async {
     prefs = await SharedPreferences.getInstance();
+    loadMessageSettings();
+  }
+
+  void loadMessageSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      messageFontSize = prefs.getDouble('messageFontSize') ?? 14.0;
+      messageSingleLine = prefs.getBool('messageSingleLine') ?? false;
+    });
+  }
+
+  void saveMessageSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    prefs.setDouble('messageFontSize', messageFontSize);
+    prefs.setBool('messageSingleLine', messageSingleLine);
   }
 
   void _runFilter() {
@@ -986,6 +1003,84 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
     prefs.setString(constants.prefPrivateKeyName, '');
   }
 
+  void showSettingsDialog() async {
+    double tempFontSize = messageFontSize;
+    bool tempSingleLine = messageSingleLine;
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Settings'),
+          content: StatefulBuilder(
+            builder: (BuildContext context, StateSetter setDialogState) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      const Text('Message Font Size'),
+                      Expanded(
+                        child: Slider(
+                          min: 10,
+                          max: 30,
+                          divisions: 20,
+                          value: tempFontSize,
+                          label: tempFontSize.round().toString(),
+                          onChanged: (v) {
+                            setDialogState(() {
+                              tempFontSize = v;
+                            });
+                          },
+                        ),
+                      ),
+                      SizedBox(
+                        width: 40,
+                        child: Text(tempFontSize.round().toString()),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Single Line Messages'),
+                      Switch(
+                        value: tempSingleLine,
+                        onChanged: (v) {
+                          setDialogState(() {
+                            tempSingleLine = v;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+          actions: [
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: const Text('Save'),
+              onPressed: () {
+                setState(() {
+                  messageFontSize = tempFontSize;
+                  messageSingleLine = tempSingleLine;
+                });
+                saveMessageSettings();
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     updateFullUri();
@@ -1001,10 +1096,11 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
         title: Text(widget.title),
         actions: [
+          IconButton(
+              icon: const Icon(Icons.settings),
+              onPressed: showSettingsDialog),
           IconButton(
               icon: const Icon(Icons.lightbulb),
               onPressed: () {
@@ -1153,11 +1249,15 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
                     title: RegexTextHighlight(
                       text: filteredItems[index].string,
                       searchTerm: currentFind,
+                      fontSize: messageFontSize,
                       highlightStyle: TextStyle(
                         background: Paint()
                           ..color =
                               Theme.of(context).colorScheme.inversePrimary,
+                        fontSize: messageFontSize,
                       ),
+                      maxLines: messageSingleLine ? 1 : null,
+                      overflow: messageSingleLine ? TextOverflow.ellipsis : null,
                     ),
                     tileColor: selectedIndex == index
                         ? Theme.of(context).colorScheme.inversePrimary
@@ -1186,7 +1286,13 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
                               padding: const EdgeInsets.fromLTRB(0, 0, 5, 0),
                               child: Chip(
                                   label: Text(filteredItems[index].subject!,
-                                      overflow: TextOverflow.ellipsis)),
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: messageFontSize,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface,
+                                      ))),
                             ),
                           ),
                         ),
