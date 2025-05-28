@@ -6,10 +6,6 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:dart_nats/dart_nats.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_highlighter/flutter_highlighter.dart';
-import 'package:flutter_highlighter/themes/atelier-cave-dark.dart';
-import 'package:flutter_highlighter/themes/atelier-cave-light.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:loader_overlay/loader_overlay.dart';
 import 'package:nats_client_flutter/regex_text_highlight.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -18,6 +14,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'constants.dart' as constants;
+import 'message_detail_dialog.dart';
+import 'send_message_dialog.dart';
+import 'help_dialog.dart';
+import 'settings_dialog.dart';
+import 'security_settings_dialog.dart';
 
 void main() async {
   // must wait for widgets to initialize before we are able to use SharedPreferences
@@ -516,14 +517,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
       headers = message.header?.headers ?? <String, String>{};
     }
 
-    String headerText = '';
-    if (headers.isNotEmpty) {
-      headers.forEach((k, v) => headerText += '$k: $v\n');
-      headerText = headerText.trim();
-    }
-
-    // format the data, if we can
-    var formattedJson = '';
+    String formattedJson = '';
     try {
       var json = jsonDecode(message.string);
       var encoder = const JsonEncoder.withIndent("  ");
@@ -532,74 +526,15 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
       formattedJson = message.string;
     }
 
+    // Add mounted check before using context after async gap
+    if (!mounted) return;
     return showDialog<void>(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Message Detail'),
-          content: SingleChildScrollView(
-            child: ListBody(
-              children: <Widget>[
-                if (headerVersion.isNotEmpty)
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(0, 10, 0, 0),
-                    child: Text(
-                      'Header Version',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                if (headerVersion.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
-                    child: SelectableText(headerVersion),
-                  ),
-                if (headers.isNotEmpty)
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(0, 10, 0, 0),
-                    child: Text(
-                      'Headers',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                if (headers.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
-                    child: SelectableText(headerText),
-                  ),
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(0, 10, 0, 0),
-                  child: Text(
-                    'Payload',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
-                  child: HighlightView(
-                    formattedJson,
-                    language: 'json',
-                    theme:
-                        Provider.of<ThemeModel>(context, listen: false).isDark()
-                            ? atelierCaveDarkTheme
-                            : atelierCaveLightTheme,
-                    padding: const EdgeInsets.all(10),
-                    textStyle: const TextStyle(
-                        fontSize: 14,
-                        fontFamily:
-                            'SFMono-Regular,Consolas,Liberation Mono,Menlo,monospace'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('Close'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
+        return MessageDetailDialog(
+          headerVersion: headerVersion,
+          headers: headers,
+          formattedJson: formattedJson,
         );
       },
     );
@@ -620,123 +555,55 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
       dataBoxController.text = data;
     }
 
+    // Add mounted check before using context after async gap
+    if (!mounted) return;
     return showDialog<void>(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Send Message'),
-          content: Column(
-            children: <Widget>[
-              CallbackShortcuts(
-                bindings: {
-                  const SingleActivator(LogicalKeyboardKey.enter,
-                          control: true):
-                      () => {
-                            sendMessage(subjectBoxController.value.text,
-                                dataBoxController.value.text)
-                          },
-                },
-                child: Focus(
-                  autofocus: true,
-                  child: TextFormField(
-                    maxLines: null,
-                    controller: subjectBoxController,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      hintText: 'Subject',
-                      labelText: 'Subject',
-                    ),
-                  ),
-                ),
-              ),
-              Expanded(
-                flex: 3,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
-                  child: CallbackShortcuts(
-                    bindings: {
-                      const SingleActivator(LogicalKeyboardKey.enter,
-                              control: true):
-                          () => {
-                                sendMessage(subjectBoxController.value.text,
-                                    dataBoxController.value.text)
-                              },
-                    },
-                    child: TextFormField(
-                      expands: true,
-                      controller: dataBoxController,
-                      maxLines: null,
-                      textAlignVertical: TextAlignVertical.top,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        hintText: 'Data',
-                        labelText: 'Data',
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('Close'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            Tooltip(
-              message: 'Hint: Ctrl+Enter to send',
-              child: TextButton(
-                child: const Text('Send'),
-                onPressed: () {
-                  sendMessage(subjectBoxController.value.text,
-                      dataBoxController.value.text);
-                },
-              ),
-            ),
-          ],
+        return SendMessageDialog(
+          subjectController: subjectBoxController,
+          dataController: dataBoxController,
+          onSend: (subject, data) {
+            sendMessage(subject, data);
+          },
         );
       },
     );
   }
 
-  /// Intended for use only from the send message dialog.
-  /// Sends the message and closes the dialog.
-  void sendMessage(String subject, String data) {
-    natsClient.pubString(subject, data);
-    Navigator.of(context).pop();
-  }
-
-  /// Displays an application help dialog containing a syntax-highlighted markdown document.
   Future<void> showHelpDialog() async {
+    String markdownData = await DefaultAssetBundle.of(context)
+        .loadString('assets/app_help.md');
+    markdownData = markdownData.replaceFirst('%APP_VERSION%', widget.appVersion);
+    // Add mounted check before using context after async gap
+    if (!mounted) return;
     return showDialog<void>(
       context: context,
-      builder: (BuildContext ctx) => Dialog(
-        child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: SingleChildScrollView(
-              child: ListBody(
-                children: [
-                  FutureBuilder(
-                      future: DefaultAssetBundle.of(context)
-                          .loadString('assets/app_help.md')
-                          .then((value) => value.replaceFirst(
-                              '%APP_VERSION%', widget.appVersion)),
-                      builder: (context, snapshot) {
-                        return MarkdownBody(
-                          data: snapshot.data ?? '',
-                          shrinkWrap: true,
-                        );
-                      }),
-                ],
-              ),
-            )),
-      ),
+      builder: (BuildContext ctx) => HelpDialog(markdownData: markdownData),
     );
   }
 
-  /// Displays a dialog allowing a user to select certificates.
+  void showSettingsDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return SettingsDialog(
+          initialFontSize: messageFontSize,
+          initialSingleLine: messageSingleLine,
+          onSave: (fontSize, singleLine) {
+            setState(() {
+              messageFontSize = fontSize;
+              messageSingleLine = singleLine;
+            });
+            saveMessageSettings();
+          },
+        );
+      },
+    );
+    // Add mounted check after async gap
+    if (!mounted) return;
+  }
+
   Future<void> showSecuritySettingsDialog() async {
     var trustedCertificateController = TextEditingController();
     var certificateChainController = TextEditingController();
@@ -760,142 +627,42 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
       privateKeyController.text = savedPrivateKeyName;
     }
 
+    // Add mounted check before using context after async gap
+    if (!mounted) return;
     return showDialog<void>(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Security Settings'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Row(
-                children: [
-                  Flexible(
-                    child: Padding(
-                        padding: const EdgeInsets.fromLTRB(0, 20, 0, 0),
-                        child: TextFormField(
-                          maxLines: null,
-                          readOnly: true,
-                          controller: trustedCertificateController,
-                          decoration: InputDecoration(
-                            border: const OutlineInputBorder(),
-                            hintText: 'Trusted Certificate',
-                            labelText: 'Trusted Certificate',
-                            suffixIcon: IconButton(
-                              icon: const Icon(Icons.clear),
-                              onPressed: () {
-                                clearTrustedCertificate(
-                                    trustedCertificateController);
-                              },
-                            ),
-                          ),
-                        )),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(10, 20, 0, 0),
-                    child: SizedBox(
-                        height: 50,
-                        child: ElevatedButton(
-                            onPressed: () {
-                              pickFile().then((chosenFile) => {
-                                    handleTrustedCertificateFile(
-                                        chosenFile.$1,
-                                        chosenFile.$2,
-                                        trustedCertificateController)
-                                  });
-                            },
-                            child: const Icon(Icons.folder_open))),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  Flexible(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 20, 0, 0),
-                      child: TextFormField(
-                        maxLines: null,
-                        readOnly: true,
-                        controller: certificateChainController,
-                        decoration: InputDecoration(
-                          border: const OutlineInputBorder(),
-                          hintText: 'Certificate Chain',
-                          labelText: 'Certificate Chain',
-                          suffixIcon: IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              clearCertificateChain(certificateChainController);
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(10, 20, 0, 0),
-                    child: SizedBox(
-                        height: 50,
-                        child: ElevatedButton(
-                            onPressed: () {
-                              pickFile().then((chosenFile) => {
-                                    handleCertificateChainFile(
-                                        chosenFile.$1,
-                                        chosenFile.$2,
-                                        certificateChainController)
-                                  });
-                            },
-                            child: const Icon(Icons.folder_open))),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  Flexible(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 20, 0, 0),
-                      child: TextFormField(
-                        maxLines: null,
-                        readOnly: true,
-                        controller: privateKeyController,
-                        decoration: InputDecoration(
-                          border: const OutlineInputBorder(),
-                          hintText: 'Private Key',
-                          labelText: 'Private Key',
-                          suffixIcon: IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              clearPrivateKey(privateKeyController);
-                            },
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(10, 20, 0, 0),
-                    child: SizedBox(
-                        height: 50,
-                        child: ElevatedButton(
-                            onPressed: () {
-                              pickFile().then((chosenFile) => {
-                                    handlePrivateKeyFile(chosenFile.$1,
-                                        chosenFile.$2, privateKeyController)
-                                  });
-                            },
-                            child: const Icon(Icons.folder_open))),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('Close'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
+        return SecuritySettingsDialog(
+          trustedCertificateController: trustedCertificateController,
+          certificateChainController: certificateChainController,
+          privateKeyController: privateKeyController,
+          onTrustedCertificatePick: () {
+            pickFile().then((chosenFile) {
+              handleTrustedCertificateFile(
+                  chosenFile.$1, chosenFile.$2, trustedCertificateController);
+            });
+          },
+          onCertificateChainPick: () {
+            pickFile().then((chosenFile) {
+              handleCertificateChainFile(
+                  chosenFile.$1, chosenFile.$2, certificateChainController);
+            });
+          },
+          onPrivateKeyPick: () {
+            pickFile().then((chosenFile) {
+              handlePrivateKeyFile(
+                  chosenFile.$1, chosenFile.$2, privateKeyController);
+            });
+          },
+          onClearTrustedCertificate: () {
+            clearTrustedCertificate(trustedCertificateController);
+          },
+          onClearCertificateChain: () {
+            clearCertificateChain(certificateChainController);
+          },
+          onClearPrivateKey: () {
+            clearPrivateKey(privateKeyController);
+          },
         );
       },
     );
@@ -1003,82 +770,9 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
     prefs.setString(constants.prefPrivateKeyName, '');
   }
 
-  void showSettingsDialog() async {
-    double tempFontSize = messageFontSize;
-    bool tempSingleLine = messageSingleLine;
-    await showDialog<void>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Settings'),
-          content: StatefulBuilder(
-            builder: (BuildContext context, StateSetter setDialogState) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      const Text('Message Font Size'),
-                      Expanded(
-                        child: Slider(
-                          min: 10,
-                          max: 30,
-                          divisions: 20,
-                          value: tempFontSize,
-                          label: tempFontSize.round().toString(),
-                          onChanged: (v) {
-                            setDialogState(() {
-                              tempFontSize = v;
-                            });
-                          },
-                        ),
-                      ),
-                      SizedBox(
-                        width: 40,
-                        child: Text(tempFontSize.round().toString()),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Single Line Messages'),
-                      Switch(
-                        value: tempSingleLine,
-                        onChanged: (v) {
-                          setDialogState(() {
-                            tempSingleLine = v;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                ],
-              );
-            },
-          ),
-          actions: [
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            TextButton(
-              child: const Text('Save'),
-              onPressed: () {
-                setState(() {
-                  messageFontSize = tempFontSize;
-                  messageSingleLine = tempSingleLine;
-                });
-                saveMessageSettings();
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
-        );
-      },
-    );
+  void sendMessage(String subject, String data) {
+    natsClient.pubString(subject, data);
+    Navigator.of(context).pop();
   }
 
   @override
