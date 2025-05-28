@@ -260,7 +260,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
   }
 
   /// initialize the shared preferences instance
-  initializePreferences() async {
+  Future<void> initializePreferences() async {
     prefs = await SharedPreferences.getInstance();
     loadMessageSettings();
   }
