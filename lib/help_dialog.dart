@@ -10,14 +10,27 @@ class HelpDialog extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
     return Dialog(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: SingleChildScrollView(
-          child: MarkdownBlock(
-            data: markdownData,
-            config: isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig,
+      child: Stack(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: SingleChildScrollView(
+              child: MarkdownBlock(
+                data: markdownData,
+                config: isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig,
+              ),
+            ),
           ),
-        ),
+          Positioned(
+            top: 8,
+            right: 8,
+            child: IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.of(context).pop(),
+              tooltip: 'Close',
+            ),
+          ),
+        ],
       ),
     );
   }

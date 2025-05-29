@@ -25,7 +25,19 @@ class MessageDetailDialog extends StatelessWidget {
       headerText = headerText.trim();
     }
     return AlertDialog(
-      title: const Text('Message Detail'),
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text('Message Detail'),
+          IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.of(context).pop(),
+            tooltip: 'Close',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
+      ),
       content: SingleChildScrollView(
         child: ListBody(
           children: <Widget>[

@@ -15,7 +15,19 @@ class SendMessageDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Send Message'),
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text('Send Message'),
+          IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.of(context).pop(),
+            tooltip: 'Close',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
+      ),
       content: SizedBox(
         width: 400, // Optional: set a width for better appearance
         height: 300, // Set a fixed height for the dialog
