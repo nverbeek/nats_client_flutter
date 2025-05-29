@@ -958,8 +958,8 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
                                 Theme.of(context).colorScheme.inversePrimary,
                           fontSize: messageFontSize,
                         ),
-                        maxLines: messageSingleLine ? 1 : null,
-                        overflow: messageSingleLine ? TextOverflow.ellipsis : null,
+                        maxLines: messageSingleLine ? 1 : 5,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       tileColor: selectedIndex == index
                           ? Theme.of(context).colorScheme.inversePrimary
