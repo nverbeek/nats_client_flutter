@@ -209,6 +209,9 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
   List<Message<dynamic>> filteredItems = [];
   List<Message<dynamic>> items = [];
 
+  // Add a ScrollController for the ListView
+  final ScrollController _listScrollController = ScrollController();
+
   // nats stuff
   late Client natsClient;
   bool isConnected = false;
@@ -240,6 +243,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
   @override
   void dispose() {
     windowManager.removeListener(this);
+    _listScrollController.dispose(); // Dispose the controller
     super.dispose();
   }
 
@@ -934,143 +938,148 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
             ),
           ),
           Expanded(
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: filteredItems.length,
-              itemBuilder: (context, index) {
-                return Material(
-                  child: ListTile(
-                    title: RegexTextHighlight(
-                      text: filteredItems[index].string,
-                      searchTerm: currentFind,
-                      fontSize: messageFontSize,
-                      highlightStyle: TextStyle(
-                        background: Paint()
-                          ..color =
-                              Theme.of(context).colorScheme.inversePrimary,
+            child: Scrollbar(
+              controller: _listScrollController,
+              thumbVisibility: true, // Always show the scrollbar when scrollable
+              child: ListView.builder(
+                controller: _listScrollController,
+                shrinkWrap: true,
+                itemCount: filteredItems.length,
+                itemBuilder: (context, index) {
+                  return Material(
+                    child: ListTile(
+                      title: RegexTextHighlight(
+                        text: filteredItems[index].string,
+                        searchTerm: currentFind,
                         fontSize: messageFontSize,
+                        highlightStyle: TextStyle(
+                          background: Paint()
+                            ..color =
+                                Theme.of(context).colorScheme.inversePrimary,
+                          fontSize: messageFontSize,
+                        ),
+                        maxLines: messageSingleLine ? 1 : null,
+                        overflow: messageSingleLine ? TextOverflow.ellipsis : null,
                       ),
-                      maxLines: messageSingleLine ? 1 : null,
-                      overflow: messageSingleLine ? TextOverflow.ellipsis : null,
-                    ),
-                    tileColor: selectedIndex == index
-                        ? Theme.of(context).colorScheme.inversePrimary
-                        : index % 2 == 0
-                            ? Theme.of(context).colorScheme.surfaceContainerHighest
-                            : null,
-                    onTap: () {
-                      setState(() {
-                        if (index == selectedIndex) {
-                          // user tapped the already-selected item.
-                          // un-select it
-                          selectedIndex = -1;
-                        } else {
-                          selectedIndex = index;
-                        }
-                      });
-                    },
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 450),
-                          child: Tooltip(
-                            message: filteredItems[index].subject!,
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(0, 0, 5, 0),
-                              child: Chip(
-                                  label: Text(filteredItems[index].subject!,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: messageFontSize,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurface,
-                                      ))),
+                      tileColor: selectedIndex == index
+                          ? Theme.of(context).colorScheme.inversePrimary
+                          : index % 2 == 0
+                              ? Theme.of(context).colorScheme.surfaceContainerHighest
+                              : null,
+                      onTap: () {
+                        setState(() {
+                          if (index == selectedIndex) {
+                            // user tapped the already-selected item.
+                            // un-select it
+                            selectedIndex = -1;
+                          } else {
+                            selectedIndex = index;
+                          }
+                        });
+                      },
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 450),
+                            child: Tooltip(
+                              message: filteredItems[index].subject!,
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(0, 0, 5, 0),
+                                child: Chip(
+                                    label: Text(filteredItems[index].subject!,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: messageFontSize,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurface,
+                                        ))),
+                              ),
                             ),
                           ),
-                        ),
-                        PopupMenuButton<String>(
-                          itemBuilder: (context) {
-                            return [
-                              const PopupMenuItem(
-                                value: 'copy',
-                                child: Text('Copy'),
-                              ),
-                              const PopupMenuItem(
-                                value: 'detail',
-                                child: Text('Detail'),
-                              ),
-                              const PopupMenuItem(
-                                value: 'replay',
-                                child: Text('Replay'),
-                              ),
-                              const PopupMenuItem(
-                                value: 'edit_and_send',
-                                child: Text('Edit & Send'),
-                              ),
-                              const PopupMenuItem(
-                                value: 'reply_to',
-                                child: Text('Reply To'),
-                              )
-                            ];
-                          },
-                          onSelected: (String value) async {
-                            switch (value) {
-                              case 'copy':
-                                await Clipboard.setData(ClipboardData(
-                                    text: filteredItems[index].string));
-                                showSnackBar('Copied to clipboard!');
-                                break;
-                              case 'detail':
-                                showDetailDialog(filteredItems[index]);
-                                break;
-                              case 'replay':
-                                if (currentStatus == Status.connected) {
-                                  natsClient.pubString(
-                                      filteredItems[index].subject!,
-                                      filteredItems[index].string);
-                                } else {
-                                  showSnackBar(
-                                      'Not connected, cannot replay message');
-                                }
-                                break;
-                              case 'edit_and_send':
-                                if (currentStatus == Status.connected) {
-                                  showSendMessageDialog(
-                                      filteredItems[index].subject!,
-                                      null,
-                                      filteredItems[index].string);
-                                } else {
-                                  showSnackBar(
-                                      'Not connected, cannot send message');
-                                }
-                              case 'reply_to':
-                                if (currentStatus == Status.connected) {
-                                  if (filteredItems[index].replyTo != null &&
-                                      filteredItems[index]
-                                          .replyTo!
-                                          .isNotEmpty) {
-                                    showSendMessageDialog(
-                                        filteredItems[index].replyTo,
-                                        null,
-                                        null);
+                          PopupMenuButton<String>(
+                            itemBuilder: (context) {
+                              return [
+                                const PopupMenuItem(
+                                  value: 'copy',
+                                  child: Text('Copy'),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'detail',
+                                  child: Text('Detail'),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'replay',
+                                  child: Text('Replay'),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'edit_and_send',
+                                  child: Text('Edit & Send'),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'reply_to',
+                                  child: Text('Reply To'),
+                                )
+                              ];
+                            },
+                            onSelected: (String value) async {
+                              switch (value) {
+                                case 'copy':
+                                  await Clipboard.setData(ClipboardData(
+                                      text: filteredItems[index].string));
+                                  showSnackBar('Copied to clipboard!');
+                                  break;
+                                case 'detail':
+                                  showDetailDialog(filteredItems[index]);
+                                  break;
+                                case 'replay':
+                                  if (currentStatus == Status.connected) {
+                                    natsClient.pubString(
+                                        filteredItems[index].subject!,
+                                        filteredItems[index].string);
                                   } else {
                                     showSnackBar(
-                                        'This message has no replyTo subject');
+                                        'Not connected, cannot replay message');
                                   }
-                                } else {
-                                  showSnackBar(
-                                      'Not connected, cannot send message');
-                                }
-                            }
-                          },
-                        ),
-                      ],
+                                  break;
+                                case 'edit_and_send':
+                                  if (currentStatus == Status.connected) {
+                                    showSendMessageDialog(
+                                        filteredItems[index].subject!,
+                                        null,
+                                        filteredItems[index].string);
+                                  } else {
+                                    showSnackBar(
+                                        'Not connected, cannot send message');
+                                  }
+                                case 'reply_to':
+                                  if (currentStatus == Status.connected) {
+                                    if (filteredItems[index].replyTo != null &&
+                                        filteredItems[index]
+                                            .replyTo!
+                                            .isNotEmpty) {
+                                      showSendMessageDialog(
+                                          filteredItems[index].replyTo,
+                                          null,
+                                          null);
+                                    } else {
+                                      showSnackBar(
+                                          'This message has no replyTo subject');
+                                    }
+                                  } else {
+                                    showSnackBar(
+                                        'Not connected, cannot send message');
+                                  }
+                              }
+                            },
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
           Row(
