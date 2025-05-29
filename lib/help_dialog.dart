@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:markdown_widget/markdown_widget.dart';
 
 class HelpDialog extends StatelessWidget {
   final String markdownData;
@@ -7,17 +7,15 @@ class HelpDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Dialog(
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: SingleChildScrollView(
-          child: ListBody(
-            children: [
-              MarkdownBody(
-                data: markdownData,
-                shrinkWrap: true,
-              ),
-            ],
+          child: MarkdownBlock(
+            data: markdownData,
+            config: isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig,
           ),
         ),
       ),
