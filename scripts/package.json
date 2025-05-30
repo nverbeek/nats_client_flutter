@@ -1,0 +1,13 @@
+{
+  "name": "flutter-icon-generator",
+  "version": "1.0.0",
+  "description": "Generate Flutter app icons for all platforms from SVG",
+  "main": "generate_icons.js",
+  "scripts": {
+    "generate": "node generate_icons.js"
+  },
+  "dependencies": {
+    "sharp": "^0.33.0",
+    "png-to-ico": "^2.1.8"
+  }
+} 

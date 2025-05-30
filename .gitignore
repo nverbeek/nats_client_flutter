@@ -136,3 +136,4 @@ tf/.terraform.lock.hcl
 *.tfstate
 tf/terraform.tfstate.backup
 cert
+scripts/node_modules

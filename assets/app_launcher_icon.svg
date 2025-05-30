@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Main N gradient -->
+    <linearGradient id="nGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0ea5e9"/>
+      <stop offset="30%" stop-color="#3b82f6"/>
+      <stop offset="70%" stop-color="#0891b2"/>
+      <stop offset="100%" stop-color="#14b8a6"/>
+    </linearGradient>
+    
+    <!-- Drop shadow filter -->
+    <filter id="dropShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.15"/>
+    </filter>
+  </defs>
+  
+  <!-- Main N letter as one connected path -->
+  <g filter="url(#dropShadow)">
+    <path d="M 48 48 
+             L 82 48 
+             L 174 160 
+             L 174 48 
+             L 208 48 
+             L 208 208 
+             L 174 208 
+             L 82 96 
+             L 82 208 
+             L 48 208 
+             Z" 
+          fill="url(#nGradient)"/>
+  </g>
+  
+  <!-- Subtle inner shadows for depth -->
+  <g opacity="0.2">
+    <!-- Top shadow line -->
+    <path d="M 48 48 L 82 48 L 82 52 L 48 52 Z" fill="#000000"/>
+    <path d="M 174 48 L 208 48 L 208 52 L 174 52 Z" fill="#000000"/>
+    
+    <!-- Left shadow lines -->
+    <path d="M 48 48 L 52 48 L 52 208 L 48 208 Z" fill="#000000"/>
+    <path d="M 204 48 L 208 48 L 208 208 L 204 208 Z" fill="#000000"/>
+  </g>
+</svg> 
