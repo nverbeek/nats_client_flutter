@@ -12,6 +12,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import 'constants.dart' as constants;
 import 'message_detail_dialog.dart';
@@ -794,6 +795,16 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        leadingWidth: 48, // Reduce the default leading width
+        titleSpacing: 0, // Remove the default title spacing
+        leading: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: SvgPicture.asset(
+            'assets/app_launcher_icon.svg',
+            width: 32,
+            height: 32,
+          ),
+        ),
         title: Text(widget.title),
         actions: [
           IconButton(

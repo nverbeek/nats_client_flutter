@@ -46,6 +46,7 @@ dependencies:
   package_info_plus: ^8.2.1
   file_picker: ^10.1.9
   window_manager: ^0.4.3
+  flutter_svg: ^2.1.0
 
 dev_dependencies:
   flutter_test:
@@ -71,3 +72,4 @@ flutter:
 
   assets:
     - assets/app_help.md
+    - assets/app_launcher_icon.svg
