@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_highlighter/flutter_highlighter.dart';
-import 'package:flutter_highlighter/themes/atelier-cave-dark.dart';
-import 'package:flutter_highlighter/themes/atelier-cave-light.dart';
 import 'package:provider/provider.dart';
 import 'package:nats_client_flutter/main.dart'; // For ThemeModel
+import 'highlight_theme.dart';
 
 class MessageDetailDialog extends StatelessWidget {
   final String headerVersion;
@@ -79,9 +78,10 @@ class MessageDetailDialog extends StatelessWidget {
               child: HighlightView(
                 formattedJson,
                 language: 'json',
-                theme: Provider.of<ThemeModel>(context, listen: false).isDark()
-                    ? atelierCaveDarkTheme
-                    : atelierCaveLightTheme,
+                theme: getCustomHighlightTheme(
+                  context,
+                  isDark: Provider.of<ThemeModel>(context, listen: false).isDark(),
+                ),
                 padding: const EdgeInsets.all(10),
                 textStyle: const TextStyle(
                     fontSize: 14,

@@ -525,7 +525,8 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
     String formattedJson = '';
     try {
       var json = jsonDecode(message.string);
-      var encoder = const JsonEncoder.withIndent("  ");
+      var encoder = const JsonEncoder.withIndent("    ");
+    
       formattedJson = encoder.convert(json);
     } on FormatException {
       formattedJson = message.string;
@@ -792,9 +793,30 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
       availableSchemes.remove('nats://');
     }
 
+    // Define custom colors for message list rows based on theme
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    // Even row: subtle tint
+    final messageRowEvenColor = isDark
+        ? Color.alphaBlend(theme.colorScheme.surface.withAlpha(40), theme.colorScheme.background)
+        : Color.alphaBlend(theme.colorScheme.surface.withAlpha(20), theme.colorScheme.background);
+    // Odd row: more contrast
+    final messageRowOddColor = isDark
+        ? Color.alphaBlend(theme.colorScheme.secondaryContainer.withAlpha(80), theme.colorScheme.background)
+        : Color.alphaBlend(theme.colorScheme.secondaryContainer.withAlpha(140), theme.colorScheme.surface);
+
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        backgroundColor: (() {
+          final theme = Theme.of(context);
+          final surface = theme.colorScheme.surface;
+          final isDark = theme.brightness == Brightness.dark;
+          return Color.alphaBlend(
+            Colors.black.withAlpha(isDark ? 80 : 20), // 20% for dark, 8% for light
+            surface,
+          );
+        })(),
+        scrolledUnderElevation: 0,
         leadingWidth: 48, // Reduce the default leading width
         titleSpacing: 0, // Remove the default title spacing
         leading: Padding(
@@ -948,6 +970,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
               ),
             ),
           ),
+          const Divider(height: 1), // Divider below the top toolbar
           Expanded(
             child: Scrollbar(
               controller: _listScrollController,
@@ -965,8 +988,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
                         fontSize: messageFontSize,
                         highlightStyle: TextStyle(
                           background: Paint()
-                            ..color =
-                                Theme.of(context).colorScheme.inversePrimary,
+                            ..color = Theme.of(context).colorScheme.inversePrimary,
                           fontSize: messageFontSize,
                         ),
                         maxLines: messageSingleLine ? 1 : 5,
@@ -975,8 +997,8 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
                       tileColor: selectedIndex == index
                           ? Theme.of(context).colorScheme.inversePrimary
                           : index % 2 == 0
-                              ? Theme.of(context).colorScheme.surfaceContainerHighest
-                              : null,
+                              ? messageRowEvenColor
+                              : messageRowOddColor,
                       onTap: () {
                         setState(() {
                           if (index == selectedIndex) {
@@ -1010,6 +1032,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
                             ),
                           ),
                           PopupMenuButton<String>(
+                            padding: EdgeInsets.zero, // Remove default padding
                             itemBuilder: (context) {
                               return [
                                 const PopupMenuItem(
@@ -1064,6 +1087,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
                                     showSnackBar(
                                         'Not connected, cannot send message');
                                   }
+                                  break;
                                 case 'reply_to':
                                   if (currentStatus == Status.connected) {
                                     if (filteredItems[index].replyTo != null &&
@@ -1082,6 +1106,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
                                     showSnackBar(
                                         'Not connected, cannot send message');
                                   }
+                                  break;
                               }
                             },
                           ),
@@ -1093,6 +1118,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
               ),
             ),
           ),
+          const Divider(height: 1), // Divider above the bottom toolbar
           Row(
             children: <Widget>[
               Container(
