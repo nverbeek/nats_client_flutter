@@ -137,3 +137,4 @@ tf/.terraform.lock.hcl
 tf/terraform.tfstate.backup
 cert
 scripts/node_modules
+scripts/package-lock.json
