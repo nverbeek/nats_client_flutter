@@ -299,7 +299,6 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
           .toList();
     }
 
-    // Refresh the UI
     setState(() {
       filteredItems = results;
     });
@@ -460,14 +459,17 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
 
   void handleIncomingMessage(event) {
     debugPrint(event.string);
-    setState(() {
-      items.insert(0, event);
-      // if an item is selected, we need to move the selection since
-      // we just put a new item in the list
-      if (selectedIndex > -1) {
-        selectedIndex += 1;
-      }
-      _runFilter();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        items.insert(0, event);
+        // if an item is selected, we need to move the selection since
+        // we just put a new item in the list
+        if (selectedIndex > -1) {
+          selectedIndex += 1;
+        }
+        _runFilter();
+      });
     });
   }
 
@@ -981,6 +983,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
                 itemCount: filteredItems.length,
                 itemBuilder: (context, index) {
                   return Material(
+                    key: ValueKey(filteredItems[index].hashCode), // Add a key to help Flutter track widgets
                     child: ListTile(
                       title: RegexTextHighlight(
                         text: filteredItems[index].string,
