@@ -800,11 +800,11 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
     final isDark = theme.brightness == Brightness.dark;
     // Even row: subtle tint
     final messageRowEvenColor = isDark
-        ? Color.alphaBlend(theme.colorScheme.surface.withAlpha(40), theme.colorScheme.background)
-        : Color.alphaBlend(theme.colorScheme.surface.withAlpha(20), theme.colorScheme.background);
+        ? Color.alphaBlend(theme.colorScheme.surface.withAlpha(40), theme.colorScheme.surface)
+        : Color.alphaBlend(theme.colorScheme.surface.withAlpha(20), theme.colorScheme.surface);
     // Odd row: more contrast
     final messageRowOddColor = isDark
-        ? Color.alphaBlend(theme.colorScheme.secondaryContainer.withAlpha(80), theme.colorScheme.background)
+        ? Color.alphaBlend(theme.colorScheme.secondaryContainer.withAlpha(80), theme.colorScheme.surface)
         : Color.alphaBlend(theme.colorScheme.secondaryContainer.withAlpha(140), theme.colorScheme.surface);
 
     return Scaffold(
