@@ -1,4 +1,4 @@
-# NATS Client UI
+# <img src="./assets/app_launcher_icon.svg" width="36" height="36" alt="NATS Client Logo" style="vertical-align: text-bottom"> NATS Client UI
 This NATS client is a cross-platform desktop & web application written in Flutter. The client allows users to easily watch & manage NATS messages.
 
 # Platforms
@@ -15,6 +15,7 @@ This application currently supports Windows, Linux, macOS and Web platforms.
 - See message details, such as headers, subject and payload. JSON payloads are automatically formatted and syntax highlighted as well!
 - Light and Dark themes
 - Most recent connection information & theme are persisted between app runs
+- Message view settings
 
 # Screenshots
 <br/>
