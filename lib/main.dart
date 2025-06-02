@@ -458,19 +458,23 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
   }
 
   void handleIncomingMessage(event) {
-    debugPrint(event.string);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() {
-        items.insert(0, event);
-        // if an item is selected, we need to move the selection since
-        // we just put a new item in the list
-        if (selectedIndex > -1) {
-          selectedIndex += 1;
-        }
-        _runFilter();
-      });
+    String displayText;
+    try {
+      displayText = event.string;
+    } catch (e) {
+      displayText = '[Binary Data] ${event.payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}';
+    }
+    debugPrint(displayText);
+    debugPrint("---");
+    
+    if (!mounted) return;
+    setState(() {
+      items.insert(0, event);
+      if (selectedIndex > -1) {
+        selectedIndex += 1;
+      }
     });
+    _runFilter();
   }
 
   void setStateConnected() {
