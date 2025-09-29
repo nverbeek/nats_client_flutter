@@ -879,7 +879,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
                           child: Text(value),
                         );
                       }).toList(),
-                      value: scheme,
+                      initialValue: scheme,
                       onChanged: (currentStatus != Status.disconnected)
                           ? null
                           : (value) {
