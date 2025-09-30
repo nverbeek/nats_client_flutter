@@ -24,51 +24,58 @@ import 'security_settings_dialog.dart';
 void main() async {
   // must wait for widgets to initialize before we are able to use SharedPreferences
   WidgetsFlutterBinding.ensureInitialized();
-  await windowManager.ensureInitialized();
+  
+  // Only initialize window manager on non-web platforms
+  if (!kIsWeb) {
+    await windowManager.ensureInitialized();
+
+    // setup a reference to the shared preferences instance
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+
+    // get the window's last size and position from the last run (if applicable)
+    var windowWidth = 1280.0;
+    var windowHeight = 720.0;
+    var lastWidth = prefs.getDouble(constants.prefLastWidth);
+    var lastHeight = prefs.getDouble(constants.prefLastHeight);
+    double? windowPositionX;
+    double? windowPositionY;
+    var lastPositionX = prefs.getDouble(constants.prefLastPositionX);
+    var lastPositionY = prefs.getDouble(constants.prefLastPositionY);
+
+    if (lastWidth != null) {
+      windowWidth = lastWidth;
+    }
+    if (lastHeight != null) {
+      windowHeight = lastHeight;
+    }
+    if (lastPositionX != null) {
+      windowPositionX = lastPositionX;
+    }
+    if (lastPositionY != null) {
+      windowPositionY = lastPositionY;
+    }
+
+    // set the window options (including size)
+    WindowOptions windowOptions = WindowOptions(
+      size: Size(windowWidth, windowHeight),
+      backgroundColor: Colors.transparent,
+      skipTaskbar: false,
+    );
+
+    // if there was a saved position, restore that
+    if (windowPositionX != null && windowPositionY != null) {
+      windowManager.setPosition(Offset(windowPositionX, windowPositionY));
+    }
+
+    // finally, show the window
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    });
+  }
 
   // setup a reference to the shared preferences instance
   SharedPreferences prefs = await SharedPreferences.getInstance();
-
-  // get the window's last size and position from the last run (if applicable)
-  var windowWidth = 1280.0;
-  var windowHeight = 720.0;
-  var lastWidth = prefs.getDouble(constants.prefLastWidth);
-  var lastHeight = prefs.getDouble(constants.prefLastHeight);
-  double? windowPositionX;
-  double? windowPositionY;
-  var lastPositionX = prefs.getDouble(constants.prefLastPositionX);
-  var lastPositionY = prefs.getDouble(constants.prefLastPositionY);
-
-  if (lastWidth != null) {
-    windowWidth = lastWidth;
-  }
-  if (lastHeight != null) {
-    windowHeight = lastHeight;
-  }
-  if (lastPositionX != null) {
-    windowPositionX = lastPositionX;
-  }
-  if (lastPositionY != null) {
-    windowPositionY = lastPositionY;
-  }
-
-  // set the window options (including size)
-  WindowOptions windowOptions = WindowOptions(
-    size: Size(windowWidth, windowHeight),
-    backgroundColor: Colors.transparent,
-    skipTaskbar: false,
-  );
-
-  // if there was a saved position, restore that
-  if (windowPositionX != null && windowPositionY != null) {
-    windowManager.setPosition(Offset(windowPositionX, windowPositionY));
-  }
-
-  // finally, show the window
-  windowManager.waitUntilReadyToShow(windowOptions, () async {
-    await windowManager.show();
-    await windowManager.focus();
-  });
 
   // attempt to read previous connection info from preferences
   String? tempScheme = prefs.getString(constants.prefScheme);
@@ -237,31 +244,39 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
     updateFullUri();
     super.initState();
 
-    // add a listener for window events, such as size/position changes
-    windowManager.addListener(this);
+    // add a listener for window events, such as size/position changes (desktop only)
+    if (!kIsWeb) {
+      windowManager.addListener(this);
+    }
   }
 
   @override
   void dispose() {
-    windowManager.removeListener(this);
+    if (!kIsWeb) {
+      windowManager.removeListener(this);
+    }
     _listScrollController.dispose(); // Dispose the controller
     super.dispose();
   }
 
   @override
   void onWindowResized() {
-    windowManager.getSize().then((windowSize) => {
-          prefs.setDouble(constants.prefLastWidth, windowSize.width),
-          prefs.setDouble(constants.prefLastHeight, windowSize.height)
-        });
+    if (!kIsWeb) {
+      windowManager.getSize().then((windowSize) => {
+            prefs.setDouble(constants.prefLastWidth, windowSize.width),
+            prefs.setDouble(constants.prefLastHeight, windowSize.height)
+          });
+    }
   }
 
   @override
   void onWindowMoved() {
-    windowManager.getPosition().then((windowPosition) => {
-      prefs.setDouble(constants.prefLastPositionX, windowPosition.dx),
-      prefs.setDouble(constants.prefLastPositionY, windowPosition.dy),
-    });
+    if (!kIsWeb) {
+      windowManager.getPosition().then((windowPosition) => {
+        prefs.setDouble(constants.prefLastPositionX, windowPosition.dx),
+        prefs.setDouble(constants.prefLastPositionY, windowPosition.dy),
+      });
+    }
   }
 
   /// initialize the shared preferences instance
@@ -398,8 +413,13 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
 
   /// Creates a SecurityContext instance based on the currently configured
   /// certificates. Returns a null [SecurityContext] if no certificates
-  /// are configured.
+  /// are configured. Not available on web platform.
   SecurityContext? getSecurityContext() {
+    // SecurityContext is not available on web platform
+    if (kIsWeb) {
+      return null;
+    }
+
     // read out the certificate paths from preferences
 
     // trusted certificate

@@ -15,7 +15,6 @@ RUN apt-get update && \
         ca-certificates \
         gnupg \
         lsb-release \
-        software-properties-common \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 # Clone the flutter repo
