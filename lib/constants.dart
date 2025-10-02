@@ -41,3 +41,7 @@ const String prefLastWidth = "LAST_WIDTH";
 const String prefLastHeight = "LAST_HEIGHT";
 const String prefLastPositionX = "LAST_POSITION_X";
 const String prefLastPositionY = "LAST_POSITION_Y";
+const String prefRetryInterval = "RETRY_INTERVAL";
+
+// retry interval options (in seconds)
+const int defaultRetryInterval = 10;

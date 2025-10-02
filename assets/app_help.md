@@ -11,6 +11,7 @@ The application provides a settings dialog (⚙️ button in the toolbar) with t
 
 - **Message Font Size**: Adjusts the font size of messages in the message list.
 - **Single Line Messages**: If enabled, each message in the list is displayed on a single line (with ellipsis for overflow). If disabled, messages can span multiple lines (up to 5 lines).
+- **Reconnect Interval**: Controls the amount of time between reconnection attempts.
 
 # Connection
 ## Schemes

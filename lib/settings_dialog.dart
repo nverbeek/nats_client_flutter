@@ -3,12 +3,14 @@ import 'package:flutter/material.dart';
 class SettingsDialog extends StatefulWidget {
   final double initialFontSize;
   final bool initialSingleLine;
-  final void Function(double, bool) onSave;
+  final int initialRetryInterval;
+  final void Function(double, bool, int) onSave;
 
   const SettingsDialog({
     super.key,
     required this.initialFontSize,
     required this.initialSingleLine,
+    required this.initialRetryInterval,
     required this.onSave,
   });
 
@@ -19,12 +21,14 @@ class SettingsDialog extends StatefulWidget {
 class _SettingsDialogState extends State<SettingsDialog> {
   late double tempFontSize;
   late bool tempSingleLine;
+  late int tempRetryInterval;
 
   @override
   void initState() {
     super.initState();
     tempFontSize = widget.initialFontSize;
     tempSingleLine = widget.initialSingleLine;
+    tempRetryInterval = widget.initialRetryInterval;
   }
 
   @override
@@ -69,6 +73,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
               ),
             ],
           ),
+          const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -80,6 +85,33 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     tempSingleLine = v;
                   });
                 },
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              const Text('Reconnect Interval'),
+              const SizedBox(width: 16),
+              Expanded(
+                child: DropdownButtonFormField<int>(
+                  value: tempRetryInterval,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 3, child: Text('3 seconds')),
+                    DropdownMenuItem(value: 5, child: Text('5 seconds')),
+                    DropdownMenuItem(value: 10, child: Text('10 seconds')),
+                    DropdownMenuItem(value: 30, child: Text('30 seconds')),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      tempRetryInterval = value!;
+                    });
+                  },
+                ),
               ),
             ],
           ),
@@ -95,7 +127,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
         TextButton(
           child: const Text('Save'),
           onPressed: () {
-            widget.onSave(tempFontSize, tempSingleLine);
+            widget.onSave(tempFontSize, tempSingleLine, tempRetryInterval);
             Navigator.of(context).pop();
           },
         ),

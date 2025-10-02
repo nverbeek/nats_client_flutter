@@ -267,6 +267,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
   late SharedPreferences prefs;
   double messageFontSize = 14.0;
   bool messageSingleLine = false;
+  int retryInterval = constants.defaultRetryInterval;
 
   @override
   initState() {
@@ -328,6 +329,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
     setState(() {
       messageFontSize = prefs.getDouble('messageFontSize') ?? 14.0;
       messageSingleLine = prefs.getBool('messageSingleLine') ?? false;
+      retryInterval = prefs.getInt(constants.prefRetryInterval) ?? constants.defaultRetryInterval;
     });
   }
 
@@ -335,6 +337,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
     final prefs = await SharedPreferences.getInstance();
     prefs.setDouble('messageFontSize', messageFontSize);
     prefs.setBool('messageSingleLine', messageSingleLine);
+    prefs.setInt(constants.prefRetryInterval, retryInterval);
   }
 
   /// Handles tap logic to distinguish between single and double taps
@@ -468,7 +471,10 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
 
       // finally, make the connection attempt
       await natsClient.connect(uri,
-          retry: true, retryCount: -1, securityContext: securityContext);
+          retry: true, 
+          retryCount: -1, 
+          retryInterval: retryInterval,
+          securityContext: securityContext);
     } on TlsException {
       showSnackBar(constants.connectionFailure);
       setStateDisconnected();
@@ -726,10 +732,12 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
         return SettingsDialog(
           initialFontSize: messageFontSize,
           initialSingleLine: messageSingleLine,
-          onSave: (fontSize, singleLine) {
+          initialRetryInterval: retryInterval,
+          onSave: (fontSize, singleLine, retryIntervalValue) {
             setState(() {
               messageFontSize = fontSize;
               messageSingleLine = singleLine;
+              retryInterval = retryIntervalValue;
             });
             saveMessageSettings();
           },
