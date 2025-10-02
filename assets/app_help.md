@@ -63,6 +63,15 @@ Each message has the following information/options:
     - **Edit & Send** - Opens a dialog pre-filled with the message's subject and data, allowing you to edit prior to sending again.
     - **Reply To** - If the selected message has a replyTo subject defined, this option opens a send message box where the subject is pre-filled with the replyTo subject.
 
+## Keyboard Shortcuts
+When a message is selected (highlighted), the following keyboard shortcuts are available:
+
+- **`d`** - Open Detail dialog
+- **`r`** - Execute Replay (re-send the message)
+- **`e`** - Open Edit & Send dialog
+- **`Ctrl + C`** - Copy message content to clipboard
+- **`Esc`** - Un-select the currently selected message
+
 # Tools
 At the bottom of the window are several tools:
 

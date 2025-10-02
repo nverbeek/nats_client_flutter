@@ -158,12 +158,38 @@ class MyApp extends StatelessWidget {
               useMaterial3: true,
               colorScheme:
                   ColorScheme.fromSeed(seedColor: Colors.lightBlue.shade900),
+              snackBarTheme: SnackBarThemeData(
+                backgroundColor: ColorScheme.fromSeed(seedColor: Colors.lightBlue.shade900).surfaceContainerHighest,
+                contentTextStyle: TextStyle(
+                  color: ColorScheme.fromSeed(seedColor: Colors.lightBlue.shade900).onSurface,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                behavior: SnackBarBehavior.floating,
+                elevation: 4,
+              ),
             ),
             darkTheme: ThemeData(
               useMaterial3: true,
               colorScheme: ColorScheme.fromSeed(
                   brightness: Brightness.dark,
                   seedColor: Colors.lightBlue.shade900),
+              snackBarTheme: SnackBarThemeData(
+                backgroundColor: ColorScheme.fromSeed(
+                    brightness: Brightness.dark,
+                    seedColor: Colors.lightBlue.shade900).surfaceContainerHighest,
+                contentTextStyle: TextStyle(
+                  color: ColorScheme.fromSeed(
+                      brightness: Brightness.dark,
+                      seedColor: Colors.lightBlue.shade900).onSurface,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                behavior: SnackBarBehavior.floating,
+                elevation: 4,
+              ),
             ),
             themeMode: model.mode,
             home: LoaderOverlay(
@@ -527,9 +553,26 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
     });
   }
 
-  void showSnackBar(String message) {
+  void showSnackBar(String message, {SnackBarAction? action, Duration? duration}) {
+    final theme = Theme.of(context);
+    
     var snackBar = SnackBar(
-      content: Text(message),
+      content: Text(
+        message,
+        style: TextStyle(
+          color: theme.colorScheme.onSurface,
+          fontSize: 14,
+        ),
+      ),
+      backgroundColor: theme.colorScheme.surfaceContainerHighest,
+      action: action,
+      duration: duration ?? const Duration(seconds: 4),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+      ),
+      margin: const EdgeInsets.all(16),
+      elevation: 4,
     );
 
     // Find the ScaffoldMessenger in the widget tree
@@ -831,7 +874,55 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
         ? Color.alphaBlend(theme.colorScheme.secondaryContainer.withAlpha(80), theme.colorScheme.surface)
         : Color.alphaBlend(theme.colorScheme.secondaryContainer.withAlpha(140), theme.colorScheme.surface);
 
-    return Scaffold(
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        // Only handle key events when a message is selected
+        if (selectedIndex >= 0 && selectedIndex < filteredItems.length) {
+          if (event is KeyDownEvent) {
+            // Handle single key shortcuts
+            if (event.logicalKey == LogicalKeyboardKey.keyD) {
+              showDetailDialog(filteredItems[selectedIndex]);
+              return KeyEventResult.handled;
+            } else if (event.logicalKey == LogicalKeyboardKey.keyR) {
+              if (currentStatus == Status.connected) {
+                natsClient.pubString(
+                    filteredItems[selectedIndex].subject!,
+                    filteredItems[selectedIndex].string);
+              } else {
+                showSnackBar('Not connected, cannot replay message');
+              }
+              return KeyEventResult.handled;
+            } else if (event.logicalKey == LogicalKeyboardKey.keyE) {
+              if (currentStatus == Status.connected) {
+                showSendMessageDialog(
+                    filteredItems[selectedIndex].subject!,
+                    null,
+                    filteredItems[selectedIndex].string);
+              } else {
+                showSnackBar('Not connected, cannot send message');
+              }
+              return KeyEventResult.handled;
+            }
+            // Handle Ctrl+C shortcut
+            else if (event.logicalKey == LogicalKeyboardKey.keyC && 
+                     HardwareKeyboard.instance.isControlPressed) {
+              Clipboard.setData(ClipboardData(text: filteredItems[selectedIndex].string));
+              showSnackBar('Copied to clipboard!');
+              return KeyEventResult.handled;
+            }
+            // Handle Esc key to un-select message
+            else if (event.logicalKey == LogicalKeyboardKey.escape) {
+              setState(() {
+                selectedIndex = -1;
+              });
+              return KeyEventResult.handled;
+            }
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Scaffold(
       appBar: AppBar(
         backgroundColor: (() {
           final theme = Theme.of(context);
@@ -1261,6 +1352,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
           ),
         ],
       ),
+    ),
     );
   }
 }
