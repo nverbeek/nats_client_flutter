@@ -340,15 +340,19 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
           .toList();
     }
 
-    setState(() {
-      filteredItems = results;
-    });
+    if (mounted) {
+      setState(() {
+        filteredItems = results;
+      });
+    }
   }
 
   void updateFullUri() {
-    setState(() {
-      fullUri = '$scheme$host:$port';
-    });
+    if (mounted) {
+      setState(() {
+        fullUri = '$scheme$host:$port';
+      });
+    }
   }
 
   void natsConnect() async {
@@ -399,9 +403,12 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
             break;
         }
 
-        setState(() {
-          connectionStateString = stateString;
-        });
+        // Add mounted check before calling setState
+        if (mounted) {
+          setState(() {
+            connectionStateString = stateString;
+          });
+        }
       });
 
       // process the subjects, see if there are more than one
@@ -524,60 +531,74 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
   }
 
   void setStateConnected() {
-    setState(() {
-      isConnected = true;
-      if (context.mounted) {}
-    });
+    if (mounted) {
+      setState(() {
+        isConnected = true;
+      });
+    }
   }
 
   void setStateDisconnected() {
-    setState(() {
-      isConnected = false;
-      connectionStateString = constants.disconnected;
-      if (context.mounted) {}
-    });
+    if (mounted) {
+      setState(() {
+        isConnected = false;
+        connectionStateString = constants.disconnected;
+      });
+    }
   }
 
   void natsDisconnect() async {
     await natsClient.forceClose();
 
-    setState(() {
-      isConnected = false;
-    });
+    if (mounted) {
+      setState(() {
+        isConnected = false;
+      });
+    }
   }
 
   void clearMessageList() {
-    setState(() {
-      items.clear();
-      filteredItems.clear();
-    });
+    if (mounted) {
+      setState(() {
+        items.clear();
+        filteredItems.clear();
+      });
+    }
   }
 
   void showSnackBar(String message, {SnackBarAction? action, Duration? duration}) {
-    final theme = Theme.of(context);
+    // Add mounted check before accessing context
+    if (!mounted) return;
     
-    var snackBar = SnackBar(
-      content: Text(
-        message,
-        style: TextStyle(
-          color: theme.colorScheme.onSurface,
-          fontSize: 14,
+    try {
+      final theme = Theme.of(context);
+      
+      var snackBar = SnackBar(
+        content: Text(
+          message,
+          style: TextStyle(
+            color: theme.colorScheme.onSurface,
+            fontSize: 14,
+          ),
         ),
-      ),
-      backgroundColor: theme.colorScheme.surfaceContainerHighest,
-      action: action,
-      duration: duration ?? const Duration(seconds: 4),
-      behavior: SnackBarBehavior.floating,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-      ),
-      margin: const EdgeInsets.all(16),
-      elevation: 4,
-    );
+        backgroundColor: theme.colorScheme.surfaceContainerHighest,
+        action: action,
+        duration: duration ?? const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        margin: const EdgeInsets.all(16),
+        elevation: 4,
+      );
 
-    // Find the ScaffoldMessenger in the widget tree
-    // and use it to show a SnackBar.
-    ScaffoldMessenger.of(context).showSnackBar(snackBar);
+      // Find the ScaffoldMessenger in the widget tree
+      // and use it to show a SnackBar.
+      ScaffoldMessenger.of(context).showSnackBar(snackBar);
+    } catch (e) {
+      // Log error but don't crash the app
+      debugPrint('Error showing snackbar: $e');
+    }
   }
 
   /// Shows a dialog containing [Message] details including headers and payload.
@@ -847,7 +868,132 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
 
   void sendMessage(String subject, String data) {
     natsClient.pubString(subject, data);
-    Navigator.of(context).pop();
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  /// Creates a safe PopupMenuButton that handles mounted state properly
+  Widget _buildSafePopupMenuButton(int index) {
+    return PopupMenuButton<String>(
+      key: ValueKey('popup_${filteredItems[index].hashCode}'),
+      padding: EdgeInsets.zero,
+      itemBuilder: (context) {
+        // Add mounted check before accessing context
+        if (!mounted) return [];
+        
+        try {
+          return [
+            const PopupMenuItem(
+              value: 'copy',
+              child: Text('Copy'),
+            ),
+            const PopupMenuItem(
+              value: 'detail',
+              child: Text('Detail'),
+            ),
+            PopupMenuItem(
+              value: 'replay',
+              enabled: currentStatus == Status.connected,
+              child: Text(
+                'Replay',
+                style: currentStatus == Status.connected
+                    ? null
+                    : TextStyle(
+                        color: Theme.of(context).disabledColor,
+                      ),
+              ),
+            ),
+            PopupMenuItem(
+              value: 'edit_and_send',
+              enabled: currentStatus == Status.connected,
+              child: Text(
+                'Edit & Send',
+                style: currentStatus == Status.connected
+                    ? null
+                    : TextStyle(
+                        color: Theme.of(context).disabledColor,
+                      ),
+              ),
+            ),
+            PopupMenuItem(
+              value: 'reply_to',
+              enabled: currentStatus == Status.connected,
+              child: Text(
+                'Reply To',
+                style: currentStatus == Status.connected
+                    ? null
+                    : TextStyle(
+                        color: Theme.of(context).disabledColor,
+                      ),
+              ),
+            )
+          ];
+        } catch (e) {
+          // If there's an error accessing context, return empty list
+          debugPrint('Error building popup menu items: $e');
+          return [];
+        }
+      },
+      onSelected: (String value) async {
+        // Add mounted check before processing selection
+        if (!mounted) return;
+        
+        try {
+          switch (value) {
+            case 'copy':
+              await Clipboard.setData(ClipboardData(
+                  text: filteredItems[index].string));
+              if (mounted) {
+                showSnackBar('Copied to clipboard!');
+              }
+              break;
+            case 'detail':
+              if (mounted) {
+                showDetailDialog(filteredItems[index]);
+              }
+              break;
+            case 'replay':
+              if (mounted && currentStatus == Status.connected) {
+                natsClient.pubString(
+                    filteredItems[index].subject!,
+                    filteredItems[index].string);
+              }
+              break;
+            case 'edit_and_send':
+              if (mounted && currentStatus == Status.connected) {
+                showSendMessageDialog(
+                    filteredItems[index].subject!,
+                    null,
+                    filteredItems[index].string);
+              }
+              break;
+            case 'reply_to':
+              if (mounted && currentStatus == Status.connected) {
+                if (filteredItems[index].replyTo != null &&
+                    filteredItems[index]
+                        .replyTo!
+                        .isNotEmpty) {
+                  showSendMessageDialog(
+                      filteredItems[index].replyTo,
+                      null,
+                      null);
+                } else {
+                  showSnackBar(
+                      'This message has no replyTo subject');
+                }
+              }
+              break;
+          }
+        } catch (e) {
+          // Log error but don't crash the app
+          debugPrint('Error handling popup menu selection: $e');
+          if (mounted) {
+            showSnackBar('An error occurred. Please try again.');
+          }
+        }
+      },
+    );
   }
 
   @override
@@ -1149,85 +1295,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
                               ),
                             ),
                           ),
-                          PopupMenuButton<String>(
-                            padding: EdgeInsets.zero, // Remove default padding
-                            itemBuilder: (context) {
-                              return [
-                                const PopupMenuItem(
-                                  value: 'copy',
-                                  child: Text('Copy'),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'detail',
-                                  child: Text('Detail'),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'replay',
-                                  child: Text('Replay'),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'edit_and_send',
-                                  child: Text('Edit & Send'),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'reply_to',
-                                  child: Text('Reply To'),
-                                )
-                              ];
-                            },
-                            onSelected: (String value) async {
-                              switch (value) {
-                                case 'copy':
-                                  await Clipboard.setData(ClipboardData(
-                                      text: filteredItems[index].string));
-                                  showSnackBar('Copied to clipboard!');
-                                  break;
-                                case 'detail':
-                                  showDetailDialog(filteredItems[index]);
-                                  break;
-                                case 'replay':
-                                  if (currentStatus == Status.connected) {
-                                    natsClient.pubString(
-                                        filteredItems[index].subject!,
-                                        filteredItems[index].string);
-                                  } else {
-                                    showSnackBar(
-                                        'Not connected, cannot replay message');
-                                  }
-                                  break;
-                                case 'edit_and_send':
-                                  if (currentStatus == Status.connected) {
-                                    showSendMessageDialog(
-                                        filteredItems[index].subject!,
-                                        null,
-                                        filteredItems[index].string);
-                                  } else {
-                                    showSnackBar(
-                                        'Not connected, cannot send message');
-                                  }
-                                  break;
-                                case 'reply_to':
-                                  if (currentStatus == Status.connected) {
-                                    if (filteredItems[index].replyTo != null &&
-                                        filteredItems[index]
-                                            .replyTo!
-                                            .isNotEmpty) {
-                                      showSendMessageDialog(
-                                          filteredItems[index].replyTo,
-                                          null,
-                                          null);
-                                    } else {
-                                      showSnackBar(
-                                          'This message has no replyTo subject');
-                                    }
-                                  } else {
-                                    showSnackBar(
-                                        'Not connected, cannot send message');
-                                  }
-                                  break;
-                              }
-                            },
-                          ),
+                          _buildSafePopupMenuButton(index),
                         ],
                       ),
                     ),
