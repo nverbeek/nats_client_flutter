@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -246,6 +247,10 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
   // Add a ScrollController for the ListView
   final ScrollController _listScrollController = ScrollController();
 
+  // Variables for handling single/double tap detection
+  Timer? _tapTimer;
+  int? _lastTappedIndex;
+
   // nats stuff
   late Client natsClient;
   bool isConnected = false;
@@ -282,6 +287,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
       windowManager.removeListener(this);
     }
     _listScrollController.dispose(); // Dispose the controller
+    _tapTimer?.cancel(); // Cancel any pending timer
     super.dispose();
   }
 
@@ -323,6 +329,34 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
     final prefs = await SharedPreferences.getInstance();
     prefs.setDouble('messageFontSize', messageFontSize);
     prefs.setBool('messageSingleLine', messageSingleLine);
+  }
+
+  /// Handles tap logic to distinguish between single and double taps
+  void _handleMessageTap(int index) {
+    // Cancel any existing timer
+    _tapTimer?.cancel();
+    
+    if (_lastTappedIndex == index) {
+      // This is a double tap on the same item
+      _lastTappedIndex = null;
+      showDetailDialog(filteredItems[index]);
+    } else {
+      // This might be a single tap, start a timer to check
+      _lastTappedIndex = index;
+      _tapTimer = Timer(const Duration(milliseconds: 300), () {
+        // Timer expired, this was a single tap
+        setState(() {
+          if (index == selectedIndex) {
+            // user tapped the already-selected item.
+            // un-select it
+            selectedIndex = -1;
+          } else {
+            selectedIndex = index;
+          }
+        });
+        _lastTappedIndex = null;
+      });
+    }
   }
 
   void _runFilter() {
@@ -1263,17 +1297,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
                           : index % 2 == 0
                               ? messageRowEvenColor
                               : messageRowOddColor,
-                      onTap: () {
-                        setState(() {
-                          if (index == selectedIndex) {
-                            // user tapped the already-selected item.
-                            // un-select it
-                            selectedIndex = -1;
-                          } else {
-                            selectedIndex = index;
-                          }
-                        });
-                      },
+                      onTap: () => _handleMessageTap(index), // Use the new tap handler
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: <Widget>[
