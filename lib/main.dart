@@ -258,6 +258,10 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
 
   var filterBoxController = TextEditingController();
   var findBoxController = TextEditingController();
+  
+  // Focus nodes for keyboard shortcuts
+  final FocusNode _filterFocusNode = FocusNode();
+  final FocusNode _findFocusNode = FocusNode();
 
   // user preferences
   late SharedPreferences prefs;
@@ -288,6 +292,8 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
     }
     _listScrollController.dispose(); // Dispose the controller
     _tapTimer?.cancel(); // Cancel any pending timer
+    _filterFocusNode.dispose(); // Dispose focus nodes
+    _findFocusNode.dispose();
     super.dispose();
   }
 
@@ -1057,9 +1063,24 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
     return Focus(
       autofocus: true,
       onKeyEvent: (node, event) {
-        // Only handle key events when a message is selected
-        if (selectedIndex >= 0 && selectedIndex < filteredItems.length) {
-          if (event is KeyDownEvent) {
+        if (event is KeyDownEvent) {
+          // Global shortcuts (work regardless of message selection)
+          if (event.logicalKey == LogicalKeyboardKey.keyF) {
+            if (HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isMetaPressed) {
+              if (HardwareKeyboard.instance.isShiftPressed) {
+                // Ctrl+Shift+F or Cmd+Shift+F - Focus Filter field
+                _filterFocusNode.requestFocus();
+                return KeyEventResult.handled;
+              } else {
+                // Ctrl+F or Cmd+F - Focus Find field
+                _findFocusNode.requestFocus();
+                return KeyEventResult.handled;
+              }
+            }
+          }
+          
+          // Message-specific shortcuts (only when a message is selected)
+          if (selectedIndex >= 0 && selectedIndex < filteredItems.length) {
             // Handle single key shortcuts
             if (event.logicalKey == LogicalKeyboardKey.keyD) {
               showDetailDialog(filteredItems[selectedIndex]);
@@ -1084,9 +1105,9 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
               }
               return KeyEventResult.handled;
             }
-            // Handle Ctrl+C shortcut
+            // Handle Ctrl+C/Cmd+C shortcut
             else if (event.logicalKey == LogicalKeyboardKey.keyC && 
-                     HardwareKeyboard.instance.isControlPressed) {
+                     (HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isMetaPressed)) {
               Clipboard.setData(ClipboardData(text: filteredItems[selectedIndex].string));
               showSnackBar('Copied to clipboard!');
               return KeyEventResult.handled;
@@ -1362,6 +1383,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
                   padding: const EdgeInsets.fromLTRB(0, 10, 10, 10),
                   child: TextFormField(
                     controller: filterBoxController,
+                    focusNode: _filterFocusNode,
                     onChanged: (value) {
                       currentFilter = value;
                       _runFilter();
@@ -1390,6 +1412,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
                   padding: const EdgeInsets.fromLTRB(0, 10, 10, 10),
                   child: TextFormField(
                     controller: findBoxController,
+                    focusNode: _findFocusNode,
                     onChanged: (value) {
                       setState(() {
                         currentFind = value;

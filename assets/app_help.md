@@ -63,14 +63,27 @@ Each message has the following information/options:
     - **Edit & Send** - Opens a dialog pre-filled with the message's subject and data, allowing you to edit prior to sending again.
     - **Reply To** - If the selected message has a replyTo subject defined, this option opens a send message box where the subject is pre-filled with the replyTo subject.
 
-## Keyboard Shortcuts
+# Keyboard Shortcuts
+
+## Global Shortcuts
+These shortcuts work from anywhere in the application:
+
+- **`Ctrl + F`** (Windows/Linux) or **`Cmd + F`** (Mac) - Focus the Find text field
+- **`Ctrl + Shift + F`** (Windows/Linux) or **`Cmd + Shift + F`** (Mac) - Focus the Filter text field
+
+## Message-Specific Shortcuts
 When a message is selected (highlighted), the following keyboard shortcuts are available:
 
 - **`d`** - Open Detail dialog
 - **`r`** - Execute Replay (re-send the message)
 - **`e`** - Open Edit & Send dialog
-- **`Ctrl + C`** - Copy message content to clipboard
+- **`Ctrl + C`** (Windows/Linux) or **`Cmd + C`** (Mac) - Copy message content to clipboard
 - **`Esc`** - Un-select the currently selected message
+
+## Send Message Dialog Shortcuts
+When the Send Message dialog is open:
+
+- **`Ctrl + Enter`** (Windows/Linux) or **`Cmd + Enter`** (Mac) - Send the message
 
 # Tools
 At the bottom of the window are several tools:

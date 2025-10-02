@@ -23,6 +23,7 @@ class SendMessageDialog extends StatelessWidget {
     return Shortcuts(
       shortcuts: <LogicalKeySet, Intent>{
         LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.enter): const SendIntent(),
+        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.enter): const SendIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
@@ -87,7 +88,7 @@ class SendMessageDialog extends StatelessWidget {
               },
             ),
             Tooltip(
-              message: 'Hint: Ctrl+Enter to send',
+              message: 'Hint: Ctrl+Enter (Cmd+Enter on Mac) to send',
               child: TextButton(
                 child: const Text('Send'),
                 onPressed: () {
