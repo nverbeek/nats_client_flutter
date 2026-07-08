@@ -51,11 +51,22 @@ Both Android Studio and VS Code, when setup properly, will automatically offer d
 To build a release, use the following command for your target platform:
 
 ```
-flutter build windows
-flutter build macos
-flutter build linux
-flutter build web
+flutter build windows --release
+flutter build macos --release
+flutter build linux --release
+flutter build web --release
 ```
+
+## Release Artifacts
+Release bundles are produced by GitHub Actions for tagged builds. The workflow publishes desktop and web artifacts for:
+
+- Windows x64 and Windows ARM64 packages
+- Linux bundles
+- macOS bundles
+- Web builds
+- Docker images
+
+This makes it straightforward to ship the app across desktop and web targets without manually packaging each build.
 
 ## Docker Build
 To build a docker version of the client, run the following command (from the root of the source code):

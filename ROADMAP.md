@@ -122,5 +122,5 @@ A clean multi-column layout. The left column lists active KV buckets, and the ri
 - [ ] **Quality Assurance**:
   - [ ] Fix any deprecated API alerts (e.g. migrate `withOpacity` instances to `.withValues()`).
   - [ ] Add comprehensive unit and widget tests under `test/` verifying the new layouts.
-- [ ] **Build Pipeline**:
-  - [ ] Verify that GitHub Actions CI runner (`.github/workflows/build.yml`) packages releases successfully.
+- [x] **Build Pipeline**:
+  - [x] Verify that GitHub Actions CI runner ([.github/workflows/build.yml](.github/workflows/build.yml)) packages release bundles successfully for Windows x64/ARM64, Linux, macOS, Web, and Docker.
