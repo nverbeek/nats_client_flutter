@@ -65,8 +65,10 @@ jobs:
     runs-on: windows-11-arm
     steps:
       - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.44.5'
           channel: 'stable'
       - name: Install project dependencies
         run: flutter pub get
