@@ -9,7 +9,7 @@ on:
       - '**'
   workflow_dispatch:
 env:
-  ARTIFACT_SUFFIX: ${{ github.run_id }}-${{ github.sha }}
+  ARTIFACT_SUFFIX: ${{ github.ref_type == 'tag' && github.ref_name || github.run_id }}
 jobs: 
   build-web: 
     runs-on: ubuntu-latest
