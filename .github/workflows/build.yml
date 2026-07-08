@@ -70,13 +70,14 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $version = '3.44.5'
-          $dest = Join-Path $env:RUNNER_TEMP 'flutter'
-          if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
-          $zip = Join-Path $env:RUNNER_TEMP 'flutter.zip'
+          $root = Join-Path $env:RUNNER_TEMP 'flutter-root'
+          $dest = Join-Path $root 'flutter'
+          if (Test-Path $root) { Remove-Item $root -Recurse -Force }
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          $zip = Join-Path $root 'flutter.zip'
           $url = "https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/flutter_windows_${version}-stable.zip"
           Invoke-WebRequest -Uri $url -OutFile $zip
-          Expand-Archive -Path $zip -DestinationPath $env:RUNNER_TEMP -Force
-          Move-Item -Path (Join-Path $env:RUNNER_TEMP 'flutter') -Destination $dest -Force
+          Expand-Archive -Path $zip -DestinationPath $root -Force
           "$dest\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           "FLUTTER_ROOT=$dest" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Install project dependencies
