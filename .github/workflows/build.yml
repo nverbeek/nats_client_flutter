@@ -9,7 +9,7 @@ on:
       - '**'
   workflow_dispatch:
 env:
-  ARTIFACT_SUFFIX: ${{ replace(github.ref_name, '/', '-') }}
+  ARTIFACT_SUFFIX: ${{ github.run_id }}-${{ github.sha }}
 jobs: 
   build-web: 
     runs-on: ubuntu-latest
