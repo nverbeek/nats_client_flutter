@@ -5,7 +5,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:dart_nats/dart_nats.dart';
+import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:flutter/services.dart';
 import 'package:loader_overlay/loader_overlay.dart';
 import 'package:nats_client_flutter/regex_text_highlight.dart';
@@ -474,7 +474,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
           retry: true, 
           retryCount: -1, 
           retryInterval: retryInterval,
-          securityContext: securityContext);
+          securityContext: securityContext as dynamic);
     } on TlsException {
       showSnackBar(constants.connectionFailure);
       setStateDisconnected();

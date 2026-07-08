@@ -1,12 +1,15 @@
 on:
   push:
     branches:
-      - '*'
+      - '**'
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
   pull_request:
     branches:
-      - '*'
+      - '**'
+  workflow_dispatch:
+env:
+  ARTIFACT_SUFFIX: ${{ github.run_id }}-${{ github.sha }}
 jobs: 
   build-web: 
     runs-on: ubuntu-latest
@@ -23,7 +26,7 @@ jobs:
         uses: thedoctor0/zip-release@master
         with:
           type: 'zip'
-          filename: NATSClientUI-${{github.ref_name}}-web.zip
+          filename: NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-web.zip
           directory: build/web
       - name: Web Release
         uses: softprops/action-gh-release@v1
@@ -31,33 +34,84 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          files: build/web/NATSClientUI-${{github.ref_name}}-web.zip
-  build-windows:
+          files: build/web/NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-web.zip
+  build-windows-x64:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-         channel: 'stable'
+          channel: 'stable'
       - name: Install project dependencies
         run: flutter pub get
       - name: Enable windows build
         run: flutter config --enable-windows-desktop
       - name: Build artifacts
         run: flutter build windows --release
-      - name: Archive Release
+      - name: Archive x64 Release
         uses: thedoctor0/zip-release@master
         with:
           type: 'zip'
-          filename: NATSClientUI-${{github.ref_name}}-windows.zip
+          filename: NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-windows-x64.zip
           directory: build/windows/x64/runner/Release
-      - name: Windows Release
+      - name: Windows x64 Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          files: build/windows/x64/runner/Release/NATSClientUI-${{github.ref_name}}-windows.zip
+          files: build/windows/x64/runner/Release/NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-windows-x64.zip
+  build-windows-arm64:
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Flutter
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '3.44.5'
+          $root = Join-Path $env:RUNNER_TEMP 'flutter-root'
+          $dest = Join-Path $root 'flutter'
+          if (Test-Path $root) { Remove-Item $root -Recurse -Force }
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          $zip = Join-Path $root 'flutter.zip'
+          $url = "https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/flutter_windows_${version}-stable.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $root -Force
+          "$dest\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "FLUTTER_ROOT=$dest" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Install project dependencies
+        run: flutter pub get
+      - name: Enable windows build
+        run: flutter config --enable-windows-desktop
+      - name: Build artifacts
+        run: flutter build windows --release
+      - name: Locate build output
+        shell: pwsh
+        run: |
+          $candidates = @(
+            'build/windows/arm64/runner/Release',
+            'build/windows/x64/runner/Release',
+            'build/windows/runner/Release'
+          )
+          $resolved = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $resolved) {
+            throw 'No Windows build output directory found.'
+          }
+          "BUILD_DIR=$resolved" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Archive arm64 Release
+        uses: thedoctor0/zip-release@master
+        with:
+          type: 'zip'
+          filename: NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-windows-arm64.zip
+          directory: ${{ env.BUILD_DIR }}
+      - name: Windows arm64 Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: ${{ env.BUILD_DIR }}/NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-windows-arm64.zip
   build-linux:
     runs-on: ubuntu-latest
     steps:
@@ -79,7 +133,7 @@ jobs:
         uses: thedoctor0/zip-release@master
         with:
           type: 'zip'
-          filename: NATSClientUI-${{github.ref_name}}-linux.zip
+          filename: NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-linux.zip
           directory: build/linux/x64/release/bundle
       - name: Linux Release
         uses: softprops/action-gh-release@v1
@@ -87,7 +141,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          files: build/linux/x64/release/bundle/NATSClientUI-${{github.ref_name}}-linux.zip
+          files: build/linux/x64/release/bundle/NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-linux.zip
   build-macos:
     runs-on: macos-latest
     steps:
@@ -105,7 +159,7 @@ jobs:
         uses: thedoctor0/zip-release@master
         with:
           type: 'zip'
-          filename: NATSClientUI-${{github.ref_name}}-macos.zip
+          filename: NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-macos.zip
           directory: build/macos/Build/Products/Release
       - name: macOS Release
         uses: softprops/action-gh-release@v1
@@ -113,7 +167,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          files: build/macos/Build/Products/Release/NATSClientUI-${{github.ref_name}}-macos.zip
+          files: build/macos/Build/Products/Release/NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-macos.zip
   build-docker:
     runs-on: ubuntu-latest
     env:
