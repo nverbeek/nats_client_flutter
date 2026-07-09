@@ -15,6 +15,7 @@ Welcome! This document is a living, context-bootstrapping architectural and oper
   - The Web client (running in browsers/Docker) **only** supports the `ws://` scheme due to browser-level TCP socket restrictions.
 - **TLS & Mutual TLS**: Custom TLS authentication support using PEM-formatted trusted CA certificates, client certificate chains, and private keys.
 - **Real-Time Stream**: Subscribe to multiple comma-separated subjects (supporting wildcards like `*` and `>`), filter incoming payloads in real-time, search and highlight text with regex, and send/publish custom messages.
+- **JetStream Dashboard** (`lib/jetstream_*.dart`, toggleable via the "Enable JetStream" setting): monitor streams and consumers, create/purge/delete streams, create/delete consumers (push or pull, any ack policy), browse a stream's messages live, tail a specific consumer with Ack/Nak/Term actions, and publish with JetStream delivery acknowledgement from the regular Send Message dialog.
 - **Data Syntax Highlighting**: Automatic pretty-printing and syntax highlighting of JSON payloads inside detailed message dialogs.
 - **State & Size Persistence**: Remembers recent connection setups, theme preferences, and window size/position across runs.
 
@@ -27,7 +28,8 @@ Below is the structured layout of the workspace, pointing you to relevant files 
 ```
 nats_client_flutter/
 ├── .github/workflows/
-│   └── build.yml               # CI/CD GitHub Actions workflow (multi-platform builds & Docker publishing)
+│   └── build.yml               # CI: `test` job (real nats:latest -js + Xvfb, runs test/ + integration_test/)
+│                                #   gates every build/release job via `needs: test`, then multi-platform builds & Docker publishing
 ├── assets/
 │   ├── app_help.md             # Standard application markdown help file loaded dynamically in-app
 │   └── app_launcher_icon.svg   # Source SVG launcher icon (used to regenerate platform-native icons)
@@ -36,19 +38,33 @@ nats_client_flutter/
 │   ├── constants.dart          # Connection state text, defaults, colors, and SharedPreferences keys
 │   ├── help_dialog.dart        # Stateless widget dialog that parses and displays assets/app_help.md
 │   ├── highlight_theme.dart    # Theme configurations for the code highlighter
+│   ├── jetstream_consumer_dialog.dart    # "Create Consumer" dialog (push/pull, ack/deliver policy)
+│   ├── jetstream_consumer_tail_view.dart # Live tail of a named consumer with Ack/Nak/Term actions
+│   ├── jetstream_dashboard.dart          # Stream/consumer monitor + mutations (JetStream tab's main widget)
+│   ├── jetstream_manager.dart            # Thin, testable wrapper around client.jetStream() calls
+│   ├── jetstream_message_view.dart       # Ephemeral ordered-consumer "Browse Messages" tail
+│   ├── jetstream_stream_dialog.dart      # "Create Stream" dialog (name, subjects, max age, replicas)
 │   ├── main.dart               # Main entry point, ThemeModel provider, and MyHomePage (core state machine)
 │   ├── message_detail_dialog.dart # Dialog widget for inspecting subject, headers, and pretty JSON payloads
 │   ├── regex_text_highlight.dart  # Custom inline text highlighting engine using regex substring matching
 │   ├── security_settings_dialog.dart # TLS config file selector (Trusted Cert, Cert Chain, Private Key paths)
-│   ├── send_message_dialog.dart # Form dialog for publishing/sending standard or edit-replay payloads
-│   └── settings_dialog.dart    # App options dialog (font sizes, line wrapping, retry intervals)
+│   ├── send_message_dialog.dart # Form dialog for publishing/sending standard, edit-replay, or JetStream payloads
+│   └── settings_dialog.dart    # App options dialog (font sizes, line wrapping, retry intervals, JetStream toggle)
 ├── scripts/                    # Icon generator and mockup testing utilities
 │   ├── generate_icons.js       # Custom Node.js sharp-based cross-platform transparent icon generator
 │   ├── generate_icons.bat      # Helper batch script to run generate_icons.js
+│   ├── jetstream_demo.ps1      # pwsh-only (see Recipe E): seeds demo streams + a steady publish loop
 │   ├── message_pub.ps1         # PowerShell script publishing mockup JSON payload streams to NATS subjects
 │   └── package.json            # Node.js dependencies (sharp, png-to-ico) for icon generation
-├── test/
-│   └── widget_test.dart        # Test suite root (contains empty main, ready for unit & widget tests)
+├── test/                       # Fast widget/unit tests — fakes only, no server needed (see Recipe F)
+│   ├── jetstream_dashboard_test.dart, jetstream_manager_test.dart, jetstream_*_dialog_test.dart, ...
+│   └── message_detail_dialog_test.dart, settings_dialog_test.dart, security_settings_dialog_test.dart, ...
+├── integration_test/           # Real-backend end-to-end tests against a live nats-server (see Recipe E/F)
+│   ├── helpers/nats_test_app.dart       # pumpConnectedApp/disconnectApp/pumpUntil/waitForSnackBarGone
+│   ├── live_messages_test.dart          # Core pub/sub round trip
+│   ├── live_messages_interactions_test.dart # Filter/Find/row menu/keyboard shortcuts
+│   ├── jetstream_lifecycle_test.dart    # Full stream/consumer mutation lifecycle incl. Ack/Nak/Term
+│   └── jetstream_browse_test.dart       # The ephemeral "Browse Messages" ordered-consumer view
 ├── Dockerfile                  # Multi-stage Docker container (Debian Flutter builder -> Alpine Nginx host)
 ├── analysis_options.yaml       # Static analysis and lints configuration (extends flutter_lints/flutter.yaml)
 └── pubspec.yaml                # Flutter project specifications and library dependencies
@@ -68,6 +84,7 @@ nats_client_flutter/
 - **`markdown_widget`**: Parses and displays rich help text from markdown files.
 - **`flutter_svg`**: Renders SVG vector icons.
 - **`file_picker`**: Supports secure file path selection for TLS/MTLS configurations.
+- **`integration_test`** (dev, SDK-native — no version to track): Drives the real app end-to-end against a real `nats-server`. See Recipe E/F.
 
 ### State & Execution Architecture
 
@@ -152,6 +169,18 @@ The JetStream tab (Milestone 1 in `ROADMAP.md`) needs a JetStream-*enabled* serv
    This creates a couple of sample streams (e.g. `orders`, `telemetry`) via `nats stream add` and then loops `nats pub`, so switching to the JetStream tab shows real, growing streams and "Browse Messages" has live data to tail.
 4. When finished: `docker rm -f nats-js`.
 
+### Recipe F: Writing New Tests
+Two distinct suites, two distinct patterns — don't mix them up:
+
+- **Widget tests (`test/`)**: no live server. For anything touching `JetStreamManager`, extend the `FakeJetStreamManager` in `test/jetstream_dashboard_test.dart` (override the specific method(s) you need; most already have an overridable `xImpl` function field). For standalone dialogs (`Create Stream`, `Create Consumer`, `Settings`, `Security Settings`, `Message Detail`, `Send Message`), just `pumpWidget` the dialog directly wrapped in a `MaterialApp`/`Scaffold` — see `test/jetstream_stream_dialog_test.dart` or `test/settings_dialog_test.dart` for the pattern. `MyHomePage` itself (Live Messages tab) has no fake-injection point (`natsClient` is constructed internally), so its controls can only be covered by integration tests.
+- **Integration tests (`integration_test/`)**: real server, real app, via `helpers/nats_test_app.dart`'s `pumpConnectedApp`/`disconnectApp`/`pumpUntil`/`waitForSnackBarGone`. A few sharp edges worth knowing before you hit them yourself:
+  - `JetStreamDashboard`'s state does **not** survive switching away from the JetStream tab and back (no `AutomaticKeepAliveClientMixin`) — re-select the stream/consumer after any trip through `Live Messages`.
+  - A `SnackBar` sitting at the bottom of the screen can silently absorb taps meant for the bottom toolbar; `pumpAndSettle()` doesn't wait out its full display duration. Call `waitForSnackBarGone(tester)` after anything that shows one.
+  - `find.byTooltip(...)` returns the `Tooltip` wrapper, not the `IconButton` inside it — use `find.ancestor(of: ..., matching: find.byType(IconButton))` to inspect `onPressed`.
+  - `find.text(...)` also matches `EditableText`, and a plain `Text` widget always builds its own internal `RichText` — a predicate checking both `Text` and `RichText` double-counts every unstyled row. Match your own custom widgets (e.g. `RegexTextHighlight.text`) directly instead of guessing at Flutter's internal render tree.
+  - Tapping a `ListTile` doesn't grant it keyboard focus the way tapping a text field does — if a shortcut test needs `selectedIndex` set and then a bare-letter key event to reach the app's `Focus(onKeyEvent: ...)`, explicitly call `Focus.of(tester.element(rowFinder)).requestFocus()` after selecting the row, or the key event has nothing focused to bubble up from.
+  - Nak causes a *real* server redelivery — a second row with the same payload can legitimately appear afterward. Prefer `.last` when re-locating "the row I just acted on" (new deliveries insert at index 0).
+
 ---
 
 ## 5. Build, Lint & Test Command Reference
@@ -182,10 +211,15 @@ flutter run -d <target_device_id_or_platform>
 ```
 
 ### Run Tests
-Execute the widget and unit test suites:
+Fast widget/unit tests (`test/`, fakes only, no server needed):
 ```bash
-flutter test
+flutter test test/
 ```
+Real-backend integration tests (`integration_test/`, needs a local JetStream-enabled `nats-server` — see Recipe E) — run **one file per invocation**, not the whole directory: passing multiple files to a single `flutter test integration_test` invocation is known to fail to relaunch the app for the second file on at least the Windows desktop target.
+```bash
+flutter test integration_test/live_messages_test.dart -d windows
+```
+CI runs both suites (see `.github/workflows/build.yml`'s `test` job) on every push/PR and gates every build/release job on them.
 
 ### Building Platform Artifacts
 ```bash
@@ -221,4 +255,4 @@ docker build -t nats-client-flutter .
 ### Verification & Quality Mandate
 1. **Formatting**: Always format your modified code using `flutter format .` prior to finishing.
 2. **Analysis**: Always execute `flutter analyze` to ensure the project passes compile validation.
-3. **Regression Testing**: If you modify the connection or messaging behavior, write a corresponding unit test inside `test/widget_test.dart` or create a new test file under `test/` (e.g. `test/connection_test.dart`). Verify that your change does not break existing test runs.
+3. **Regression Testing**: If you modify UI or logic covered by an existing test file, run it and keep it green. If you add a new dialog or `JetStreamManager` method, add a corresponding widget test under `test/` (see Recipe F for the patterns to reuse — `widget_test.dart` itself is an unused stub, not a place to add tests). If the change can only be verified against a real server (a new connection-state path, a new JetStream mutation, a new keyboard shortcut), add or extend an `integration_test/` file instead.

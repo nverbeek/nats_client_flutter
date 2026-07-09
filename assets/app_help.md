@@ -12,6 +12,7 @@ The application provides a settings dialog (⚙️ button in the toolbar) with t
 - **Message Font Size**: Adjusts the font size of messages in the message list.
 - **Single Line Messages**: If enabled, each message in the list is displayed on a single line (with ellipsis for overflow). If disabled, messages can span multiple lines (up to 5 lines).
 - **Reconnect Interval**: Controls the amount of time between reconnection attempts.
+- **Enable JetStream**: Shows or hides the JetStream tab (see below). On by default; turning it off doesn't affect your connection or the Live Messages tab, it just hides the JetStream UI for users who don't need it.
 
 # Connection
 ## Schemes
@@ -63,6 +64,27 @@ Each message has the following information/options:
     - **Replay**: Re-sends the message exactly as defined, with the same subject and data.
     - **Edit & Send** - Opens a dialog pre-filled with the message's subject and data, allowing you to edit prior to sending again.
     - **Reply To** - If the selected message has a replyTo subject defined, this option opens a send message box where the subject is pre-filled with the replyTo subject.
+
+# JetStream
+When **Enable JetStream** is on (the default) and you're connected to a server or account with JetStream enabled, a **JetStream** tab appears alongside **Live Messages**. It's a monitoring and management dashboard for streams and consumers.
+
+## Streams
+The left-hand pane lists all streams on the account. Selecting a stream shows its subjects, storage type, retention policy, and message/byte counts on the right.
+
+- **Add Stream**: Opens a dialog to create a new stream (name, comma-separated subjects, optional max age in days, and replica count).
+- **Browse Messages**: Opens a live tail of the selected stream's contents. This uses a temporary, auto-cleaning consumer under the hood — no manual consumer setup required just to look at what's in a stream. Disabled when the stream has no messages yet.
+- **Purge**: Deletes all messages in the stream but keeps the stream and its consumers. Asks for confirmation first.
+- **Delete Stream**: Permanently deletes the stream, its messages, and its consumers. Asks for confirmation first.
+
+## Consumers
+Each stream's consumers are listed below its details. Tapping a consumer opens a detail dialog (type, ack policy, deliver policy, pending/redelivered counts) with **Delete** and **Tail** actions.
+
+- **Create Consumer**: Opens a dialog to create a new consumer on the selected stream — durable name (leave blank for an ephemeral consumer), optional filter subject, push (with a deliver subject) or pull, ack policy, and deliver policy.
+- **Delete**: Removes the consumer. Asks for confirmation first. Only available for named (non-ephemeral) consumers.
+- **Tail**: Opens a live view of messages delivered to that specific consumer. If the consumer's ack policy is `explicit`, each message gets **Ack**, **Nak** (redeliver), and **Term** (stop redelivery) buttons; once you act on a message, its buttons disable. Consumers with any other ack policy show the same messages with those buttons disabled, since the server isn't expecting acks for them.
+
+## Publishing into a stream
+The regular **Send Message** dialog (see Tools, below) gets a **Publish via JetStream (get delivery ack)** checkbox whenever JetStream is available and connected. Checking it publishes through JetStream instead of a plain core NATS publish, and shows the stream name and assigned sequence number once the server acknowledges it.
 
 # Keyboard Shortcuts
 

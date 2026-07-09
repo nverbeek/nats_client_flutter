@@ -325,4 +325,158 @@ void main() {
     expect(manager.deleteConsumerCalls, 1);
     expect(find.text('Consumer "billing-processor" deleted.'), findsOneWidget);
   });
+
+  testWidgets('Refresh streams button re-invokes listStreams', (tester) async {
+    final manager = FakeJetStreamManager();
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
+    );
+    await tester.pumpAndSettle();
+    expect(manager.listStreamsCalls, 1);
+
+    await tester.tap(find.byTooltip('Refresh streams'));
+    await tester.pumpAndSettle();
+
+    expect(manager.listStreamsCalls, 2);
+  });
+
+  testWidgets('stream-list Retry button re-invokes listStreams after a failure',
+      (tester) async {
+    final manager = FakeJetStreamManager();
+    manager.listStreamsImpl = () async => throw Exception('stream list boom');
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('JetStream is unavailable'), findsOneWidget);
+
+    manager.listStreamsImpl = () async => [_stream('orders', messages: 3)];
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('orders'), findsOneWidget);
+  });
+
+  testWidgets(
+      'consumer-list Retry button re-invokes listConsumers after a failure',
+      (tester) async {
+    final manager = FakeJetStreamManager();
+    manager.listStreamsImpl = () async => [_stream('orders', messages: 3)];
+    manager.listConsumersImpl =
+        (_) async => throw Exception('consumer list boom');
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('orders'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('JetStream is unavailable'), findsOneWidget);
+
+    manager.listConsumersImpl =
+        (_) async => [_consumer('billing-processor')];
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('billing-processor'), findsOneWidget);
+  });
+
+  testWidgets('Browse Messages is disabled when the stream has no messages',
+      (tester) async {
+    final manager = FakeJetStreamManager();
+    manager.listStreamsImpl = () async => [_stream('orders', messages: 0)];
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('orders'));
+    await tester.pumpAndSettle();
+
+    final browseButton = tester.widget<ElevatedButton>(
+        find.widgetWithText(ElevatedButton, 'Browse Messages'));
+    expect(browseButton.onPressed, isNull);
+  });
+
+  testWidgets('an ephemeral consumer hides its row delete icon and disables '
+      'Delete/Tail in its detail dialog', (tester) async {
+    final manager = FakeJetStreamManager();
+    manager.listStreamsImpl = () async => [_stream('orders', messages: 3)];
+    manager.listConsumersImpl = (_) async => [_consumer('')];
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('orders'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('(ephemeral)'), findsOneWidget);
+    expect(find.byTooltip('Delete consumer'), findsNothing);
+
+    await tester.tap(find.text('(ephemeral)'));
+    await tester.pumpAndSettle();
+
+    final deleteButton =
+        tester.widget<TextButton>(find.widgetWithText(TextButton, 'Delete'));
+    final tailButton =
+        tester.widget<TextButton>(find.widgetWithText(TextButton, 'Tail'));
+    expect(deleteButton.onPressed, isNull);
+    expect(tailButton.onPressed, isNull);
+  });
+
+  testWidgets(
+      'Consumer Detail dialog Delete button confirms then calls the manager',
+      (tester) async {
+    final manager = FakeJetStreamManager();
+    manager.listStreamsImpl = () async => [_stream('orders', messages: 3)];
+    manager.listConsumersImpl =
+        (_) async => [_consumer('billing-processor')];
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('orders'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('billing-processor'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Delete'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete Consumer?'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Delete'));
+    await tester.pumpAndSettle();
+
+    expect(manager.deleteConsumerCalls, 1);
+    expect(find.text('Consumer "billing-processor" deleted.'), findsOneWidget);
+  });
+
+  testWidgets('Consumer Detail dialog Close button dismisses without acting',
+      (tester) async {
+    final manager = FakeJetStreamManager();
+    manager.listStreamsImpl = () async => [_stream('orders', messages: 3)];
+    manager.listConsumersImpl =
+        (_) async => [_consumer('billing-processor')];
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('orders'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('billing-processor'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Close'));
+    await tester.pumpAndSettle();
+
+    expect(manager.deleteConsumerCalls, 0);
+    expect(find.text('billing-processor'), findsOneWidget);
+  });
 }

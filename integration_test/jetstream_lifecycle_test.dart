@@ -28,8 +28,48 @@ void main() {
     final runId = DateTime.now().microsecondsSinceEpoch;
     final streamName = 'it_orders_$runId';
     final consumerName = 'it_consumer_$runId';
-    final messageSubject = '$streamName.created';
-    final messagePayload = 'it-payload-$runId';
+    final ackPayload = 'it-ack-$runId';
+    final nakPayload = 'it-nak-$runId';
+    final termPayload = 'it-term-$runId';
+
+    Future<void> publishViaJetStream(String subject, String payload) async {
+      await tester.tap(find.byIcon(Icons.send));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Subject'), subject);
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Data'), payload);
+      await tester.tap(find.text('Publish via JetStream (get delivery ack)'));
+      await tester.pump();
+      await tester.tap(find.widgetWithText(TextButton, 'Send'));
+      await pumpUntil(
+          tester,
+          () => find
+              .textContaining('Published to stream "$streamName" at seq')
+              .evaluate()
+              .isNotEmpty);
+      await waitForSnackBarGone(tester);
+    }
+
+    /// The tail view lists one row per message, each with its own Ack/Nak/
+    /// Term/Copy buttons — scope the lookup to the row containing [payload]
+    /// rather than the ambiguous `find.byTooltip(tooltip)` (which matches
+    /// every row) once more than one message is on screen.
+    ///
+    /// Nak specifically causes the *server* to redeliver that message, so a
+    /// second row with the same payload can legitimately appear after
+    /// nak'ing it — new deliveries are inserted at the top of the list
+    /// (`_messages.insert(0, message)`), so `.last` deterministically keeps
+    /// referring to the original row we interacted with, however many
+    /// redeliveries show up afterward.
+    Finder actionButtonFor(String payload, String tooltip) {
+      final row = find.ancestor(
+          of: find.text(payload).last, matching: find.byType(ListTile));
+      final tooltipFinder =
+          find.descendant(of: row, matching: find.byTooltip(tooltip));
+      return find.ancestor(
+          of: tooltipFinder, matching: find.byType(IconButton));
+    }
 
     addTearDown(() async {
       // Best-effort cleanup in case an assertion above failed before the
@@ -38,8 +78,8 @@ void main() {
       if (leftoverStream.evaluate().isEmpty) return;
       await tester.tap(leftoverStream);
       await tester.pumpAndSettle();
-      final deleteStreamButton = find.widgetWithText(
-          OutlinedButton, 'Delete Stream');
+      final deleteStreamButton =
+          find.widgetWithText(OutlinedButton, 'Delete Stream');
       if (deleteStreamButton.evaluate().isEmpty) return;
       await tester.tap(deleteStreamButton);
       await tester.pumpAndSettle();
@@ -63,33 +103,20 @@ void main() {
         find.widgetWithText(TextFormField, 'Subjects (comma-separated)'),
         '$streamName.>');
     await tester.tap(find.widgetWithText(TextButton, 'Create'));
-    await pumpUntil(
-        tester, () => find.text('Stream "$streamName" created.').evaluate().isNotEmpty);
+    await pumpUntil(tester,
+        () => find.text('Stream "$streamName" created.').evaluate().isNotEmpty);
     await tester.pumpAndSettle();
     expect(find.text(streamName), findsOneWidget);
     await waitForSnackBarGone(tester);
 
     // 3. Switch to Live Messages (Send Message is tab-scoped) and publish
-    // into the stream via the JetStream ack checkbox.
+    // three messages into the stream via the JetStream ack checkbox — one
+    // each to Ack, Nak, and Term in step 5.
     await tester.tap(find.text('Live Messages'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.send));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-        find.widgetWithText(TextFormField, 'Subject'), messageSubject);
-    await tester.enterText(
-        find.widgetWithText(TextFormField, 'Data'), messagePayload);
-    await tester
-        .tap(find.text('Publish via JetStream (get delivery ack)'));
-    await tester.pump();
-    await tester.tap(find.widgetWithText(TextButton, 'Send'));
-    await pumpUntil(
-        tester,
-        () => find
-            .textContaining('Published to stream "$streamName" at seq')
-            .evaluate()
-            .isNotEmpty);
-    await waitForSnackBarGone(tester);
+    await publishViaJetStream('$streamName.ack', ackPayload);
+    await publishViaJetStream('$streamName.nak', nakPayload);
+    await publishViaJetStream('$streamName.term', termPayload);
 
     // 4. Back to JetStream. Note: `JetStreamDashboard`'s state does NOT
     // survive this round trip — this app's `TabBarView` doesn't opt its
@@ -118,25 +145,31 @@ void main() {
     expect(find.textContaining('Ack: explicit'), findsOneWidget);
     await waitForSnackBarGone(tester);
 
-    // 5. Tail the consumer and ack the message published in step 3.
+    // 5. Tail the consumer and exercise Ack, Nak, and Term — one on each of
+    // the three messages published in step 3.
     await tester.tap(find.text(consumerName));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(TextButton, 'Tail'));
     await tester.pumpAndSettle();
-    await pumpUntil(
-        tester, () => find.text(messagePayload).evaluate().isNotEmpty);
+    await pumpUntil(tester, () => find.text(termPayload).evaluate().isNotEmpty);
+    expect(find.text(ackPayload), findsOneWidget);
+    expect(find.text(nakPayload), findsOneWidget);
 
-    final ackButtonFinder = find.byTooltip('Ack');
-    expect(ackButtonFinder, findsOneWidget);
-    await tester.tap(ackButtonFinder);
-    await tester.pumpAndSettle();
-    // `byTooltip` finds the `Tooltip` IconButton wraps itself in, not the
-    // IconButton widget itself — walk up to it to check `onPressed`.
-    final ackIconButtonFinder =
-        find.ancestor(of: ackButtonFinder, matching: find.byType(IconButton));
-    final ackedButton = tester.widget<IconButton>(ackIconButtonFinder);
-    expect(ackedButton.onPressed, isNull,
-        reason: 'Ack/Nak/Term should disable for a message once acked');
+    Future<void> tapActionAndExpectDisabled(String payload, String tooltip,
+        {required String reason}) async {
+      final buttonFinder = actionButtonFor(payload, tooltip);
+      await tester.tap(buttonFinder);
+      await tester.pumpAndSettle();
+      final button = tester.widget<IconButton>(buttonFinder);
+      expect(button.onPressed, isNull, reason: reason);
+    }
+
+    await tapActionAndExpectDisabled(ackPayload, 'Ack',
+        reason: 'Ack/Nak/Term should disable once a message is acked');
+    await tapActionAndExpectDisabled(nakPayload, 'Nak (redeliver)',
+        reason: 'Ack/Nak/Term should disable once a message is nak\'d');
+    await tapActionAndExpectDisabled(termPayload, 'Term (stop redelivery)',
+        reason: 'Ack/Nak/Term should disable once a message is terminated');
 
     // 6. Delete the consumer.
     await tester.tap(find.byTooltip('Back to stream details'));
@@ -160,12 +193,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Purge Stream?'), findsOneWidget);
     await tester.tap(find.widgetWithText(TextButton, 'Purge'));
-    await pumpUntil(
-        tester,
-        () => find
-            .text('Stream "$streamName" purged.')
-            .evaluate()
-            .isNotEmpty);
+    await pumpUntil(tester,
+        () => find.text('Stream "$streamName" purged.').evaluate().isNotEmpty);
     await tester.pumpAndSettle();
     await waitForSnackBarGone(tester);
 
@@ -174,12 +203,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Delete Stream?'), findsOneWidget);
     await tester.tap(find.widgetWithText(TextButton, 'Delete'));
-    await pumpUntil(
-        tester,
-        () => find
-            .text('Stream "$streamName" deleted.')
-            .evaluate()
-            .isNotEmpty);
+    await pumpUntil(tester,
+        () => find.text('Stream "$streamName" deleted.').evaluate().isNotEmpty);
     await tester.pumpAndSettle();
     expect(find.text('Select a stream to see details.'), findsOneWidget);
     expect(find.text(streamName), findsNothing);

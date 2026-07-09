@@ -1,4 +1,6 @@
 # <img src="./assets/app_launcher_icon.svg" width="36" height="36" alt="NATS Client Logo" style="vertical-align: text-bottom"> NATS Client UI
+[![Build](https://github.com/nverbeek/nats_client_flutter/actions/workflows/build.yml/badge.svg)](https://github.com/nverbeek/nats_client_flutter/actions/workflows/build.yml)
+
 This NATS client is a cross-platform desktop & web application written in Flutter. The client allows users to easily watch & manage NATS messages.
 
 # Platforms
@@ -16,6 +18,11 @@ This application currently supports Windows, Linux, macOS and Web platforms.
 - Light and Dark themes
 - Most recent connection information & theme are persisted between app runs
 - Message view settings
+- **JetStream support** (optional, on by default — toggle it off in Settings if you don't need it):
+  - Monitor streams and their consumers, including message/byte counts, retention, and ack/redelivery stats
+  - Create, purge, and delete streams; create and delete consumers (push or pull, any ack policy)
+  - Browse a stream's messages live, or tail a specific consumer and Ack / Nak / Term individual messages
+  - Publish messages with JetStream delivery acknowledgement straight from the regular Send Message dialog
 
 # Screenshots
 <br/>
@@ -42,6 +49,20 @@ docker run -d -p 8080:80 --name nats-client nverbeek/nats-client-flutter
 ```
 
 You may then access the application in your favorite browser at http://localhost:8080.
+
+# Testing
+This project has two test suites:
+
+- **`test/`** — fast widget and unit tests that don't need a running NATS server (dialogs, form validation, pure logic). Run with:
+  ```
+  flutter test test/
+  ```
+- **`integration_test/`** — end-to-end tests that drive the real app against a real, locally-running JetStream-enabled `nats-server`, covering the core message round trip, the full JetStream stream/consumer lifecycle, and the Live Messages tab's filter/find/row-menu/keyboard-shortcut controls. See [AGENTS.md](./AGENTS.md)'s "Recipe E: Local JetStream Testing" for how to stand up a local server, then run each file individually against it, e.g.:
+  ```
+  flutter test integration_test/live_messages_test.dart -d windows
+  ```
+
+GitHub Actions runs both suites on every push and pull request, and every release build is gated on them passing.
 
 # Building
 To build NATS Client UI, you must first [install Flutter](https://docs.flutter.dev/get-started/install) for your platform, [and get an editor](https://docs.flutter.dev/get-started/editor). I highly recommend Android Studio for building, but VS Code is a great second option.
