@@ -37,6 +37,12 @@ This application currently supports Windows, Linux, macOS and Web platforms.
 
 ![Message View](./images/Message%20Detail.png)
 
+<br/>
+
+![JetStream Dashboard](./images/JetStream.png)
+
+These are generated automatically — see `scripts/capture_screenshots.ps1` if you're regenerating them after a UI change.
+
 # Application Usage
 See the [help documentation](./assets/app_help.md) for more details on how to use the application.
 

@@ -50,21 +50,25 @@ nats_client_flutter/
 │   ├── security_settings_dialog.dart # TLS config file selector (Trusted Cert, Cert Chain, Private Key paths)
 │   ├── send_message_dialog.dart # Form dialog for publishing/sending standard, edit-replay, or JetStream payloads
 │   └── settings_dialog.dart    # App options dialog (font sizes, line wrapping, retry intervals, JetStream toggle)
-├── scripts/                    # Icon generator and mockup testing utilities
+├── scripts/                    # Icon generator, mockup testing, and screenshot utilities
 │   ├── generate_icons.js       # Custom Node.js sharp-based cross-platform transparent icon generator
 │   ├── generate_icons.bat      # Helper batch script to run generate_icons.js
-│   ├── jetstream_demo.ps1      # pwsh-only (see Recipe E): seeds demo streams + a steady publish loop
+│   ├── jetstream_demo.ps1      # pwsh-only (see Recipe E): seeds demo streams + a publish loop (or -Iterations N for a finite run)
 │   ├── message_pub.ps1         # PowerShell script publishing mockup JSON payload streams to NATS subjects
+│   ├── capture_screenshots.ps1 # pwsh-only (see Recipe G): regenerates images/*.png used by the README
+│   ├── _image_processing.ps1  # Shared crop/round-corner helper, dot-sourced by capture_screenshots.ps1 and images/process_screenshots.ps1
 │   └── package.json            # Node.js dependencies (sharp, png-to-ico) for icon generation
 ├── test/                       # Fast widget/unit tests — fakes only, no server needed (see Recipe F)
 │   ├── jetstream_dashboard_test.dart, jetstream_manager_test.dart, jetstream_*_dialog_test.dart, ...
 │   └── message_detail_dialog_test.dart, settings_dialog_test.dart, security_settings_dialog_test.dart, ...
 ├── integration_test/           # Real-backend end-to-end tests against a live nats-server (see Recipe E/F)
 │   ├── helpers/nats_test_app.dart       # pumpConnectedApp/disconnectApp/pumpUntil/waitForSnackBarGone
+│   ├── helpers/screenshot_signal.dart   # File-handshake helper used only by screenshot_tour_test.dart (see Recipe G)
 │   ├── live_messages_test.dart          # Core pub/sub round trip
 │   ├── live_messages_interactions_test.dart # Filter/Find/row menu/keyboard shortcuts
 │   ├── jetstream_lifecycle_test.dart    # Full stream/consumer mutation lifecycle incl. Ack/Nak/Term
-│   └── jetstream_browse_test.dart       # The ephemeral "Browse Messages" ordered-consumer view
+│   ├── jetstream_browse_test.dart       # The ephemeral "Browse Messages" ordered-consumer view
+│   └── screenshot_tour_test.dart        # Drives the app through the README's screenshots — run via scripts/capture_screenshots.ps1, not directly
 ├── Dockerfile                  # Multi-stage Docker container (Debian Flutter builder -> Alpine Nginx host)
 ├── analysis_options.yaml       # Static analysis and lints configuration (extends flutter_lints/flutter.yaml)
 └── pubspec.yaml                # Flutter project specifications and library dependencies
@@ -180,6 +184,18 @@ Two distinct suites, two distinct patterns — don't mix them up:
   - `find.text(...)` also matches `EditableText`, and a plain `Text` widget always builds its own internal `RichText` — a predicate checking both `Text` and `RichText` double-counts every unstyled row. Match your own custom widgets (e.g. `RegexTextHighlight.text`) directly instead of guessing at Flutter's internal render tree.
   - Tapping a `ListTile` doesn't grant it keyboard focus the way tapping a text field does — if a shortcut test needs `selectedIndex` set and then a bare-letter key event to reach the app's `Focus(onKeyEvent: ...)`, explicitly call `Focus.of(tester.element(rowFinder)).requestFocus()` after selecting the row, or the key event has nothing focused to bubble up from.
   - Nak causes a *real* server redelivery — a second row with the same payload can legitimately appear afterward. Prefer `.last` when re-locating "the row I just acted on" (new deliveries insert at index 0).
+
+### Recipe G: Regenerating README Screenshots
+The images under `images/` (referenced from the README's "Screenshots" section) are captured automatically, not hand-taken. A real OS-level window screenshot (title bar and all) can only come from a process other than the one being photographed, so this is two cooperating processes: `scripts/capture_screenshots.ps1` (host) and `integration_test/screenshot_tour_test.dart` (drives the real app), trading turns through plain files under `build/.screenshot_signals/` — see `integration_test/helpers/screenshot_signal.dart` for the handshake and `scripts/capture_screenshots.ps1`'s header comment for the Win32 capture side.
+
+1. Prerequisites on `PATH`: `flutter`, `docker`, the `nats` CLI, and ImageMagick (`magick`) — same as Recipe E/F plus the same ImageMagick dependency as `images/process_screenshots.ps1`.
+2. Run (from the repo root, under `pwsh`, not Windows PowerShell):
+   ```powershell
+   pwsh ./scripts/capture_screenshots.ps1
+   ```
+3. What it does: starts a disposable JetStream-enabled `nats-server` in Docker (or reuses whatever's already listening on port 4222, e.g. a Recipe E container you left running), seeds it (`jetstream_demo.ps1 -Iterations 5`), launches `flutter test integration_test/screenshot_tour_test.dart -d windows`, and as that test reaches each screen (Messages, Filter and Sort, Message Detail, JetStream), captures the live "NATS Client" window and writes the cropped/rounded result straight into `images/<name>.png`, overwriting the existing file.
+4. If you add a new screen worth screenshotting, add a checkpoint to `screenshot_tour_test.dart` (call `signaler.capture(tester, 'Some Name')` once the screen is settled) and reference `./images/Some%20Name.png` from the README — no changes needed to the capture script itself.
+5. Only the Windows target has been wired up (matches how `images/process_screenshots.ps1` already assumes `magick`/pwsh on Windows) — there's no Linux/macOS equivalent of the Win32 `PrintWindow` capture yet.
 
 ---
 

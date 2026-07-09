@@ -51,7 +51,15 @@ jobs:
           # the same desktop target has been observed to fail to relaunch the
           # app for the second file. Looping keeps this working as more
           # integration test files are added later.
+          #
+          # screenshot_tour_test.dart is excluded: it only makes progress
+          # paired with the scripts/capture_screenshots.ps1 watcher process
+          # (see AGENTS.md "Recipe G"), which doesn't exist in CI — it would
+          # just time out waiting for capture acks that never arrive.
           for f in integration_test/*_test.dart; do
+            if [ "$(basename "$f")" = "screenshot_tour_test.dart" ]; then
+              continue
+            fi
             echo "::group::$f"
             xvfb-run -a flutter test "$f" -d linux -r github
             echo "::endgroup::"

@@ -23,84 +23,7 @@ param(
     [string]$ImagePath = "."
 )
 
-# Function to check if ImageMagick is installed
-function Test-ImageMagick {
-    try {
-        $null = & magick --version 2>$null
-        return $true
-    }
-    catch {
-        return $false
-    }
-}
-
-# Function to process a single image
-function Process-Image {
-    param(
-        [string]$ImageFile
-    )
-    
-    Write-Host "Processing: $ImageFile" -ForegroundColor Green
-    
-    # Get file info
-    $fileInfo = Get-Item $ImageFile
-    $baseName = $fileInfo.BaseName
-    $extension = $fileInfo.Extension
-    
-    # Create temporary file names
-    $tempCropped = "${baseName}_temp_cropped${extension}"
-    $tempRounded = "${baseName}_temp_rounded${extension}"
-    
-    try {
-        # Step 1: Crop 4 pixels from all sides
-        Write-Host "  - Cropping 4 pixels from all sides..." -ForegroundColor Yellow
-        & magick $ImageFile -shave 4x4 $tempCropped
-        
-        if (-not (Test-Path $tempCropped)) {
-            throw "Failed to create cropped image"
-        }
-        
-        # Step 2: Add rounded corners
-        Write-Host "  - Adding rounded corners..." -ForegroundColor Yellow
-        # Create a mask file first
-        $maskFile = "${baseName}_mask${extension}"
-        & magick $tempCropped -alpha extract -fill black -colorize 100% -fill white -draw "roundrectangle 0,0 %[fx:w-1],%[fx:h-1] 8,8" $maskFile
-        
-        # Apply the mask to create rounded corners
-        & magick $tempCropped $maskFile -alpha off -compose CopyOpacity -composite $tempRounded
-        
-        # Clean up mask file
-        Remove-Item $maskFile -Force -ErrorAction SilentlyContinue
-        
-        if (-not (Test-Path $tempRounded)) {
-            throw "Failed to create rounded corner image"
-        }
-        
-        # Step 3: Replace original file
-        Write-Host "  - Replacing original file..." -ForegroundColor Yellow
-        Copy-Item $tempRounded $ImageFile -Force
-        
-        # Clean up temporary files
-        Remove-Item $tempCropped -Force -ErrorAction SilentlyContinue
-        Remove-Item $tempRounded -Force -ErrorAction SilentlyContinue
-        Remove-Item $maskFile -Force -ErrorAction SilentlyContinue
-        
-        Write-Host "  ✅ Successfully processed!" -ForegroundColor Green
-        
-    }
-    catch {
-        Write-Error "Failed to process ${ImageFile}: $($_.Exception.Message)"
-        
-        # Clean up any temporary files
-        Remove-Item $tempCropped -Force -ErrorAction SilentlyContinue
-        Remove-Item $tempRounded -Force -ErrorAction SilentlyContinue
-        Remove-Item $maskFile -Force -ErrorAction SilentlyContinue
-        
-        return $false
-    }
-    
-    return $true
-}
+. (Join-Path $PSScriptRoot "../scripts/_image_processing.ps1")
 
 # Main script execution
 Write-Host "🖼️  Screenshot Processor" -ForegroundColor Cyan
@@ -140,8 +63,14 @@ $successCount = 0
 $totalCount = $pngFiles.Count
 
 foreach ($file in $pngFiles) {
-    if (Process-Image $file.FullName) {
+    Write-Host "Processing: $($file.FullName)" -ForegroundColor Green
+    try {
+        Format-Screenshot -ImageFile $file.FullName
+        Write-Host "  ✅ Successfully processed!" -ForegroundColor Green
         $successCount++
+    }
+    catch {
+        Write-Error "Failed to process $($file.FullName): $($_.Exception.Message)"
     }
 }
 
@@ -161,4 +90,4 @@ if ($successCount -eq $totalCount) {
 } else {
     Write-Warning "Some images failed to process. Check the error messages above."
     exit 1
-} 
+}

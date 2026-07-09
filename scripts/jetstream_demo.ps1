@@ -14,6 +14,13 @@
 # $OutputEncoding is set, which corrupts the JSON payload below from Dart's
 # jsonDecode()'s point of view. The #Requires line above makes that failure
 # an explicit error instead of silently-corrupted test data.
+#
+# -Iterations lets a caller (e.g. scripts/capture_screenshots.ps1) seed a
+# handful of messages and return instead of trickling forever — 0 (the
+# default) preserves the original "run until Ctrl+C" Recipe E behavior.
+param(
+    [int]$Iterations = 0
+)
 
 # Belt-and-suspenders: also force BOM-less UTF-8 explicitly (harmless no-op
 # under pwsh, which already defaults to this).
@@ -43,9 +50,11 @@ Write-Host ""
 
 $orderId = 1000
 $statuses = @("placed", "shipped", "delivered", "cancelled")
+$count = 0
 
 while ($true) {
     $orderId++
+    $count++
 
     $order = @{
         orderId  = $orderId
@@ -67,6 +76,10 @@ while ($true) {
     # JSON (e.g. `{"a":1}` becomes `{a:1}`). Stdin sidesteps that entirely.
     $order | nats pub "orders.created" --force-stdin --quiet
     $reading | nats pub "telemetry.reading" --force-stdin --quiet
+
+    if ($Iterations -gt 0 -and $count -ge $Iterations) {
+        break
+    }
 
     Start-Sleep -Seconds 2
 }
