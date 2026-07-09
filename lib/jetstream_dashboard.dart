@@ -9,19 +9,21 @@ import 'jetstream_message_view.dart';
 ///
 /// Milestone 1a is intentionally read-only — no stream/consumer mutations —
 /// so this widget only ever calls list/info methods on [JetStreamManager].
+///
+/// Takes an already-constructed [JetStreamManager] (rather than a raw
+/// `Client`) so tests can inject a fake manager and exercise the connected
+/// dashboard states without a live NATS server.
 class JetStreamDashboard extends StatefulWidget {
-  /// The active NATS client, or `null` when not currently connected.
-  final Client? client;
+  /// The active JetStream manager, or `null` when not currently connected.
+  final JetStreamManager? manager;
 
-  const JetStreamDashboard({super.key, required this.client});
+  const JetStreamDashboard({super.key, required this.manager});
 
   @override
   State<JetStreamDashboard> createState() => _JetStreamDashboardState();
 }
 
 class _JetStreamDashboardState extends State<JetStreamDashboard> {
-  JetStreamManager? _manager;
-
   bool _checkingAvailability = false;
   String? _availabilityError;
 
@@ -39,37 +41,35 @@ class _JetStreamDashboardState extends State<JetStreamDashboard> {
   @override
   void initState() {
     super.initState();
-    _syncWithClient(null);
+    if (widget.manager != null) {
+      _checkAvailability();
+    }
   }
 
   @override
   void didUpdateWidget(covariant JetStreamDashboard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.client != widget.client) {
-      _syncWithClient(oldWidget.client);
-    }
-  }
+    if (oldWidget.manager == widget.manager) return;
 
-  void _syncWithClient(Client? previousClient) {
-    if (widget.client == null) {
+    if (widget.manager == null) {
       // Disconnected: drop all cached state so a future reconnect starts fresh.
-      _manager = null;
-      _availabilityError = null;
-      _streams = [];
-      _consumers = [];
-      _selectedStreamName = null;
-      _browsing = false;
+      setState(() {
+        _checkingAvailability = false;
+        _availabilityError = null;
+        _streamsError = null;
+        _streams = [];
+        _consumers = [];
+        _selectedStreamName = null;
+        _browsing = false;
+      });
       return;
     }
 
-    if (widget.client != previousClient) {
-      _manager = JetStreamManager(widget.client!);
-      _checkAvailability();
-    }
+    _checkAvailability();
   }
 
   Future<void> _checkAvailability() async {
-    final manager = _manager;
+    final manager = widget.manager;
     if (manager == null) return;
 
     setState(() {
@@ -78,7 +78,7 @@ class _JetStreamDashboardState extends State<JetStreamDashboard> {
     });
 
     final error = await manager.checkAvailability();
-    if (!mounted || _manager != manager) return;
+    if (!mounted || widget.manager != manager) return;
 
     setState(() {
       _checkingAvailability = false;
@@ -91,7 +91,7 @@ class _JetStreamDashboardState extends State<JetStreamDashboard> {
   }
 
   Future<void> _loadStreams() async {
-    final manager = _manager;
+    final manager = widget.manager;
     if (manager == null) return;
 
     setState(() {
@@ -101,13 +101,13 @@ class _JetStreamDashboardState extends State<JetStreamDashboard> {
 
     try {
       final streams = await manager.listStreams();
-      if (!mounted || _manager != manager) return;
+      if (!mounted || widget.manager != manager) return;
       setState(() {
         _streams = streams;
         _loadingStreams = false;
       });
     } catch (e) {
-      if (!mounted || _manager != manager) return;
+      if (!mounted || widget.manager != manager) return;
       setState(() {
         _streamsError = describeJetStreamError(e);
         _loadingStreams = false;
@@ -126,7 +126,7 @@ class _JetStreamDashboardState extends State<JetStreamDashboard> {
   }
 
   Future<void> _loadConsumers(String streamName) async {
-    final manager = _manager;
+    final manager = widget.manager;
     if (manager == null) return;
 
     setState(() {
@@ -137,7 +137,7 @@ class _JetStreamDashboardState extends State<JetStreamDashboard> {
     try {
       final consumers = await manager.listConsumers(streamName);
       if (!mounted ||
-          _manager != manager ||
+          widget.manager != manager ||
           _selectedStreamName != streamName) {
         return;
       }
@@ -147,7 +147,7 @@ class _JetStreamDashboardState extends State<JetStreamDashboard> {
       });
     } catch (e) {
       if (!mounted ||
-          _manager != manager ||
+          widget.manager != manager ||
           _selectedStreamName != streamName) {
         return;
       }
@@ -371,7 +371,7 @@ class _JetStreamDashboardState extends State<JetStreamDashboard> {
       return JetStreamMessageView(
         key: ValueKey(_selectedStreamName),
         streamName: _selectedStreamName!,
-        manager: _manager!,
+        manager: widget.manager!,
         onClose: () => setState(() => _browsing = false),
       );
     }
@@ -386,7 +386,7 @@ class _JetStreamDashboardState extends State<JetStreamDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.client == null) {
+    if (widget.manager == null) {
       return _buildEmptyState(
         Icons.cloud_off,
         'Connect to a NATS server to use JetStream.',

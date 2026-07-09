@@ -99,7 +99,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
               const SizedBox(width: 16),
               Expanded(
                 child: DropdownButtonFormField<int>(
-                  value: tempRetryInterval,
+                  initialValue: tempRetryInterval,
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                     contentPadding:

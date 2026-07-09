@@ -17,6 +17,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import 'constants.dart' as constants;
 import 'jetstream_dashboard.dart';
+import 'jetstream_manager.dart';
 import 'message_detail_dialog.dart';
 import 'send_message_dialog.dart';
 import 'help_dialog.dart';
@@ -265,6 +266,7 @@ class _MyHomePageState extends State<MyHomePage>
 
   // nats stuff
   late Client natsClient;
+  JetStreamManager? _jetStreamManager;
   bool isConnected = false;
   String connectionStateString = constants.disconnected;
 
@@ -418,6 +420,7 @@ class _MyHomePageState extends State<MyHomePage>
 
   void natsConnect() async {
     natsClient = Client();
+    _jetStreamManager = JetStreamManager(natsClient);
 
     // save the user's connection properties to preferences.
     // we can read these out at startup.
@@ -565,7 +568,7 @@ class _MyHomePageState extends State<MyHomePage>
     return securityContext;
   }
 
-  void subscribeToSubject(subject) {
+  void subscribeToSubject(String subject) {
     debugPrint('Subscribing to $subject');
     var sub = natsClient.sub(subject);
 
@@ -574,13 +577,13 @@ class _MyHomePageState extends State<MyHomePage>
     });
   }
 
-  void handleIncomingMessage(event) {
+  void handleIncomingMessage(Message<dynamic> event) {
     String displayText;
     try {
       displayText = event.string;
     } catch (e) {
       displayText =
-          '[Binary Data] ${event.payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}';
+          '[Binary Data] ${event.byte.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}';
     }
     debugPrint(displayText);
     debugPrint("---");
@@ -1334,8 +1337,8 @@ class _MyHomePageState extends State<MyHomePage>
                         _buildLiveMessagesTab(
                             messageRowEvenColor, messageRowOddColor),
                         JetStreamDashboard(
-                          client: currentStatus == Status.connected
-                              ? natsClient
+                          manager: currentStatus == Status.connected
+                              ? _jetStreamManager
                               : null,
                         ),
                       ],

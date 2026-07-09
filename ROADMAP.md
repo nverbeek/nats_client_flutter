@@ -1,6 +1,6 @@
 # NATS Client UI — Feature Expansion Roadmap (`ROADMAP.md`)
 
-This living roadmap details the development plan, UI architecture, and implementation milestones for expanding the **NATS Client UI** with core advanced NATS ecosystem capabilities: **JetStream (Phase B)** and **Key-Value Stores (Phase A)**.
+This living roadmap details the development plan, UI architecture, and implementation milestones for expanding the **NATS Client UI** with core advanced NATS ecosystem capabilities: **JetStream (Phase B)**, **Key-Value Stores (Phase A)**, and **Expanded Authentication (Phase D)**.
 
 These features are made possible by our successful migration to the official mainline `dart_nats: ^1.1.1` package.
 
@@ -11,6 +11,7 @@ These features are made possible by our successful migration to the official mai
 - [~] **Milestone 1**: Design & Implement **Phase B: JetStream Stream & Consumer Monitor** (High Priority). 1a (read-only monitor) complete; 1b (mutations) not started.
 - [ ] **Milestone 2**: Design & Implement **Phase A: Key-Value (KV) Store Inspector** (Medium Priority).
 - [ ] **Milestone 3**: Clean up, finalize error handling, write widget/unit tests, and bundle releases.
+- [ ] **Milestone 4**: Design & Implement **Phase D: Expanded Authentication Support** (username/password, token, NKey, `.creds`) (Medium Priority).
 
 ---
 
@@ -132,3 +133,54 @@ A clean multi-column layout. The left column lists active KV buckets, and the ri
   - [ ] Add comprehensive unit and widget tests under `test/` verifying the new layouts.
 - [x] **Build Pipeline**:
   - [x] Verify that GitHub Actions CI runner ([.github/workflows/build.yml](.github/workflows/build.yml)) packages release bundles successfully for Windows x64/ARM64, Linux, macOS, Web, and Docker.
+
+---
+
+## Milestone 4: Phase D — Expanded Authentication Support (Medium Priority)
+
+### Objective
+Today the client only supports TLS/mTLS (via the 🔒 Security Settings dialog) or no application-level credentials at all. Beyond the TCP/TLS transport, `dart_nats: ^1.1.1` also implements the standard NATS authentication mechanisms server operators actually configure: username/password, bearer tokens, bare NKey seeds, and decentralized JWT+NKey `.creds` files. This milestone adds first-class UI for all of them, so connecting to a server configured with any of these auth modes doesn't require editing connection strings or reaching for another tool.
+
+### What `dart_nats` actually supports (verified against `dart_nats-1.1.1/lib/src/{client,common}.dart`, not assumed)
+- **Username / Password** — `ConnectOption(user: ..., pass: ...)` passed to `client.connect()`.
+- **Auth Token** — `ConnectOption(authToken: ...)`.
+- **NKey seed** — `client.seed = 'SU...'` set before connecting; the client automatically signs the server's nonce challenge (`_sign()` in `client.dart`) with no further wiring needed.
+- **Decentralized JWT + NKey (`.creds` file)** — `client.loadCredentialsFile(path)` / `loadCredentials(content)`, the standard format used by NGS/Synadia Cloud and self-hosted operator-mode NATS. This is the modern, recommended auth style for anything beyond a single self-hosted server, and it's a one-call helper — cheap to support.
+- **mTLS** — already implemented via the existing Security Settings dialog. When a server is configured with `verify_and_map`, the existing client-certificate UI already doubles as authentication, not just transport encryption, so no new work is needed there.
+- **Auth failures on the wire** — the server sends an `-ERR` containing `"Authorization Violation"`/`"Authentication..."`; `dart_nats` already stops retrying and closes the connection when it sees this (`client.dart` around the `-ERR` handler), but `lib/main.dart`'s `natsConnect()` doesn't currently distinguish it from any other connection failure — worth fixing alongside this milestone so a bad password doesn't just say "Failed to connect!".
+
+**Explicitly out of scope**: generating new NKey identities or JWTs (`Nkeys.createUser()` etc. exist in the package, but provisioning credentials is an operator/`nsc` concern, not something this client should do) and OAuth-style browser-redirect flows (NATS has no native equivalent).
+
+### UI Architecture & Concept
+Rather than a second toolbar icon, extend the existing **Security Settings** dialog (still opened via the same 🔒 button) with a new "Authentication" section below the current TLS/mTLS fields, separated by a divider. TLS and application-level auth are both really answering "how do I securely connect" from a user's point of view, and this app already groups loosely-related settings into one dialog elsewhere (the main Settings dialog mixes font size, single-line mode, reconnect interval, and the JetStream toggle). An "Authentication Method" dropdown switches between `None` (today's behavior) / `Username & Password` / `Token` / `NKey Seed` / `Credentials File (.creds)`, revealing only the relevant fields for the selected method — the same progressive-disclosure pattern already used for the cert file pickers above it. The dialog becomes scrollable if needed once both sections are present.
+
+Unlike host/port/subjects/TLS cert paths, which are always remembered, the fields introduced here are real secrets. `SharedPreferences` isn't an encrypted OS keychain on every platform this app targets, so these are **opt-in** to persist: an unchecked-by-default "Remember credentials on this device" checkbox, re-entered each launch otherwise.
+
+```
++-------------------------------------------------------------+
+|  Security Settings                                     [X]  |
++-------------------------------------------------------------+
+|  Trusted Certificate:  [ ca.pem              ] [ Browse... ] |
+|  Certificate Chain:    [                     ] [ Browse... ] |
+|  Private Key:          [                     ] [ Browse... ] |
+|  ------------------------------------------------------------|
+|  Authentication                                              |
+|  Method: [ Credentials File (.creds)          v ]           |
+|                                                               |
+|  Credentials File:  [ ngs-user.creds        ] [ Browse... ]  |
+|                                                               |
+|  [ ] Remember credentials on this device                     |
+|      (stored locally, not encrypted)                         |
++-------------------------------------------------------------+
+|                                                       [Close] |
++-------------------------------------------------------------+
+```
+
+### Implementation Checklist
+- [ ] **`lib/security_settings_dialog.dart`**: add an "Authentication" section below the existing TLS fields (behind a divider) — method dropdown + conditional fields: username/password text fields, token text field, NKey seed text field with an obscure/reveal toggle (like a password field), and a `.creds` file picker reusing the existing `pickFile()` / `file_picker` pattern already used for the cert pickers. No new toolbar button — same 🔒 icon and dialog as today, just with more in it.
+- [ ] **`lib/main.dart`**: wire the selected method into `natsConnect()` by building the appropriate `ConnectOption` and/or setting `natsClient.seed` / calling `natsClient.loadCredentialsFile()` before `connect()`.
+- [ ] **`lib/constants.dart`**: new preference keys for the auth method + its fields, following the existing TLS key-naming convention.
+- [ ] **Opt-in persistence**: only write secrets to `SharedPreferences` when "Remember credentials on this device" is checked; reuse the existing gzip+base64 encoding already used for the TLS private key field for the `.creds` file contents.
+- [ ] **Clearer auth-failure feedback**: differentiate an authorization-violation close from a generic connection failure in `natsConnect()`'s error handling, and surface a specific message (e.g. "Authentication failed — check your credentials") instead of the generic "Failed to connect!".
+- [ ] Update `assets/app_help.md` with a new "Authentication" section documenting each method, mirroring the existing "TLS Notes" section.
+- [ ] Add unit tests for whichever parts are pure/testable (e.g. building a `ConnectOption` from form state) following the same "pure logic vs. network calls" split used in `lib/jetstream_manager.dart` and `test/jetstream_manager_test.dart`.

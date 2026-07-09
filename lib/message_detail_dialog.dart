@@ -170,7 +170,8 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
                                   borderRadius: BorderRadius.circular(12),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withOpacity(0.2),
+                                      color:
+                                          Colors.black.withValues(alpha: 0.2),
                                       blurRadius: 4,
                                       offset: const Offset(0, 2),
                                     ),
@@ -200,11 +201,12 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
                                 decoration: BoxDecoration(
                                   color: Theme.of(context)
                                       .cardColor
-                                      .withOpacity(0.9),
+                                      .withValues(alpha: 0.9),
                                   borderRadius: BorderRadius.circular(20),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withOpacity(0.1),
+                                      color:
+                                          Colors.black.withValues(alpha: 0.1),
                                       blurRadius: 4,
                                       offset: const Offset(0, 2),
                                     ),
@@ -238,10 +240,11 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
                   width: double.infinity,
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).cardColor.withOpacity(0.5),
+                    color: Theme.of(context).cardColor.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: Theme.of(context).dividerColor.withOpacity(0.3),
+                      color:
+                          Theme.of(context).dividerColor.withValues(alpha: 0.3),
                       width: 1,
                     ),
                   ),
@@ -254,7 +257,7 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
                             .textTheme
                             .bodyMedium
                             ?.color
-                            ?.withOpacity(0.6),
+                            ?.withValues(alpha: 0.6),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -265,7 +268,7 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
                                 .textTheme
                                 .bodyMedium
                                 ?.color
-                                ?.withOpacity(0.7),
+                                ?.withValues(alpha: 0.7),
                             fontStyle: FontStyle.italic,
                           ),
                         ),
