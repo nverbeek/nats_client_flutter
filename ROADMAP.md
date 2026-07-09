@@ -10,7 +10,7 @@ These features are made possible by our successful migration to the official mai
 - [x] **Milestone 0**: Migrate custom fork to mainline `dart_nats: ^1.1.1` and verify compatibility.
 - [x] **Milestone 1**: Design & Implement **Phase B: JetStream Stream & Consumer Monitor** (High Priority). 1a (read-only monitor) and 1b (mutations) complete.
 - [ ] **Milestone 2**: Design & Implement **Phase A: Key-Value (KV) Store Inspector** (Medium Priority).
-- [~] **Milestone 3**: Clean up, finalize error handling, write widget/unit tests, and bundle releases. Quality Assurance (widget + real-backend `integration_test/` suites, CI `test` job, full coverage gap list) is done; Platform Verification (manual native/web build checks) is the one remaining sub-item.
+- [~] **Milestone 3**: Clean up, finalize error handling, write widget/unit tests, and bundle releases. Quality Assurance and Platform Verification are done for Windows, Linux, and Web (including confirming JetStream works over the web target's forced `ws://` scheme); macOS is compile-verified in CI only — functional verification still needs someone with a Mac to run it once.
 - [ ] **Milestone 4**: Design & Implement **Phase D: Expanded Authentication Support** (username/password, token, NKey, `.creds`) (Medium Priority).
 
 ---
@@ -125,9 +125,11 @@ A clean multi-column layout. The left column lists active KV buckets, and the ri
 
 ## Milestone 3: Clean up, Testing & Release
 
-- [ ] **Platform Verification**:
-  - [ ] Ensure that native desktop builds (Windows, Linux, macOS) compile smoothly and function on all newly introduced tabs.
-  - [ ] Verify that Flutter Web operates gracefully. Include explicit guards (e.g. `kIsWeb` alerts) on features that are completely blocked by WebSocket scheme boundaries.
+- [~] **Platform Verification**: all five CI build targets (Windows x64/ARM64, Linux, macOS, Web) compile cleanly. Functional (not just compile) verification of the JetStream tab:
+  - [x] **Windows**: manually driven end-to-end (connect, publish, filter/find, message detail, JetStream stream/consumer create) via the `scripts/capture_screenshots.ps1` automation.
+  - [x] **Linux**: the full `integration_test/` suite (including the JetStream stream/consumer lifecycle) runs for real under Xvfb in CI on every push — see `.github/workflows/build.yml`'s `test` job.
+  - [x] **Web**: confirmed JetStream works over a real WebSocket transport — ran the full create-stream/publish-with-ack/create-consumer/tail/ack/nak/term/delete/purge lifecycle against a `nats-server` with `websocket {}` enabled, forcing the app's `ws://` scheme (the same one the web build is locked to via `kIsWeb`). The server's own audit log confirmed every JetStream API call was tagged `"client_type":"websocket"`. No `kIsWeb` guards needed — JetStream isn't blocked by the websocket scheme boundary. (Caveat: this ran on the desktop target with `ws://` forced, not inside an actual compiled-for-web/Chrome process — `flutter test` doesn't support web for `integration_test`, and standing up a version-matched ChromeDriver for a true in-browser run wasn't pursued. Since JetStream is just NATS pub/sub over whatever transport `dart_nats` gives it, and plain ws:// connectivity is already a shipped, working feature, this is considered sufficient evidence rather than a real gap.)
+  - [ ] **macOS**: compiles in CI (`build-macos` job) but has never been functionally exercised — no Mac was available to verify. Remaining gap; needs someone with a Mac to run `flutter run -d macos` (or the `integration_test/` suite) once.
 - [x] **Quality Assurance**:
   - [x] Fix any deprecated API alerts (e.g. migrate `withOpacity` instances to `.withValues()`) — none remain; `flutter analyze` is clean project-wide.
   - [x] Add comprehensive unit and widget tests under `test/` verifying the new JetStream layouts (`test/jetstream_dashboard_test.dart`, `test/jetstream_manager_test.dart`, `test/send_message_dialog_test.dart`, plus one file per standalone dialog — see below).
