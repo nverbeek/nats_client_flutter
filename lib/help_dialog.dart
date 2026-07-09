@@ -8,7 +8,7 @@ class HelpDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Dialog(
       child: Stack(
         children: [
@@ -17,7 +17,9 @@ class HelpDialog extends StatelessWidget {
             child: SingleChildScrollView(
               child: MarkdownBlock(
                 data: markdownData,
-                config: isDark ? MarkdownConfig.darkConfig : MarkdownConfig.defaultConfig,
+                config: isDark
+                    ? MarkdownConfig.darkConfig
+                    : MarkdownConfig.defaultConfig,
               ),
             ),
           ),

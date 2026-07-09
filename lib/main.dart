@@ -16,6 +16,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import 'constants.dart' as constants;
+import 'jetstream_dashboard.dart';
 import 'message_detail_dialog.dart';
 import 'send_message_dialog.dart';
 import 'help_dialog.dart';
@@ -25,7 +26,7 @@ import 'security_settings_dialog.dart';
 void main() async {
   // must wait for widgets to initialize before we are able to use SharedPreferences
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Only initialize window manager on non-web platforms
   if (!kIsWeb) {
     await windowManager.ensureInitialized();
@@ -160,9 +161,13 @@ class MyApp extends StatelessWidget {
               colorScheme:
                   ColorScheme.fromSeed(seedColor: Colors.lightBlue.shade900),
               snackBarTheme: SnackBarThemeData(
-                backgroundColor: ColorScheme.fromSeed(seedColor: Colors.lightBlue.shade900).surfaceContainerHighest,
+                backgroundColor:
+                    ColorScheme.fromSeed(seedColor: Colors.lightBlue.shade900)
+                        .surfaceContainerHighest,
                 contentTextStyle: TextStyle(
-                  color: ColorScheme.fromSeed(seedColor: Colors.lightBlue.shade900).onSurface,
+                  color:
+                      ColorScheme.fromSeed(seedColor: Colors.lightBlue.shade900)
+                          .onSurface,
                 ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -178,12 +183,14 @@ class MyApp extends StatelessWidget {
                   seedColor: Colors.lightBlue.shade900),
               snackBarTheme: SnackBarThemeData(
                 backgroundColor: ColorScheme.fromSeed(
-                    brightness: Brightness.dark,
-                    seedColor: Colors.lightBlue.shade900).surfaceContainerHighest,
+                        brightness: Brightness.dark,
+                        seedColor: Colors.lightBlue.shade900)
+                    .surfaceContainerHighest,
                 contentTextStyle: TextStyle(
                   color: ColorScheme.fromSeed(
-                      brightness: Brightness.dark,
-                      seedColor: Colors.lightBlue.shade900).onSurface,
+                          brightness: Brightness.dark,
+                          seedColor: Colors.lightBlue.shade900)
+                      .onSurface,
                 ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -229,7 +236,8 @@ class MyHomePage extends StatefulWidget {
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> with WindowListener {
+class _MyHomePageState extends State<MyHomePage>
+    with WindowListener, SingleTickerProviderStateMixin {
   String host = constants.defaultHost;
   String port = constants.defaultPort;
   String subject = constants.defaultSubject;
@@ -243,6 +251,10 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
   bool tlsConnection = false;
   List<Message<dynamic>> filteredItems = [];
   List<Message<dynamic>> items = [];
+
+  // JetStream tab
+  bool jetStreamEnabled = constants.defaultJetStreamEnabled;
+  late TabController _tabController;
 
   // Add a ScrollController for the ListView
   final ScrollController _listScrollController = ScrollController();
@@ -258,7 +270,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
 
   var filterBoxController = TextEditingController();
   var findBoxController = TextEditingController();
-  
+
   // Focus nodes for keyboard shortcuts
   final FocusNode _filterFocusNode = FocusNode();
   final FocusNode _findFocusNode = FocusNode();
@@ -278,6 +290,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
     port = widget.port;
     subject = widget.subject;
     updateFullUri();
+    _tabController = TabController(length: 2, vsync: this);
     super.initState();
 
     // add a listener for window events, such as size/position changes (desktop only)
@@ -295,6 +308,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
     _tapTimer?.cancel(); // Cancel any pending timer
     _filterFocusNode.dispose(); // Dispose focus nodes
     _findFocusNode.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -312,9 +326,9 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
   void onWindowMoved() {
     if (!kIsWeb) {
       windowManager.getPosition().then((windowPosition) => {
-        prefs.setDouble(constants.prefLastPositionX, windowPosition.dx),
-        prefs.setDouble(constants.prefLastPositionY, windowPosition.dy),
-      });
+            prefs.setDouble(constants.prefLastPositionX, windowPosition.dx),
+            prefs.setDouble(constants.prefLastPositionY, windowPosition.dy),
+          });
     }
   }
 
@@ -329,7 +343,10 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
     setState(() {
       messageFontSize = prefs.getDouble('messageFontSize') ?? 14.0;
       messageSingleLine = prefs.getBool('messageSingleLine') ?? false;
-      retryInterval = prefs.getInt(constants.prefRetryInterval) ?? constants.defaultRetryInterval;
+      retryInterval = prefs.getInt(constants.prefRetryInterval) ??
+          constants.defaultRetryInterval;
+      jetStreamEnabled = prefs.getBool(constants.prefJetStreamEnabled) ??
+          constants.defaultJetStreamEnabled;
     });
   }
 
@@ -338,13 +355,14 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
     prefs.setDouble('messageFontSize', messageFontSize);
     prefs.setBool('messageSingleLine', messageSingleLine);
     prefs.setInt(constants.prefRetryInterval, retryInterval);
+    prefs.setBool(constants.prefJetStreamEnabled, jetStreamEnabled);
   }
 
   /// Handles tap logic to distinguish between single and double taps
   void _handleMessageTap(int index) {
     // Cancel any existing timer
     _tapTimer?.cancel();
-    
+
     if (_lastTappedIndex == index) {
       // This is a double tap on the same item
       _lastTappedIndex = null;
@@ -471,8 +489,8 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
 
       // finally, make the connection attempt
       await natsClient.connect(uri,
-          retry: true, 
-          retryCount: -1, 
+          retry: true,
+          retryCount: -1,
           retryInterval: retryInterval,
           securityContext: securityContext as dynamic);
     } on TlsException {
@@ -561,11 +579,12 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
     try {
       displayText = event.string;
     } catch (e) {
-      displayText = '[Binary Data] ${event.payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}';
+      displayText =
+          '[Binary Data] ${event.payload.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}';
     }
     debugPrint(displayText);
     debugPrint("---");
-    
+
     if (!mounted) return;
     setState(() {
       items.insert(0, event);
@@ -612,13 +631,14 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
     }
   }
 
-  void showSnackBar(String message, {SnackBarAction? action, Duration? duration}) {
+  void showSnackBar(String message,
+      {SnackBarAction? action, Duration? duration}) {
     // Add mounted check before accessing context
     if (!mounted) return;
-    
+
     try {
       final theme = Theme.of(context);
-      
+
       var snackBar = SnackBar(
         content: Text(
           message,
@@ -662,7 +682,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
     try {
       var json = jsonDecode(message.string);
       var encoder = const JsonEncoder.withIndent("    ");
-    
+
       formattedJson = encoder.convert(json);
     } on FormatException {
       formattedJson = message.string;
@@ -714,9 +734,10 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
   }
 
   Future<void> showHelpDialog() async {
-    String markdownData = await DefaultAssetBundle.of(context)
-        .loadString('assets/app_help.md');
-    markdownData = markdownData.replaceFirst('%APP_VERSION%', widget.appVersion);
+    String markdownData =
+        await DefaultAssetBundle.of(context).loadString('assets/app_help.md');
+    markdownData =
+        markdownData.replaceFirst('%APP_VERSION%', widget.appVersion);
     // Add mounted check before using context after async gap
     if (!mounted) return;
     return showDialog<void>(
@@ -733,11 +754,14 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
           initialFontSize: messageFontSize,
           initialSingleLine: messageSingleLine,
           initialRetryInterval: retryInterval,
-          onSave: (fontSize, singleLine, retryIntervalValue) {
+          initialJetStreamEnabled: jetStreamEnabled,
+          onSave: (fontSize, singleLine, retryIntervalValue,
+              jetStreamEnabledValue) {
             setState(() {
               messageFontSize = fontSize;
               messageSingleLine = singleLine;
               retryInterval = retryIntervalValue;
+              jetStreamEnabled = jetStreamEnabledValue;
             });
             saveMessageSettings();
           },
@@ -929,7 +953,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
       itemBuilder: (context) {
         // Add mounted check before accessing context
         if (!mounted) return [];
-        
+
         try {
           return [
             const PopupMenuItem(
@@ -986,12 +1010,12 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
       onSelected: (String value) async {
         // Add mounted check before processing selection
         if (!mounted) return;
-        
+
         try {
           switch (value) {
             case 'copy':
-              await Clipboard.setData(ClipboardData(
-                  text: filteredItems[index].string));
+              await Clipboard.setData(
+                  ClipboardData(text: filteredItems[index].string));
               if (mounted) {
                 showSnackBar('Copied to clipboard!');
               }
@@ -1004,31 +1028,23 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
             case 'replay':
               if (mounted && currentStatus == Status.connected) {
                 natsClient.pubString(
-                    filteredItems[index].subject!,
-                    filteredItems[index].string);
+                    filteredItems[index].subject!, filteredItems[index].string);
               }
               break;
             case 'edit_and_send':
               if (mounted && currentStatus == Status.connected) {
-                showSendMessageDialog(
-                    filteredItems[index].subject!,
-                    null,
+                showSendMessageDialog(filteredItems[index].subject!, null,
                     filteredItems[index].string);
               }
               break;
             case 'reply_to':
               if (mounted && currentStatus == Status.connected) {
                 if (filteredItems[index].replyTo != null &&
-                    filteredItems[index]
-                        .replyTo!
-                        .isNotEmpty) {
+                    filteredItems[index].replyTo!.isNotEmpty) {
                   showSendMessageDialog(
-                      filteredItems[index].replyTo,
-                      null,
-                      null);
+                      filteredItems[index].replyTo, null, null);
                 } else {
-                  showSnackBar(
-                      'This message has no replyTo subject');
+                  showSnackBar('This message has no replyTo subject');
                 }
               }
               break;
@@ -1061,12 +1077,16 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
     final isDark = theme.brightness == Brightness.dark;
     // Even row: subtle tint
     final messageRowEvenColor = isDark
-        ? Color.alphaBlend(theme.colorScheme.surface.withAlpha(40), theme.colorScheme.surface)
-        : Color.alphaBlend(theme.colorScheme.surface.withAlpha(20), theme.colorScheme.surface);
+        ? Color.alphaBlend(
+            theme.colorScheme.surface.withAlpha(40), theme.colorScheme.surface)
+        : Color.alphaBlend(
+            theme.colorScheme.surface.withAlpha(20), theme.colorScheme.surface);
     // Odd row: more contrast
     final messageRowOddColor = isDark
-        ? Color.alphaBlend(theme.colorScheme.secondaryContainer.withAlpha(80), theme.colorScheme.surface)
-        : Color.alphaBlend(theme.colorScheme.secondaryContainer.withAlpha(140), theme.colorScheme.surface);
+        ? Color.alphaBlend(theme.colorScheme.secondaryContainer.withAlpha(80),
+            theme.colorScheme.surface)
+        : Color.alphaBlend(theme.colorScheme.secondaryContainer.withAlpha(140),
+            theme.colorScheme.surface);
 
     return Focus(
       autofocus: true,
@@ -1074,7 +1094,8 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
         if (event is KeyDownEvent) {
           // Global shortcuts (work regardless of message selection)
           if (event.logicalKey == LogicalKeyboardKey.keyF) {
-            if (HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isMetaPressed) {
+            if (HardwareKeyboard.instance.isControlPressed ||
+                HardwareKeyboard.instance.isMetaPressed) {
               if (HardwareKeyboard.instance.isShiftPressed) {
                 // Ctrl+Shift+F or Cmd+Shift+F - Focus Filter field
                 _filterFocusNode.requestFocus();
@@ -1086,7 +1107,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
               }
             }
           }
-          
+
           // Message-specific shortcuts (only when a message is selected)
           if (selectedIndex >= 0 && selectedIndex < filteredItems.length) {
             // Handle single key shortcuts
@@ -1095,8 +1116,7 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
               return KeyEventResult.handled;
             } else if (event.logicalKey == LogicalKeyboardKey.keyR) {
               if (currentStatus == Status.connected) {
-                natsClient.pubString(
-                    filteredItems[selectedIndex].subject!,
+                natsClient.pubString(filteredItems[selectedIndex].subject!,
                     filteredItems[selectedIndex].string);
               } else {
                 showSnackBar('Not connected, cannot replay message');
@@ -1104,19 +1124,19 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
               return KeyEventResult.handled;
             } else if (event.logicalKey == LogicalKeyboardKey.keyE) {
               if (currentStatus == Status.connected) {
-                showSendMessageDialog(
-                    filteredItems[selectedIndex].subject!,
-                    null,
-                    filteredItems[selectedIndex].string);
+                showSendMessageDialog(filteredItems[selectedIndex].subject!,
+                    null, filteredItems[selectedIndex].string);
               } else {
                 showSnackBar('Not connected, cannot send message');
               }
               return KeyEventResult.handled;
             }
             // Handle Ctrl+C/Cmd+C shortcut
-            else if (event.logicalKey == LogicalKeyboardKey.keyC && 
-                     (HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isMetaPressed)) {
-              Clipboard.setData(ClipboardData(text: filteredItems[selectedIndex].string));
+            else if (event.logicalKey == LogicalKeyboardKey.keyC &&
+                (HardwareKeyboard.instance.isControlPressed ||
+                    HardwareKeyboard.instance.isMetaPressed)) {
+              Clipboard.setData(
+                  ClipboardData(text: filteredItems[selectedIndex].string));
               showSnackBar('Copied to clipboard!');
               return KeyEventResult.handled;
             }
@@ -1132,350 +1152,390 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
         return KeyEventResult.ignored;
       },
       child: Scaffold(
-      appBar: AppBar(
-        backgroundColor: (() {
-          final theme = Theme.of(context);
-          final surface = theme.colorScheme.surface;
-          final isDark = theme.brightness == Brightness.dark;
-          return Color.alphaBlend(
-            Colors.black.withAlpha(isDark ? 80 : 20), // 20% for dark, 8% for light
-            surface,
-          );
-        })(),
-        scrolledUnderElevation: 0,
-        leadingWidth: 48, // Reduce the default leading width
-        titleSpacing: 0, // Remove the default title spacing
-        leading: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: SvgPicture.asset(
-            'assets/app_launcher_icon.svg',
-            width: 32,
-            height: 32,
+        appBar: AppBar(
+          backgroundColor: (() {
+            final theme = Theme.of(context);
+            final surface = theme.colorScheme.surface;
+            final isDark = theme.brightness == Brightness.dark;
+            return Color.alphaBlend(
+              Colors.black
+                  .withAlpha(isDark ? 80 : 20), // 20% for dark, 8% for light
+              surface,
+            );
+          })(),
+          scrolledUnderElevation: 0,
+          leadingWidth: 48, // Reduce the default leading width
+          titleSpacing: 0, // Remove the default title spacing
+          leading: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: SvgPicture.asset(
+              'assets/app_launcher_icon.svg',
+              width: 32,
+              height: 32,
+            ),
           ),
+          title: Text(widget.title),
+          actions: [
+            IconButton(
+                icon: const Icon(Icons.settings),
+                onPressed: showSettingsDialog),
+            IconButton(
+                icon: const Icon(Icons.lightbulb),
+                onPressed: () {
+                  ThemeModel themeModel =
+                      Provider.of<ThemeModel>(context, listen: false);
+                  themeModel.toggleMode();
+                  if (themeModel.isDark()) {
+                    prefs.setString(constants.prefTheme, constants.darkTheme);
+                  } else {
+                    prefs.setString(constants.prefTheme, constants.lightTheme);
+                  }
+                }),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(0, 0, 10, 0),
+              child: IconButton(
+                  icon: const Icon(Icons.question_mark),
+                  onPressed: () => showHelpDialog()),
+            )
+          ],
         ),
-        title: Text(widget.title),
-        actions: [
-          IconButton(
-              icon: const Icon(Icons.settings),
-              onPressed: showSettingsDialog),
-          IconButton(
-              icon: const Icon(Icons.lightbulb),
-              onPressed: () {
-                ThemeModel themeModel =
-                    Provider.of<ThemeModel>(context, listen: false);
-                themeModel.toggleMode();
-                if (themeModel.isDark()) {
-                  prefs.setString(constants.prefTheme, constants.darkTheme);
-                } else {
-                  prefs.setString(constants.prefTheme, constants.lightTheme);
-                }
-              }),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(0, 0, 10, 0),
-            child: IconButton(
-                icon: const Icon(Icons.question_mark),
-                onPressed: () => showHelpDialog()),
-          )
-        ],
-      ),
-      body: Column(
-        children: <Widget>[
-          Container(
-            margin: const EdgeInsets.fromLTRB(10, 0, 10, 0),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(0, 10, 0, 10),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  Flexible(
-                    flex: 1,
-                    child: DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                          border: OutlineInputBorder(), labelText: 'Scheme'),
-                      items: availableSchemes.map((String value) {
-                        return DropdownMenuItem<String>(
-                          value: value,
-                          child: Text(value),
-                        );
-                      }).toList(),
-                      initialValue: scheme,
-                      onChanged: (currentStatus != Status.disconnected)
-                          ? null
-                          : (value) {
-                              scheme = value!;
-                              updateFullUri();
-                            },
-                      hint: const Text('Scheme'),
+        body: Column(
+          children: <Widget>[
+            Container(
+              margin: const EdgeInsets.fromLTRB(10, 0, 10, 0),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(0, 10, 0, 10),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    Flexible(
+                      flex: 1,
+                      child: DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                            border: OutlineInputBorder(), labelText: 'Scheme'),
+                        items: availableSchemes.map((String value) {
+                          return DropdownMenuItem<String>(
+                            value: value,
+                            child: Text(value),
+                          );
+                        }).toList(),
+                        initialValue: scheme,
+                        onChanged: (currentStatus != Status.disconnected)
+                            ? null
+                            : (value) {
+                                scheme = value!;
+                                updateFullUri();
+                              },
+                        hint: const Text('Scheme'),
+                      ),
                     ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
-                    child: SizedBox(
-                        height: 50,
-                        child: ElevatedButton(
-                            onPressed: (currentStatus == Status.disconnected)
-                                ? showSecuritySettingsDialog
-                                : null,
-                            child: const Icon(Icons.lock))),
-                  ),
-                  Flexible(
-                    flex: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
+                      child: SizedBox(
+                          height: 50,
+                          child: ElevatedButton(
+                              onPressed: (currentStatus == Status.disconnected)
+                                  ? showSecuritySettingsDialog
+                                  : null,
+                              child: const Icon(Icons.lock))),
+                    ),
+                    Flexible(
+                      flex: 2,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
+                        child: TextFormField(
+                          enabled: (currentStatus == Status.disconnected),
+                          initialValue: widget.host,
+                          onChanged: (value) {
+                            host = value;
+                            updateFullUri();
+                          },
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            hintText: 'Host',
+                            labelText: 'Host',
+                          ),
+                        ),
+                      ),
+                    ),
+                    Flexible(
+                      flex: 1,
                       child: TextFormField(
                         enabled: (currentStatus == Status.disconnected),
-                        initialValue: widget.host,
+                        initialValue: widget.port,
                         onChanged: (value) {
-                          host = value;
+                          port = value;
                           updateFullUri();
                         },
                         decoration: const InputDecoration(
                           border: OutlineInputBorder(),
-                          hintText: 'Host',
-                          labelText: 'Host',
+                          hintText: 'Port',
+                          labelText: 'Port',
                         ),
                       ),
                     ),
-                  ),
-                  Flexible(
-                    flex: 1,
-                    child: TextFormField(
-                      enabled: (currentStatus == Status.disconnected),
-                      initialValue: widget.port,
-                      onChanged: (value) {
-                        port = value;
-                        updateFullUri();
-                      },
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        hintText: 'Port',
-                        labelText: 'Port',
+                    Flexible(
+                      flex: 3,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
+                        child: TextFormField(
+                          enabled: (currentStatus == Status.disconnected),
+                          initialValue: widget.subject,
+                          onChanged: (value) {
+                            subject = value;
+                          },
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                            hintText: 'Subjects',
+                            labelText: 'Subjects',
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  Flexible(
-                    flex: 3,
-                    child: Padding(
+                    Container(
                       padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
-                      child: TextFormField(
-                        enabled: (currentStatus == Status.disconnected),
-                        initialValue: widget.subject,
-                        onChanged: (value) {
-                          subject = value;
-                        },
-                        decoration: const InputDecoration(
-                          border: OutlineInputBorder(),
-                          hintText: 'Subjects',
-                          labelText: 'Subjects',
-                        ),
-                      ),
+                      child: SizedBox(
+                          height: 50,
+                          child: ElevatedButton(
+                              onPressed: (currentStatus == Status.disconnected)
+                                  ? natsConnect
+                                  : null,
+                              child: const Icon(Icons.check))),
                     ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
-                    child: SizedBox(
-                        height: 50,
-                        child: ElevatedButton(
-                            onPressed: (currentStatus == Status.disconnected)
-                                ? natsConnect
-                                : null,
-                            child: const Icon(Icons.check))),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
-                    child: SizedBox(
-                        height: 50,
-                        child: ElevatedButton(
-                            onPressed: (currentStatus != Status.disconnected)
-                                ? natsDisconnect
-                                : null,
-                            child: const Icon(Icons.close))),
-                  ),
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
+                      child: SizedBox(
+                          height: 50,
+                          child: ElevatedButton(
+                              onPressed: (currentStatus != Status.disconnected)
+                                  ? natsDisconnect
+                                  : null,
+                              child: const Icon(Icons.close))),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const Divider(height: 1), // Divider below the top toolbar
+            if (jetStreamEnabled)
+              TabBar(
+                controller: _tabController,
+                tabs: const [
+                  Tab(text: 'Live Messages'),
+                  Tab(text: 'JetStream'),
+                ],
+              ),
+            Expanded(
+              child: jetStreamEnabled
+                  ? TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildLiveMessagesTab(
+                            messageRowEvenColor, messageRowOddColor),
+                        JetStreamDashboard(
+                          client: currentStatus == Status.connected
+                              ? natsClient
+                              : null,
+                        ),
+                      ],
+                    )
+                  : _buildLiveMessagesTab(
+                      messageRowEvenColor, messageRowOddColor),
+            ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(5, 2, 10, 4),
+              color: Provider.of<ThemeModel>(context, listen: false).isDark()
+                  ? isConnected
+                      ? constants.connectedLight
+                      : constants.disconnectedLight
+                  : isConnected
+                      ? constants.connectedDark
+                      : constants.disconnectedDark,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: <Widget>[
+                  Text(
+                      'Total Messages: ${items.length}, Showing: ${filteredItems.length}  |  '),
+                  Text('URL: $fullUri'),
+                  if (isConnected && tlsConnection)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(5, 2, 0, 0),
+                      child: Icon(Icons.lock_outline,
+                          size: 15,
+                          color: Theme.of(context).colorScheme.onSurface),
+                    ),
+                  const Text('  |  '),
+                  Text('Status: $connectionStateString'),
                 ],
               ),
             ),
-          ),
-          const Divider(height: 1), // Divider below the top toolbar
-          Expanded(
-            child: Scrollbar(
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Builds the "Live Messages" tab content: the scrolling message list plus
+  /// the bottom toolbar (clear/send/filter/find). Unchanged from before the
+  /// JetStream tab was introduced, just extracted so it can be reused as a
+  /// `TabBarView` page.
+  Widget _buildLiveMessagesTab(Color evenRowColor, Color oddRowColor) {
+    return Column(
+      children: <Widget>[
+        Expanded(
+          child: Scrollbar(
+            controller: _listScrollController,
+            thumbVisibility: true, // Always show the scrollbar when scrollable
+            child: ListView.builder(
               controller: _listScrollController,
-              thumbVisibility: true, // Always show the scrollbar when scrollable
-              child: ListView.builder(
-                controller: _listScrollController,
-                shrinkWrap: true,
-                itemCount: filteredItems.length,
-                itemBuilder: (context, index) {
-                  return Material(
-                    key: ValueKey(filteredItems[index].hashCode), // Add a key to help Flutter track widgets
-                    child: ListTile(
-                      title: RegexTextHighlight(
-                        text: filteredItems[index].string,
-                        searchTerm: currentFind,
+              shrinkWrap: true,
+              itemCount: filteredItems.length,
+              itemBuilder: (context, index) {
+                return Material(
+                  key: ValueKey(filteredItems[index]
+                      .hashCode), // Add a key to help Flutter track widgets
+                  child: ListTile(
+                    title: RegexTextHighlight(
+                      text: filteredItems[index].string,
+                      searchTerm: currentFind,
+                      fontSize: messageFontSize,
+                      highlightStyle: TextStyle(
+                        background: Paint()
+                          ..color =
+                              Theme.of(context).colorScheme.inversePrimary,
                         fontSize: messageFontSize,
-                        highlightStyle: TextStyle(
-                          background: Paint()
-                            ..color = Theme.of(context).colorScheme.inversePrimary,
-                          fontSize: messageFontSize,
-                        ),
-                        maxLines: messageSingleLine ? 1 : 5,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                      tileColor: selectedIndex == index
-                          ? Theme.of(context).colorScheme.inversePrimary
-                          : index % 2 == 0
-                              ? messageRowEvenColor
-                              : messageRowOddColor,
-                      onTap: () => _handleMessageTap(index), // Use the new tap handler
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 450),
-                            child: Tooltip(
-                              message: filteredItems[index].subject!,
-                              child: Padding(
-                                padding: const EdgeInsets.fromLTRB(0, 0, 5, 0),
-                                child: Chip(
-                                    label: Text(filteredItems[index].subject!,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontSize: messageFontSize,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurface,
-                                        ))),
-                              ),
+                      maxLines: messageSingleLine ? 1 : 5,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    tileColor: selectedIndex == index
+                        ? Theme.of(context).colorScheme.inversePrimary
+                        : index % 2 == 0
+                            ? evenRowColor
+                            : oddRowColor,
+                    onTap: () =>
+                        _handleMessageTap(index), // Use the new tap handler
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 450),
+                          child: Tooltip(
+                            message: filteredItems[index].subject!,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(0, 0, 5, 0),
+                              child: Chip(
+                                  label: Text(filteredItems[index].subject!,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: messageFontSize,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface,
+                                      ))),
                             ),
                           ),
-                          _buildSafePopupMenuButton(index),
-                        ],
-                      ),
+                        ),
+                        _buildSafePopupMenuButton(index),
+                      ],
                     ),
-                  );
-                },
-              ),
+                  ),
+                );
+              },
             ),
           ),
-          const Divider(height: 1), // Divider above the bottom toolbar
-          Row(
-            children: <Widget>[
-              Container(
-                padding: const EdgeInsets.fromLTRB(10, 10, 5, 10),
-                child: SizedBox(
-                    height: 50,
-                    child: ElevatedButton(
-                        onPressed: clearMessageList,
-                        child: const Icon(
-                          Icons.delete,
-                          size: 18,
-                        ))),
-              ),
-              Container(
-                padding: const EdgeInsets.fromLTRB(0, 10, 5, 10),
-                child: SizedBox(
-                    height: 50,
-                    child: ElevatedButton(
-                        onPressed: currentStatus == Status.connected
-                            ? () {
-                                showSendMessageDialog(null, null, null);
-                              }
-                            : null,
-                        child: const Icon(
-                          Icons.send,
-                          size: 18,
-                        ))),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 10, 10, 10),
-                  child: TextFormField(
-                    controller: filterBoxController,
-                    focusNode: _filterFocusNode,
-                    onChanged: (value) {
-                      currentFilter = value;
-                      _runFilter();
-                    },
-                    decoration: InputDecoration(
-                      border: const OutlineInputBorder(),
-                      hintText: 'Filter',
-                      labelText: 'Filter',
-                      prefixIcon: const Icon(Icons.filter_list),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          setState(() {
-                            filterBoxController.clear();
-                            currentFilter = '';
-                            _runFilter();
-                          });
-                        },
-                      ),
+        ),
+        const Divider(height: 1), // Divider above the bottom toolbar
+        Row(
+          children: <Widget>[
+            Container(
+              padding: const EdgeInsets.fromLTRB(10, 10, 5, 10),
+              child: SizedBox(
+                  height: 50,
+                  child: ElevatedButton(
+                      onPressed: clearMessageList,
+                      child: const Icon(
+                        Icons.delete,
+                        size: 18,
+                      ))),
+            ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(0, 10, 5, 10),
+              child: SizedBox(
+                  height: 50,
+                  child: ElevatedButton(
+                      onPressed: currentStatus == Status.connected
+                          ? () {
+                              showSendMessageDialog(null, null, null);
+                            }
+                          : null,
+                      child: const Icon(
+                        Icons.send,
+                        size: 18,
+                      ))),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(0, 10, 10, 10),
+                child: TextFormField(
+                  controller: filterBoxController,
+                  focusNode: _filterFocusNode,
+                  onChanged: (value) {
+                    currentFilter = value;
+                    _runFilter();
+                  },
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    hintText: 'Filter',
+                    labelText: 'Filter',
+                    prefixIcon: const Icon(Icons.filter_list),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        setState(() {
+                          filterBoxController.clear();
+                          currentFilter = '';
+                          _runFilter();
+                        });
+                      },
                     ),
                   ),
                 ),
               ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 10, 10, 10),
-                  child: TextFormField(
-                    controller: findBoxController,
-                    focusNode: _findFocusNode,
-                    onChanged: (value) {
-                      setState(() {
-                        currentFind = value;
-                      });
-                    },
-                    decoration: InputDecoration(
-                      border: const OutlineInputBorder(),
-                      hintText: 'Find',
-                      labelText: 'Find',
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          setState(() {
-                            findBoxController.clear();
-                            currentFind = '';
-                          });
-                        },
-                      ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(0, 10, 10, 10),
+                child: TextFormField(
+                  controller: findBoxController,
+                  focusNode: _findFocusNode,
+                  onChanged: (value) {
+                    setState(() {
+                      currentFind = value;
+                    });
+                  },
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    hintText: 'Find',
+                    labelText: 'Find',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        setState(() {
+                          findBoxController.clear();
+                          currentFind = '';
+                        });
+                      },
                     ),
                   ),
                 ),
               ),
-            ],
-          ),
-          Container(
-            padding: const EdgeInsets.fromLTRB(5, 2, 10, 4),
-            color: Provider.of<ThemeModel>(context, listen: false).isDark()
-                ? isConnected
-                    ? constants.connectedLight
-                    : constants.disconnectedLight
-                : isConnected
-                    ? constants.connectedDark
-                    : constants.disconnectedDark,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: <Widget>[
-                Text(
-                    'Total Messages: ${items.length}, Showing: ${filteredItems.length}  |  '),
-                Text('URL: $fullUri'),
-                if (isConnected && tlsConnection)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(5, 2, 0, 0),
-                    child: Icon(Icons.lock_outline,
-                        size: 15,
-                        color: Theme.of(context).colorScheme.onSurface),
-                  ),
-                const Text('  |  '),
-                Text('Status: $connectionStateString'),
-              ],
             ),
-          ),
-        ],
-      ),
-    ),
+          ],
+        ),
+      ],
     );
   }
 }

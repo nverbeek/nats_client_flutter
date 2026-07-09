@@ -138,7 +138,9 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
                         language: 'json',
                         theme: getCustomHighlightTheme(
                           context,
-                          isDark: Provider.of<ThemeModel>(context, listen: false).isDark(),
+                          isDark:
+                              Provider.of<ThemeModel>(context, listen: false)
+                                  .isDark(),
                         ),
                         padding: const EdgeInsets.all(10),
                         textStyle: const TextStyle(
@@ -158,9 +160,11 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
                               opacity: _fadeAnimation,
                               child: Container(
                                 margin: const EdgeInsets.only(right: 8),
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: Theme.of(context).brightness == Brightness.dark
+                                  color: Theme.of(context).brightness ==
+                                          Brightness.dark
                                       ? Colors.green.shade700
                                       : Colors.green.shade600,
                                   borderRadius: BorderRadius.circular(12),
@@ -187,13 +191,16 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
                             child: InkWell(
                               borderRadius: BorderRadius.circular(20),
                               onTap: () {
-                                Clipboard.setData(ClipboardData(text: widget.formattedJson));
+                                Clipboard.setData(
+                                    ClipboardData(text: widget.formattedJson));
                                 _showCopiedFeedback();
                               },
                               child: Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: Theme.of(context).cardColor.withOpacity(0.9),
+                                  color: Theme.of(context)
+                                      .cardColor
+                                      .withOpacity(0.9),
                                   borderRadius: BorderRadius.circular(20),
                                   boxShadow: [
                                     BoxShadow(
@@ -243,14 +250,22 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
                       Icon(
                         Icons.info_outline,
                         size: 20,
-                        color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6),
+                        color: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.color
+                            ?.withOpacity(0.6),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
                           'This message has no payload',
                           style: TextStyle(
-                            color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7),
+                            color: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.color
+                                ?.withOpacity(0.7),
                             fontStyle: FontStyle.italic,
                           ),
                         ),

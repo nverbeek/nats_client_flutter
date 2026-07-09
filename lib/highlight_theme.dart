@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 
 /// Custom syntax highlight theme for HighlightView that matches the app's theme.
 /// Call [getCustomHighlightTheme] with the current [BuildContext] and [isDark] flag.
-Map<String, TextStyle> getCustomHighlightTheme(BuildContext context, {required bool isDark}) {
+Map<String, TextStyle> getCustomHighlightTheme(BuildContext context,
+    {required bool isDark}) {
   final theme = Theme.of(context);
   final baseTextColor = theme.textTheme.bodyMedium?.color ?? Colors.black;
   final backgroundColor = theme.colorScheme.surface;
@@ -20,14 +21,22 @@ Map<String, TextStyle> getCustomHighlightTheme(BuildContext context, {required b
       color: baseTextColor,
       fontFamily: monoFont,
     ),
-    'keyword': TextStyle(color: keywordColor, fontWeight: FontWeight.bold, fontFamily: monoFont),
-    'selector-tag': TextStyle(color: keywordColor, fontWeight: FontWeight.bold, fontFamily: monoFont),
+    'keyword': TextStyle(
+        color: keywordColor, fontWeight: FontWeight.bold, fontFamily: monoFont),
+    'selector-tag': TextStyle(
+        color: keywordColor, fontWeight: FontWeight.bold, fontFamily: monoFont),
     'literal': TextStyle(color: numberColor, fontFamily: monoFont),
     'section': TextStyle(color: accentColor, fontFamily: monoFont),
-    'link': TextStyle(color: accentColor, decoration: TextDecoration.underline, fontFamily: monoFont),
+    'link': TextStyle(
+        color: accentColor,
+        decoration: TextDecoration.underline,
+        fontFamily: monoFont),
     'subst': TextStyle(color: baseTextColor, fontFamily: monoFont),
     'string': TextStyle(color: stringColor, fontFamily: monoFont),
-    'title': TextStyle(color: functionColor, fontWeight: FontWeight.bold, fontFamily: monoFont),
+    'title': TextStyle(
+        color: functionColor,
+        fontWeight: FontWeight.bold,
+        fontFamily: monoFont),
     'name': TextStyle(color: functionColor, fontFamily: monoFont),
     'type': TextStyle(color: accentColor, fontFamily: monoFont),
     'attribute': TextStyle(color: accentColor, fontFamily: monoFont),
@@ -38,8 +47,10 @@ Map<String, TextStyle> getCustomHighlightTheme(BuildContext context, {required b
     'variable': TextStyle(color: accentColor, fontFamily: monoFont),
     'template-tag': TextStyle(color: accentColor, fontFamily: monoFont),
     'template-variable': TextStyle(color: accentColor, fontFamily: monoFont),
-    'comment': TextStyle(color: commentColor, fontStyle: FontStyle.italic, fontFamily: monoFont),
-    'quote': TextStyle(color: commentColor, fontStyle: FontStyle.italic, fontFamily: monoFont),
+    'comment': TextStyle(
+        color: commentColor, fontStyle: FontStyle.italic, fontFamily: monoFont),
+    'quote': TextStyle(
+        color: commentColor, fontStyle: FontStyle.italic, fontFamily: monoFont),
     'deletion': TextStyle(color: Colors.red[400], fontFamily: monoFont),
     'meta': TextStyle(color: accentColor, fontFamily: monoFont),
     'doctag': TextStyle(color: accentColor, fontFamily: monoFont),

@@ -12,7 +12,8 @@ class RegexTextHighlight extends StatelessWidget {
   final int? maxLines;
   final TextOverflow? overflow;
 
-  const RegexTextHighlight({super.key,
+  const RegexTextHighlight({
+    super.key,
     required this.text,
     required this.searchTerm,
     required this.highlightStyle,
@@ -26,10 +27,11 @@ class RegexTextHighlight extends StatelessWidget {
     var textStyle = DefaultTextStyle.of(context).style;
     textStyle = textStyle.copyWith(fontSize: fontSize);
     if (text.isEmpty) {
-      return Text("",
-          style: textStyle,
-          maxLines: maxLines,
-          overflow: overflow ?? TextOverflow.clip,
+      return Text(
+        "",
+        style: textStyle,
+        maxLines: maxLines,
+        overflow: overflow ?? TextOverflow.clip,
       );
     }
     if (searchTerm.isEmpty) {
@@ -43,7 +45,7 @@ class RegexTextHighlight extends StatelessWidget {
     while (true) {
       var highlightRegex = RegExp('($searchTerm)', caseSensitive: false);
       final String? highlight =
-      highlightRegex.stringMatch(text.substring(start));
+          highlightRegex.stringMatch(text.substring(start));
       if (highlight == null) {
         spans.add(_normalSpan(text.substring(start)));
         break;

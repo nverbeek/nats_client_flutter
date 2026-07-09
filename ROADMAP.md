@@ -8,7 +8,7 @@ These features are made possible by our successful migration to the official mai
 
 ## Progress Overview
 - [x] **Milestone 0**: Migrate custom fork to mainline `dart_nats: ^1.1.1` and verify compatibility.
-- [ ] **Milestone 1**: Design & Implement **Phase B: JetStream Stream & Consumer Monitor** (High Priority).
+- [~] **Milestone 1**: Design & Implement **Phase B: JetStream Stream & Consumer Monitor** (High Priority). 1a (read-only monitor) complete; 1b (mutations) not started.
 - [ ] **Milestone 2**: Design & Implement **Phase A: Key-Value (KV) Store Inspector** (Medium Priority).
 - [ ] **Milestone 3**: Clean up, finalize error handling, write widget/unit tests, and bundle releases.
 
@@ -52,22 +52,30 @@ We will introduce a **main navigation/tab bar** or sliding **NavigationRail** to
 ```
 
 ### Implementation Checklist
-- [ ] **UI Infrastructure**:
-  - [ ] Add a `TabController` or bottom/side rail routing to swap active dashboard panels.
-  - [ ] Refactor main view into modular widget layout tabs to prevent `lib/main.dart` from bloating.
-- [ ] **JetStream Backend Core (`lib/jetstream_manager.dart`)**:
-  - [ ] Instantiate `JetStream` client using `var js = JetStream(natsClient)`.
-  - [ ] Add methods to fetch stream configurations (`js.getStreamNames()`, `js.getStreamInfo(name)`).
-  - [ ] Add stream management capability:
-    - [ ] Create a stream dialog (specifying Stream Name, Subjects, maxAge, replicas).
-    - [ ] Delete a stream.
-    - [ ] Purge a stream (`JsStream.purge()`).
-- [ ] **Consumer Management**:
-  - [ ] Retrieve consumer lists (`js.getConsumerNames(stream)`, `js.getConsumerInfo(stream, consumer)`).
+
+**Milestone 1a — Read-only monitor (Completed):**
+- [x] **UI Infrastructure**:
+  - [x] Add a `TabController`/`TabBar` to swap between Live Messages and JetStream, kept outside the shared connection bar and status bar since both tabs use the same connection.
+  - [x] Keep JetStream logic out of `lib/main.dart` — implemented in `lib/jetstream_manager.dart`, `lib/jetstream_dashboard.dart`, and `lib/jetstream_message_view.dart` instead.
+  - [x] Make JetStream an opt-out setting (`Enable JetStream` toggle in Settings, on by default) so the tab and its machinery are fully hidden for users who don't want it.
+- [x] **JetStream Backend Core (`lib/jetstream_manager.dart`)**:
+  - [x] Thin wrapper around `client.jetStream()` exposing `listStreams()`, `streamInfo()`, `listConsumers()`, `consumerInfo()`, and `checkAvailability()` (via `accountInfo()`).
+- [x] **Stream & Consumer Monitor**:
+  - [x] Master/detail dashboard listing streams (name, message count, size, storage type) with a detail pane (subjects, retention, byte/message counts, first/last activity).
+  - [x] Read-only consumer list per stream (name, push/pull, ack policy, pending/ack-pending/redelivered counts) with a detail dialog.
+- [x] **Stream Message Inspection**:
+  - [x] "Browse Messages" live tail using an ephemeral, auto-cleaning `OrderedConsumer` (`js.orderedConsumer()`) — no manual consumer setup required just to look at a stream's contents.
+
+**Milestone 1b — Mutations (Not yet started):**
+- [ ] Stream management capability:
+  - [ ] Create a stream dialog (specifying Stream Name, Subjects, maxAge, replicas).
+  - [ ] Delete a stream.
+  - [ ] Purge a stream (`JsStream.purge()`).
+- [ ] Consumer management:
   - [ ] Build a **"Create Consumer" dialog** supporting both push (deliver subject) and pull models.
-- [ ] **Stream Message Inspection**:
-  - [ ] Support loading historical payloads or batching messages using Pull Consumers (`Consumer.fetch(batchSize)`).
-  - [ ] Enable standard NATS acknowledgment buttons (`Ack`, `Nak`, `Term`) on pulled JetStream payloads.
+  - [ ] Delete a consumer.
+- [ ] Publish into a stream (`jetStream().publishString()`), likely by extending `SendMessageDialog` with a "get delivery ack" toggle.
+- [ ] Enable standard NATS acknowledgment buttons (`Ack`, `Nak`, `Term`) on tailed JetStream payloads once explicit-ack consumers are creatable.
 
 ---
 

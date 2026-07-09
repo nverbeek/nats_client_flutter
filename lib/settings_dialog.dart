@@ -4,13 +4,15 @@ class SettingsDialog extends StatefulWidget {
   final double initialFontSize;
   final bool initialSingleLine;
   final int initialRetryInterval;
-  final void Function(double, bool, int) onSave;
+  final bool initialJetStreamEnabled;
+  final void Function(double, bool, int, bool) onSave;
 
   const SettingsDialog({
     super.key,
     required this.initialFontSize,
     required this.initialSingleLine,
     required this.initialRetryInterval,
+    required this.initialJetStreamEnabled,
     required this.onSave,
   });
 
@@ -22,6 +24,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late double tempFontSize;
   late bool tempSingleLine;
   late int tempRetryInterval;
+  late bool tempJetStreamEnabled;
 
   @override
   void initState() {
@@ -29,6 +32,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     tempFontSize = widget.initialFontSize;
     tempSingleLine = widget.initialSingleLine;
     tempRetryInterval = widget.initialRetryInterval;
+    tempJetStreamEnabled = widget.initialJetStreamEnabled;
   }
 
   @override
@@ -98,7 +102,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
                   value: tempRetryInterval,
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
                   items: const [
                     DropdownMenuItem(value: 3, child: Text('3 seconds')),
@@ -115,6 +120,21 @@ class _SettingsDialogState extends State<SettingsDialog> {
               ),
             ],
           ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Enable JetStream'),
+              Switch(
+                value: tempJetStreamEnabled,
+                onChanged: (v) {
+                  setState(() {
+                    tempJetStreamEnabled = v;
+                  });
+                },
+              ),
+            ],
+          ),
         ],
       ),
       actions: [
@@ -127,7 +147,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
         TextButton(
           child: const Text('Save'),
           onPressed: () {
-            widget.onSave(tempFontSize, tempSingleLine, tempRetryInterval);
+            widget.onSave(tempFontSize, tempSingleLine, tempRetryInterval,
+                tempJetStreamEnabled);
             Navigator.of(context).pop();
           },
         ),

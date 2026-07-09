@@ -136,6 +136,22 @@ To test the visual stream, searching, filtering, and detail dialogue features wi
    ```
    This script queries local environments or pipes embedded mock JSON data sets (cars, animal taxonomies, telemetry) to the `>` subject tree.
 
+### Recipe E: Local JetStream Testing
+The JetStream tab (Milestone 1 in `ROADMAP.md`) needs a JetStream-*enabled* server — plain `nats-server`/`nats` (no flag) does not have JetStream turned on, and the app's own "Enable JetStream" setting only controls whether the tab is shown, not whether the server supports it.
+
+1. Start a JetStream-enabled broker with Docker (requires the `nats` CLI on the host for the demo script; the server itself needs no extra tooling):
+   ```powershell
+   docker run -d --name nats-js -p 4222:4222 -p 8222:8222 nats:latest -js
+   ```
+   (Drop the trailing `-js` to start a server *without* JetStream — useful for exercising the app's "JetStream not enabled" empty state.)
+2. Run the application and connect to `nats://127.0.0.1:4222`.
+3. Populate the server with demo streams and a steady trickle of messages so there's something to see in the dashboard:
+   ```powershell
+   ./scripts/jetstream_demo.ps1
+   ```
+   This creates a couple of sample streams (e.g. `orders`, `telemetry`) via `nats stream add` and then loops `nats pub`, so switching to the JetStream tab shows real, growing streams and "Browse Messages" has live data to tail.
+4. When finished: `docker rm -f nats-js`.
+
 ---
 
 ## 5. Build, Lint & Test Command Reference

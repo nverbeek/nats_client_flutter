@@ -22,8 +22,10 @@ class SendMessageDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return Shortcuts(
       shortcuts: <LogicalKeySet, Intent>{
-        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.enter): const SendIntent(),
-        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.enter): const SendIntent(),
+        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.enter):
+            const SendIntent(),
+        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.enter):
+            const SendIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
