@@ -14,17 +14,20 @@ jobs:
   test:
     runs-on: ubuntu-latest
     services:
+      # nats:latest is a fully distroless image (no shell, no wget/curl, not
+      # even `which`) — a Docker healthcheck has to `exec` a command *inside*
+      # the container, which is impossible here, so no `options:` health-cmd
+      # is used. Without one, GitHub Actions just waits for the container to
+      # start rather than polling for health, which is fine: nats-server
+      # starts in well under a second, and the steps below (checkout,
+      # Flutter setup, `flutter pub get`, enabling the Linux desktop target)
+      # take far longer than that before anything tries to connect to it.
       nats:
         image: nats:latest
         ports:
           - 4222:4222
           - 8222:8222
-        command: -js
-        options: >-
-          --health-cmd "wget -qO- http://localhost:8222/healthz || exit 1"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
+        command: -js -m 8222
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2

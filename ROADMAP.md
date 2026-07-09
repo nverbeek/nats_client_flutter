@@ -10,7 +10,7 @@ These features are made possible by our successful migration to the official mai
 - [x] **Milestone 0**: Migrate custom fork to mainline `dart_nats: ^1.1.1` and verify compatibility.
 - [x] **Milestone 1**: Design & Implement **Phase B: JetStream Stream & Consumer Monitor** (High Priority). 1a (read-only monitor) and 1b (mutations) complete.
 - [ ] **Milestone 2**: Design & Implement **Phase A: Key-Value (KV) Store Inspector** (Medium Priority).
-- [ ] **Milestone 3**: Clean up, finalize error handling, write widget/unit tests, and bundle releases.
+- [~] **Milestone 3**: Clean up, finalize error handling, write widget/unit tests, and bundle releases. Real-backend `integration_test/` suite + CI `test` job landed; detailed coverage gap list captured below, not yet closed.
 - [ ] **Milestone 4**: Design & Implement **Phase D: Expanded Authentication Support** (username/password, token, NKey, `.creds`) (Medium Priority).
 
 ---
@@ -128,11 +128,22 @@ A clean multi-column layout. The left column lists active KV buckets, and the ri
 - [ ] **Platform Verification**:
   - [ ] Ensure that native desktop builds (Windows, Linux, macOS) compile smoothly and function on all newly introduced tabs.
   - [ ] Verify that Flutter Web operates gracefully. Include explicit guards (e.g. `kIsWeb` alerts) on features that are completely blocked by WebSocket scheme boundaries.
-- [ ] **Quality Assurance**:
+- [~] **Quality Assurance**:
   - [ ] Fix any deprecated API alerts (e.g. migrate `withOpacity` instances to `.withValues()`).
-  - [ ] Add comprehensive unit and widget tests under `test/` verifying the new layouts.
+  - [x] Add comprehensive unit and widget tests under `test/` verifying the new JetStream layouts (`test/jetstream_dashboard_test.dart`, `test/jetstream_manager_test.dart`, `test/send_message_dialog_test.dart`).
+  - [x] Add a real-backend `integration_test/` suite (against an actual JetStream-enabled `nats-server`, not fakes) covering the core pub/sub round trip and the full JetStream stream/consumer mutation lifecycle — see `integration_test/live_messages_test.dart` and `integration_test/jetstream_lifecycle_test.dart`.
+  - [ ] **Coverage gap list** (audited by hand against every interactive control in `lib/`; ~90 controls found, ~21 touched by either suite — see conversation history for the full per-screen breakdown). Roughly ranked by usage × how untested it is:
+    - [ ] **Message Detail dialog** — opened from the message list, Browse Messages, and the Consumer Tail view; never opened by either test suite. Widget test for copy/animation/no-payload states; one integration tap to prove it opens from a real message.
+    - [ ] **Settings & Security Settings dialogs** — font size, retry interval, JetStream toggle, and all three TLS cert fields are completely untested. Pure widget-test material, no server needed — cheapest gap to close relative to its size.
+    - [ ] **Live Messages tab's daily-use controls** — Filter, Find, and the per-row menu (Copy/Detail/Replay/Edit & Send/Reply To) have zero tests despite being the app's core daily-use feature. Filter/Find are widget-test material; Replay/Edit & Send/Reply To want a live connection, so integration tests.
+    - [ ] **JetStream Browse Messages view** (`lib/jetstream_message_view.dart`) — flagged as untestable-via-fake back in Milestone 1a and still unexercised now that real-server integration tests exist (the JetStream integration test tails a named consumer instead of using "Browse Messages"). Add an integration scenario that browses a stream with existing messages.
+    - [ ] **Nak / Term buttons** (`lib/jetstream_consumer_tail_view.dart`) — only Ack is proven against a real server; Nak/redelivery and Term semantics are different enough server-side to deserve their own assertions.
+    - [ ] **Form validation & conditional fields** — empty Stream Name/Subjects errors, the Push-Consumer-without-Deliver-Subject validator, and non-default Ack/Deliver Policy dropdown values are all untested, pure widget-test material.
+    - [ ] **Error/retry paths** — stream-list retry, consumer-list retry, and the Browse/Tail views' retry-on-error each need a "make the fake throw" widget test, mirroring the pattern already used for the top-level availability-check retry.
+    - [ ] **Keyboard shortcuts** — ⌘F, ⌘⇧F, D, R, E, ⌘C, Esc, and Ctrl+Enter in Send Message all duplicate button functionality but exercise a separate `Shortcuts`/`Actions` code path that's currently untested.
 - [x] **Build Pipeline**:
   - [x] Verify that GitHub Actions CI runner ([.github/workflows/build.yml](.github/workflows/build.yml)) packages release bundles successfully for Windows x64/ARM64, Linux, macOS, Web, and Docker.
+  - [x] Add a `test` job (real `nats:latest -js` service container + Xvfb) that runs both `test/` and `integration_test/` on every push/PR, and gate every build/release job on it via `needs: test`.
 
 ---
 
