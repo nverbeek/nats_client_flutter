@@ -9,6 +9,7 @@ This application currently supports Windows, Linux, macOS and Web platforms.
 # Main Features
 - Connect to a single NATS server using either plain (`nats://`) or WebSocket (`ws://`) schemes
 - TLS connection support with optional custom certificates
+- **Authentication support**: username/password, bearer token, NKey seed, or decentralized JWT+NKey (`.creds` file) — configured in the same Security Settings dialog as TLS, with credentials remembered only if you opt in
 - Subscribe to multiple subjects
 - Automatic re-connect upon lost connection
 - Filter received messages
@@ -63,7 +64,7 @@ This project has two test suites:
   ```
   flutter test test/
   ```
-- **`integration_test/`** — end-to-end tests that drive the real app against a real, locally-running JetStream-enabled `nats-server`, covering the core message round trip, the full JetStream stream/consumer lifecycle, and the Live Messages tab's filter/find/row-menu/keyboard-shortcut controls. See [AGENTS.md](./AGENTS.md)'s "Recipe E: Local JetStream Testing" for how to stand up a local server, then run each file individually against it, e.g.:
+- **`integration_test/`** — end-to-end tests that drive the real app against a real, locally-running `nats-server`, covering the core message round trip, the full JetStream stream/consumer lifecycle, the Live Messages tab's filter/find/row-menu/keyboard-shortcut controls, and a successful connection for each of the four authentication methods (username/password, token, NKey seed, `.creds`) against purpose-built fixture servers. See [AGENTS.md](./AGENTS.md)'s "Recipe E: Local JetStream Testing" (or "Recipe H: Local Authentication Testing" for the auth fixtures) for how to stand up a local server, then run each file individually against it, e.g.:
   ```
   flutter test integration_test/live_messages_test.dart -d windows
   ```

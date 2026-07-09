@@ -49,3 +49,17 @@ const int defaultRetryInterval = 10;
 
 // JetStream defaults
 const bool defaultJetStreamEnabled = true;
+
+// authentication preference keys
+const String prefAuthMethod = "AUTH_METHOD";
+const String prefAuthUsername = "AUTH_USERNAME";
+const String prefAuthPassword = "AUTH_PASSWORD";
+const String prefAuthToken = "AUTH_TOKEN";
+const String prefAuthNkeySeed = "AUTH_NKEY_SEED";
+const String prefAuthCredsFile = "AUTH_CREDS_FILE";
+const String prefAuthCredsFileName = "AUTH_CREDS_FILE_NAME";
+const String prefRememberCredentials = "REMEMBER_CREDENTIALS";
+
+// authentication failure feedback
+const String authenticationFailure =
+    'Authentication failed — check your credentials';

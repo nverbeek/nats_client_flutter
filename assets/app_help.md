@@ -43,6 +43,19 @@ The Security Settings dialog allows the user to specify the certificates and key
 - **Certificate Chain**: Path to a PEM file containing X509 certificates, starting with the root authority and intermediate authorities forming the signed chain to the server certificate, and ending with the server certificate. The private key for this certificate is set with **Private Key** setting.
 - **Private Key**: Path to a PEM file containing an encrypted private key.
 
+## Authentication
+Beyond TLS/mTLS, the Security Settings dialog (🔒 button) also has an **Authentication** section for the application-level auth mechanisms NATS servers commonly require. Pick a **Method** from the dropdown; only the fields relevant to that method are shown:
+
+- **None**: No application-level credentials are sent (default).
+- **Username & Password**: Sends the given username and password as part of the connection handshake.
+- **Token**: Sends a single bearer token as part of the connection handshake.
+- **NKey Seed**: Sends the public key derived from the given `SU...` seed; the client signs the server's nonce challenge automatically. The seed field is obscured like a password, with a 👁 toggle to reveal it.
+- **Credentials File (.creds)**: Loads a decentralized JWT + NKey `.creds` file (the format used by NGS/Synadia Cloud and self-hosted operator-mode NATS) via the same **Browse** pattern used for the certificate fields above.
+
+These are real secrets, so unlike the connection fields and certificate paths above (which are always remembered), they are **not persisted by default**. Check **Remember credentials on this device** to save them (stored locally, not encrypted); leave it unchecked to re-enter them each time the application starts.
+
+If the server rejects your credentials, the status bar and a notification will say "Authentication failed — check your credentials" rather than the generic connection-failure message.
+
 ## Connection Status
 The connection status is shown on the bottom right of the application in the status bar at all times.
 

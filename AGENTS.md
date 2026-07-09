@@ -197,6 +197,23 @@ The images under `images/` (referenced from the README's "Screenshots" section) 
 4. If you add a new screen worth screenshotting, add a checkpoint to `screenshot_tour_test.dart` (call `signaler.capture(tester, 'Some Name')` once the screen is settled) and reference `./images/Some%20Name.png` from the README — no changes needed to the capture script itself.
 5. Only the Windows target has been wired up (matches how `images/process_screenshots.ps1` already assumes `magick`/pwsh on Windows) — there's no Linux/macOS equivalent of the Win32 `PrintWindow` capture yet.
 
+### Recipe H: Local Authentication Testing
+`integration_test/authentication_test.dart` (Milestone 4 in `ROADMAP.md`) verifies the "correct credentials connect successfully" path for all four auth methods against real servers — one server per method, since NATS's simple `authorization` block (user/pass, token, bare nkey) and its operator/JWT mode are mutually exclusive server configs, so this can't be one shared container like Recipe E's JetStream server.
+
+1. Start all four fixture servers (safe to leave running; each is a disposable container):
+   ```powershell
+   docker run -d --name nats-fixture-userpass -p 4300:4222 -v "${PWD}/integration_test/fixtures/auth/userpass.conf:/etc/nats/nats-server.conf:ro" nats:latest -c /etc/nats/nats-server.conf
+   docker run -d --name nats-fixture-token -p 4301:4222 -v "${PWD}/integration_test/fixtures/auth/token.conf:/etc/nats/nats-server.conf:ro" nats:latest -c /etc/nats/nats-server.conf
+   docker run -d --name nats-fixture-nkey -p 4302:4222 -v "${PWD}/integration_test/fixtures/auth/nkey.conf:/etc/nats/nats-server.conf:ro" nats:latest -c /etc/nats/nats-server.conf
+   docker run -d --name nats-fixture-creds -p 4303:4222 -v "${PWD}/integration_test/fixtures/auth/creds.conf:/etc/nats/nats-server.conf:ro" nats:latest -c /etc/nats/nats-server.conf
+   ```
+2. Run the test file: `flutter test integration_test/authentication_test.dart -d windows` (all four `testWidgets` run fine in one invocation/process, unlike the multi-*file* limitation noted in Recipe F).
+3. When finished: `docker rm -f nats-fixture-userpass nats-fixture-token nats-fixture-nkey nats-fixture-creds`.
+
+The fixture credentials (`integration_test/fixtures/auth/*.conf` and `test-user.creds`) are throwaway, non-expiring, committed test material — not real secrets. The `.creds` one was generated once via the official `nsc` CLI (`nsc init` + `nsc generate config --mem-resolver`); there's no need to regenerate it unless it's lost. The NKey fixture's seed lives directly in `authentication_test.dart` next to its public key in `nkey.conf`.
+
+**Deliberately not automated**: the "wrong credentials show the friendly error" path. `dart_nats`'s `-ERR` handler completes an internal `Completer` that's never awaited on this app's `retryCount: -1` connect path, which Dart reports as an uncaught zone error — harmless for the real app (`runApp()`'s `runZonedGuarded` zone swallows it after logging) but fatal under `flutter test`'s stricter zone. If you need to re-verify this by hand, use a standalone `dart run --packages=.dart_tool/package_config.json some_probe.dart` script with your own `runZonedGuarded`, not `integration_test`.
+
 ---
 
 ## 5. Build, Lint & Test Command Reference

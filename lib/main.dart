@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import 'auth_manager.dart';
 import 'constants.dart' as constants;
 import 'jetstream_dashboard.dart';
 import 'jetstream_manager.dart';
@@ -283,6 +284,16 @@ class _MyHomePageState extends State<MyHomePage>
   bool messageSingleLine = false;
   int retryInterval = constants.defaultRetryInterval;
 
+  // authentication
+  AuthMethod authMethod = AuthMethod.none;
+  String authUsername = '';
+  String authPassword = '';
+  String authToken = '';
+  String authNkeySeed = '';
+  Uint8List? authCredsFileBytes;
+  String authCredsFileName = '';
+  bool rememberCredentials = false;
+
   @override
   initState() {
     initializePreferences();
@@ -349,7 +360,32 @@ class _MyHomePageState extends State<MyHomePage>
           constants.defaultRetryInterval;
       jetStreamEnabled = prefs.getBool(constants.prefJetStreamEnabled) ??
           constants.defaultJetStreamEnabled;
+      loadAuthSettings(prefs);
     });
+  }
+
+  /// Loads persisted authentication settings, but only if the user
+  /// previously opted in via "Remember credentials on this device" —
+  /// otherwise auth fields start blank each launch.
+  void loadAuthSettings(SharedPreferences prefs) {
+    rememberCredentials =
+        prefs.getBool(constants.prefRememberCredentials) ?? false;
+    if (!rememberCredentials) return;
+
+    final methodName = prefs.getString(constants.prefAuthMethod);
+    if (methodName != null && methodName.isNotEmpty) {
+      authMethod = AuthMethod.values.byName(methodName);
+    }
+    authUsername = prefs.getString(constants.prefAuthUsername) ?? '';
+    authPassword = prefs.getString(constants.prefAuthPassword) ?? '';
+    authToken = prefs.getString(constants.prefAuthToken) ?? '';
+    authNkeySeed = prefs.getString(constants.prefAuthNkeySeed) ?? '';
+    authCredsFileName = prefs.getString(constants.prefAuthCredsFileName) ?? '';
+    final savedCredsFile = prefs.getString(constants.prefAuthCredsFile);
+    if (savedCredsFile != null && savedCredsFile.isNotEmpty) {
+      authCredsFileBytes =
+          Uint8List.fromList(gzip.decode(base64.decode(savedCredsFile)));
+    }
   }
 
   void saveMessageSettings() async {
@@ -422,6 +458,16 @@ class _MyHomePageState extends State<MyHomePage>
     natsClient = Client();
     _jetStreamManager = JetStreamManager(natsClient);
 
+    // surface authentication failures distinctly from generic connection
+    // failures (a bad password/token/nkey/creds file closes the connection
+    // via a server -ERR, rather than throwing out of connect() below)
+    natsClient.onError = (dynamic error) {
+      debugPrint('NATS client error: $error');
+      if (error != null && isAuthenticationError(error as Object)) {
+        showSnackBar(constants.authenticationFailure);
+      }
+    };
+
     // save the user's connection properties to preferences.
     // we can read these out at startup.
     await prefs.setString(constants.prefScheme, scheme);
@@ -490,11 +536,31 @@ class _MyHomePageState extends State<MyHomePage>
       // get the security context if applicable
       SecurityContext? securityContext = getSecurityContext();
 
+      // apply the currently selected authentication method. Username/password,
+      // token, and NKey seed all ride along in ConnectOption (NKey also
+      // needs `client.seed` set so dart_nats can sign the server's nonce
+      // challenge); credentials files are loaded directly on the client,
+      // which derives its own jwt/sig from them.
+      ConnectOption? authConnectOption = buildAuthConnectOption(
+        method: authMethod,
+        username: authUsername,
+        password: authPassword,
+        token: authToken,
+        nkeySeed: authNkeySeed,
+      );
+      if (authMethod == AuthMethod.nkeySeed && authNkeySeed.isNotEmpty) {
+        natsClient.seed = authNkeySeed;
+      } else if (authMethod == AuthMethod.credentialsFile &&
+          authCredsFileBytes != null) {
+        natsClient.loadCredentials(utf8.decode(authCredsFileBytes!));
+      }
+
       // finally, make the connection attempt
       await natsClient.connect(uri,
           retry: true,
           retryCount: -1,
           retryInterval: retryInterval,
+          connectOption: authConnectOption,
           securityContext: securityContext as dynamic);
     } on TlsException {
       showSnackBar(constants.connectionFailure);
@@ -801,6 +867,14 @@ class _MyHomePageState extends State<MyHomePage>
       privateKeyController.text = savedPrivateKeyName;
     }
 
+    // auth fields are seeded from in-memory state, not preferences directly —
+    // they may only live in memory for this session if "remember" is off
+    var usernameController = TextEditingController(text: authUsername);
+    var passwordController = TextEditingController(text: authPassword);
+    var tokenController = TextEditingController(text: authToken);
+    var nkeySeedController = TextEditingController(text: authNkeySeed);
+    var credsFileController = TextEditingController(text: authCredsFileName);
+
     // Add mounted check before using context after async gap
     if (!mounted) return;
     return showDialog<void>(
@@ -837,16 +911,61 @@ class _MyHomePageState extends State<MyHomePage>
           onClearPrivateKey: () {
             clearPrivateKey(privateKeyController);
           },
+          initialAuthMethod: authMethod,
+          onAuthMethodChanged: (method) {
+            authMethod = method;
+            persistAuthSettingsIfRemembered();
+          },
+          usernameController: usernameController,
+          passwordController: passwordController,
+          tokenController: tokenController,
+          nkeySeedController: nkeySeedController,
+          credsFileController: credsFileController,
+          onUsernameChanged: (value) {
+            authUsername = value;
+            persistAuthSettingsIfRemembered();
+          },
+          onPasswordChanged: (value) {
+            authPassword = value;
+            persistAuthSettingsIfRemembered();
+          },
+          onTokenChanged: (value) {
+            authToken = value;
+            persistAuthSettingsIfRemembered();
+          },
+          onNkeySeedChanged: (value) {
+            authNkeySeed = value;
+            persistAuthSettingsIfRemembered();
+          },
+          onCredsFilePick: () {
+            pickFile(allowedExtensions: ['creds']).then((chosenFile) {
+              handleCredsFile(chosenFile.$1, chosenFile.$2, credsFileController);
+            });
+          },
+          onClearCredsFile: () {
+            clearCredsFile(credsFileController);
+          },
+          initialRememberCredentials: rememberCredentials,
+          onRememberCredentialsChanged: (remember) {
+            rememberCredentials = remember;
+            prefs.setBool(constants.prefRememberCredentials, remember);
+            if (remember) {
+              persistAuthSettings();
+            } else {
+              clearPersistedAuthSettings();
+            }
+          },
         );
       },
     );
   }
 
-  /// Prompts the user to pick a certificate file
-  Future<(Uint8List?, String)> pickFile() async {
+  /// Prompts the user to pick a certificate (or credentials) file
+  Future<(Uint8List?, String)> pickFile(
+      {List<String> allowedExtensions = const ['pem']}) async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['pem'],
+      allowedExtensions: allowedExtensions,
     );
 
     if (result != null) {
@@ -942,6 +1061,65 @@ class _MyHomePageState extends State<MyHomePage>
     controller.text = '';
     prefs.setString(constants.prefPrivateKey, '');
     prefs.setString(constants.prefPrivateKeyName, '');
+  }
+
+  /// Handles the UI updates and in-memory state after a `.creds` file is
+  /// chosen by the user. Only written to preferences if the user has opted
+  /// in via "Remember credentials on this device".
+  void handleCredsFile(
+      Uint8List? fileBytes, String fileName, TextEditingController controller) {
+    if (fileBytes != null) {
+      controller.text = fileName;
+      authCredsFileBytes = fileBytes;
+      authCredsFileName = fileName;
+      persistAuthSettingsIfRemembered();
+    }
+  }
+
+  /// Clears the credentials file information from the text input and in-memory state
+  void clearCredsFile(TextEditingController controller) {
+    controller.text = '';
+    authCredsFileBytes = null;
+    authCredsFileName = '';
+    persistAuthSettingsIfRemembered();
+  }
+
+  /// Persists the current in-memory authentication state to preferences,
+  /// but only if "Remember credentials on this device" is enabled.
+  void persistAuthSettingsIfRemembered() {
+    if (rememberCredentials) {
+      persistAuthSettings();
+    }
+  }
+
+  /// Writes the current in-memory authentication state to preferences.
+  void persistAuthSettings() {
+    prefs.setString(constants.prefAuthMethod, authMethod.name);
+    prefs.setString(constants.prefAuthUsername, authUsername);
+    prefs.setString(constants.prefAuthPassword, authPassword);
+    prefs.setString(constants.prefAuthToken, authToken);
+    prefs.setString(constants.prefAuthNkeySeed, authNkeySeed);
+    prefs.setString(constants.prefAuthCredsFileName, authCredsFileName);
+    final credsBytes = authCredsFileBytes;
+    if (credsBytes != null) {
+      final gZipBytes = gzip.encode(credsBytes);
+      prefs.setString(constants.prefAuthCredsFile, base64.encode(gZipBytes));
+    } else {
+      prefs.setString(constants.prefAuthCredsFile, '');
+    }
+  }
+
+  /// Wipes any persisted authentication secrets from preferences (used when
+  /// the user turns off "Remember credentials on this device"), keeping
+  /// them only in memory for the rest of this session.
+  void clearPersistedAuthSettings() {
+    prefs.setString(constants.prefAuthMethod, '');
+    prefs.setString(constants.prefAuthUsername, '');
+    prefs.setString(constants.prefAuthPassword, '');
+    prefs.setString(constants.prefAuthToken, '');
+    prefs.setString(constants.prefAuthNkeySeed, '');
+    prefs.setString(constants.prefAuthCredsFile, '');
+    prefs.setString(constants.prefAuthCredsFileName, '');
   }
 
   Future<void> sendMessage(String subject, String data,
