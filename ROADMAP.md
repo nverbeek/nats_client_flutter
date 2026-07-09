@@ -8,7 +8,7 @@ These features are made possible by our successful migration to the official mai
 
 ## Progress Overview
 - [x] **Milestone 0**: Migrate custom fork to mainline `dart_nats: ^1.1.1` and verify compatibility.
-- [~] **Milestone 1**: Design & Implement **Phase B: JetStream Stream & Consumer Monitor** (High Priority). 1a (read-only monitor) complete; 1b (mutations) not started.
+- [x] **Milestone 1**: Design & Implement **Phase B: JetStream Stream & Consumer Monitor** (High Priority). 1a (read-only monitor) and 1b (mutations) complete.
 - [ ] **Milestone 2**: Design & Implement **Phase A: Key-Value (KV) Store Inspector** (Medium Priority).
 - [ ] **Milestone 3**: Clean up, finalize error handling, write widget/unit tests, and bundle releases.
 - [ ] **Milestone 4**: Design & Implement **Phase D: Expanded Authentication Support** (username/password, token, NKey, `.creds`) (Medium Priority).
@@ -67,16 +67,16 @@ We will introduce a **main navigation/tab bar** or sliding **NavigationRail** to
 - [x] **Stream Message Inspection**:
   - [x] "Browse Messages" live tail using an ephemeral, auto-cleaning `OrderedConsumer` (`js.orderedConsumer()`) — no manual consumer setup required just to look at a stream's contents.
 
-**Milestone 1b — Mutations (Not yet started):**
-- [ ] Stream management capability:
-  - [ ] Create a stream dialog (specifying Stream Name, Subjects, maxAge, replicas).
-  - [ ] Delete a stream.
-  - [ ] Purge a stream (`JsStream.purge()`).
-- [ ] Consumer management:
-  - [ ] Build a **"Create Consumer" dialog** supporting both push (deliver subject) and pull models.
-  - [ ] Delete a consumer.
-- [ ] Publish into a stream (`jetStream().publishString()`), likely by extending `SendMessageDialog` with a "get delivery ack" toggle.
-- [ ] Enable standard NATS acknowledgment buttons (`Ack`, `Nak`, `Term`) on tailed JetStream payloads once explicit-ack consumers are creatable.
+**Milestone 1b — Mutations (Completed):**
+- [x] Stream management capability:
+  - [x] Create a stream dialog (specifying Stream Name, Subjects, maxAge, replicas) — `lib/jetstream_stream_dialog.dart`.
+  - [x] Delete a stream (with confirmation).
+  - [x] Purge a stream (`JsStream.purge()`, with confirmation).
+- [x] Consumer management:
+  - [x] Build a **"Create Consumer" dialog** supporting both push (deliver subject) and pull models — `lib/jetstream_consumer_dialog.dart`.
+  - [x] Delete a consumer (with confirmation).
+- [x] Publish into a stream (`jetStream().publishString()`), by extending `SendMessageDialog` with a "get delivery ack" (JetStream publish) toggle, wired through `sendMessage()` in `lib/main.dart`.
+- [x] Enable standard NATS acknowledgment buttons (`Ack`, `Nak`, `Term`) on tailed JetStream payloads: selecting **Tail** on a consumer opens `lib/jetstream_consumer_tail_view.dart`, which binds to that named consumer (honoring its real ack policy, unlike the ephemeral "Browse Messages" ordered consumer) and enables Ack/Nak/Term buttons when its ack policy is `explicit`.
 
 ---
 

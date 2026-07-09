@@ -145,9 +145,9 @@ The JetStream tab (Milestone 1 in `ROADMAP.md`) needs a JetStream-*enabled* serv
    ```
    (Drop the trailing `-js` to start a server *without* JetStream — useful for exercising the app's "JetStream not enabled" empty state.)
 2. Run the application and connect to `nats://127.0.0.1:4222`.
-3. Populate the server with demo streams and a steady trickle of messages so there's something to see in the dashboard:
+3. Populate the server with demo streams and a steady trickle of messages so there's something to see in the dashboard. Run it with **`pwsh`, not `powershell.exe`** — Windows PowerShell 5.1 prepends a UTF-8 BOM when piping strings to a native process's stdin, which corrupts the JSON payloads regardless of `$OutputEncoding`; the script's `#Requires -PSEdition Core` will error out early if you run it under 5.1 instead of silently producing bad test data:
    ```powershell
-   ./scripts/jetstream_demo.ps1
+   pwsh ./scripts/jetstream_demo.ps1
    ```
    This creates a couple of sample streams (e.g. `orders`, `telemetry`) via `nats stream add` and then loops `nats pub`, so switching to the JetStream tab shows real, growing streams and "Browse Messages" has live data to tail.
 4. When finished: `docker rm -f nats-js`.

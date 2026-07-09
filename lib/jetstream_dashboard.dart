@@ -1,14 +1,14 @@
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:flutter/material.dart';
 
+import 'jetstream_consumer_dialog.dart';
+import 'jetstream_consumer_tail_view.dart';
 import 'jetstream_manager.dart';
 import 'jetstream_message_view.dart';
+import 'jetstream_stream_dialog.dart';
 
-/// JetStream tab content: a read-only monitor for streams and consumers,
-/// plus a live "Browse Messages" tail for a selected stream.
-///
-/// Milestone 1a is intentionally read-only — no stream/consumer mutations —
-/// so this widget only ever calls list/info methods on [JetStreamManager].
+/// JetStream tab content: a monitor and management dashboard for streams and
+/// consumers, plus a live "Browse Messages" tail for a selected stream.
 ///
 /// Takes an already-constructed [JetStreamManager] (rather than a raw
 /// `Client`) so tests can inject a fake manager and exercise the connected
@@ -37,6 +37,10 @@ class _JetStreamDashboardState extends State<JetStreamDashboard> {
   List<ConsumerInfo> _consumers = [];
 
   bool _browsing = false;
+  String? _tailingConsumerName;
+  bool _tailingConsumerExplicitAck = false;
+
+  bool _mutating = false;
 
   @override
   void initState() {
@@ -61,6 +65,8 @@ class _JetStreamDashboardState extends State<JetStreamDashboard> {
         _consumers = [];
         _selectedStreamName = null;
         _browsing = false;
+        _tailingConsumerName = null;
+        _mutating = false;
       });
       return;
     }
@@ -119,6 +125,7 @@ class _JetStreamDashboardState extends State<JetStreamDashboard> {
     setState(() {
       _selectedStreamName = streamName;
       _browsing = false;
+      _tailingConsumerName = null;
       _consumers = [];
       _consumersError = null;
     });
@@ -182,8 +189,194 @@ class _JetStreamDashboardState extends State<JetStreamDashboard> {
         ),
         actions: [
           TextButton(
+            onPressed: info.name.isEmpty
+                ? null
+                : () {
+                    Navigator.of(context).pop();
+                    _confirmDeleteConsumer(info.streamName, info.name);
+                  },
+            child: const Text('Delete'),
+          ),
+          TextButton(
+            onPressed: info.name.isEmpty
+                ? null
+                : () {
+                    Navigator.of(context).pop();
+                    _tailConsumer(info);
+                  },
+            child: const Text('Tail'),
+          ),
+          TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _tailConsumer(ConsumerInfo info) {
+    setState(() {
+      _browsing = false;
+      _tailingConsumerName = info.name;
+      _tailingConsumerExplicitAck = info.config.ackPolicy == 'explicit';
+    });
+  }
+
+  void _showSnack(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
+      ),
+    );
+  }
+
+  Future<void> _runMutation(Future<void> Function() action,
+      {required String successMessage}) async {
+    if (_mutating) return;
+    setState(() => _mutating = true);
+    try {
+      await action();
+      if (!mounted) return;
+      _showSnack(successMessage);
+    } catch (e) {
+      if (!mounted) return;
+      _showSnack(describeJetStreamError(e), isError: true);
+    } finally {
+      if (mounted) setState(() => _mutating = false);
+    }
+  }
+
+  void _showCreateStreamDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (context) => CreateStreamDialog(
+        onCreate: (config) => _runMutation(
+          () async {
+            await widget.manager!.createStream(config);
+            await _loadStreams();
+          },
+          successMessage: 'Stream "${config.name}" created.',
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeleteStream(String streamName) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Stream?'),
+        content: Text(
+            'This permanently deletes "$streamName" and all of its messages. '
+            'This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _runMutation(
+                () async {
+                  await widget.manager!.deleteStream(streamName);
+                  if (mounted) {
+                    setState(() {
+                      if (_selectedStreamName == streamName) {
+                        _selectedStreamName = null;
+                        _browsing = false;
+                        _tailingConsumerName = null;
+                      }
+                    });
+                  }
+                  await _loadStreams();
+                },
+                successMessage: 'Stream "$streamName" deleted.',
+              );
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmPurgeStream(String streamName) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Purge Stream?'),
+        content: Text(
+            'This permanently deletes all messages in "$streamName" but keeps '
+            'the stream and its consumers. This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _runMutation(
+                () async {
+                  await widget.manager!.purgeStream(streamName);
+                  await _loadStreams();
+                },
+                successMessage: 'Stream "$streamName" purged.',
+              );
+            },
+            child: const Text('Purge'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCreateConsumerDialog(String streamName) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => CreateConsumerDialog(
+        onCreate: (config) => _runMutation(
+          () async {
+            await widget.manager!.createConsumer(streamName, config);
+            await _loadConsumers(streamName);
+          },
+          successMessage: 'Consumer created.',
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeleteConsumer(String streamName, String consumerName) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Consumer?'),
+        content: Text('This permanently deletes consumer "$consumerName".'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _runMutation(
+                () async {
+                  await widget.manager!
+                      .deleteConsumer(streamName, consumerName);
+                  if (mounted && _tailingConsumerName == consumerName) {
+                    setState(() => _tailingConsumerName = null);
+                  }
+                  await _loadConsumers(streamName);
+                },
+                successMessage: 'Consumer "$consumerName" deleted.',
+              );
+            },
+            child: const Text('Delete'),
           ),
         ],
       ),
@@ -231,6 +424,15 @@ class _JetStreamDashboardState extends State<JetStreamDashboard> {
           ),
         ),
         const Divider(height: 1),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.add),
+            label: const Text('Add Stream'),
+            onPressed: _mutating ? null : _showCreateStreamDialog,
+          ),
+        ),
+        const SizedBox(height: 4),
         if (_loadingStreams && _streams.isEmpty)
           const Expanded(child: Center(child: CircularProgressIndicator()))
         else if (_streamsError != null)
@@ -311,6 +513,16 @@ class _JetStreamDashboardState extends State<JetStreamDashboard> {
             '${isPush ? 'Push' : 'Pull'} · Ack: ${consumer.config.ackPolicy} · '
             'Pending: ${consumer.numPending} · Redelivered: ${consumer.numRedelivered}',
           ),
+          trailing: consumer.name.isEmpty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  tooltip: 'Delete consumer',
+                  onPressed: _mutating
+                      ? null
+                      : () => _confirmDeleteConsumer(
+                          consumer.streamName, consumer.name),
+                ),
           onTap: () => _showConsumerDetail(consumer),
         );
       }).toList(),
@@ -345,15 +557,55 @@ class _JetStreamDashboardState extends State<JetStreamDashboard> {
             'Last: ${formatRelativeTime(stream.state.lastTs)}',
           ),
           const SizedBox(height: 16),
-          ElevatedButton.icon(
-            icon: const Icon(Icons.visibility),
-            label: const Text('Browse Messages'),
-            onPressed: stream.state.messages == 0
-                ? null
-                : () => setState(() => _browsing = true),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ElevatedButton.icon(
+                icon: const Icon(Icons.visibility),
+                label: const Text('Browse Messages'),
+                onPressed: stream.state.messages == 0
+                    ? null
+                    : () => setState(() {
+                          _browsing = true;
+                          _tailingConsumerName = null;
+                        }),
+              ),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.delete_sweep_outlined),
+                label: const Text('Purge'),
+                onPressed: _mutating
+                    ? null
+                    : () => _confirmPurgeStream(stream.config.name),
+              ),
+              OutlinedButton.icon(
+                icon: Icon(Icons.delete_outline,
+                    color: Theme.of(context).colorScheme.error),
+                label: Text('Delete Stream',
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error)),
+                onPressed: _mutating
+                    ? null
+                    : () => _confirmDeleteStream(stream.config.name),
+              ),
+            ],
           ),
           const SizedBox(height: 24),
-          Text('Consumers', style: Theme.of(context).textTheme.titleMedium),
+          Row(
+            children: [
+              Expanded(
+                child: Text('Consumers',
+                    style: Theme.of(context).textTheme.titleMedium),
+              ),
+              TextButton.icon(
+                icon: const Icon(Icons.add),
+                label: const Text('Create Consumer'),
+                onPressed: _mutating
+                    ? null
+                    : () => _showCreateConsumerDialog(stream.config.name),
+              ),
+            ],
+          ),
           const Divider(),
           _buildConsumerList(stream.config.name),
         ],
@@ -373,6 +625,17 @@ class _JetStreamDashboardState extends State<JetStreamDashboard> {
         streamName: _selectedStreamName!,
         manager: widget.manager!,
         onClose: () => setState(() => _browsing = false),
+      );
+    }
+
+    if (_tailingConsumerName != null) {
+      return JetStreamConsumerTailView(
+        key: ValueKey('$_selectedStreamName/$_tailingConsumerName'),
+        streamName: _selectedStreamName!,
+        consumerName: _tailingConsumerName!,
+        explicitAck: _tailingConsumerExplicitAck,
+        manager: widget.manager!,
+        onClose: () => setState(() => _tailingConsumerName = null),
       );
     }
 

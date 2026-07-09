@@ -6,17 +6,31 @@ class SendIntent extends Intent {
   const SendIntent();
 }
 
-class SendMessageDialog extends StatelessWidget {
+class SendMessageDialog extends StatefulWidget {
   final TextEditingController subjectController;
   final TextEditingController dataController;
-  final void Function(String, String) onSend;
+  final bool jetStreamAvailable;
+  final void Function(String subject, String data, bool useJetStream) onSend;
 
   const SendMessageDialog({
     super.key,
     required this.subjectController,
     required this.dataController,
+    this.jetStreamAvailable = false,
     required this.onSend,
   });
+
+  @override
+  State<SendMessageDialog> createState() => _SendMessageDialogState();
+}
+
+class _SendMessageDialogState extends State<SendMessageDialog> {
+  bool _useJetStream = false;
+
+  void _send() {
+    widget.onSend(widget.subjectController.text, widget.dataController.text,
+        _useJetStream);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +45,7 @@ class SendMessageDialog extends StatelessWidget {
         actions: <Type, Action<Intent>>{
           SendIntent: CallbackAction<SendIntent>(
             onInvoke: (SendIntent intent) {
-              onSend(subjectController.text, dataController.text);
+              _send();
               return null;
             },
           ),
@@ -52,12 +66,12 @@ class SendMessageDialog extends StatelessWidget {
           ),
           content: SizedBox(
             width: 400, // Optional: set a width for better appearance
-            height: 300, // Set a fixed height for the dialog
+            height: widget.jetStreamAvailable ? 340 : 300,
             child: Column(
               children: <Widget>[
                 TextFormField(
                   maxLines: 1,
-                  controller: subjectController,
+                  controller: widget.subjectController,
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
                     hintText: 'Subject',
@@ -67,7 +81,7 @@ class SendMessageDialog extends StatelessWidget {
                 const SizedBox(height: 10),
                 Expanded(
                   child: TextFormField(
-                    controller: dataController,
+                    controller: widget.dataController,
                     expands: true,
                     maxLines: null,
                     minLines: null,
@@ -79,6 +93,17 @@ class SendMessageDialog extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (widget.jetStreamAvailable)
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    dense: true,
+                    title:
+                        const Text('Publish via JetStream (get delivery ack)'),
+                    value: _useJetStream,
+                    onChanged: (v) =>
+                        setState(() => _useJetStream = v ?? false),
+                  ),
               ],
             ),
           ),
@@ -92,10 +117,8 @@ class SendMessageDialog extends StatelessWidget {
             Tooltip(
               message: 'Hint: Ctrl+Enter (Cmd+Enter on Mac) to send',
               child: TextButton(
+                onPressed: _send,
                 child: const Text('Send'),
-                onPressed: () {
-                  onSend(subjectController.text, dataController.text);
-                },
               ),
             ),
           ],

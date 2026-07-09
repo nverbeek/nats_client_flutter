@@ -1,3 +1,4 @@
+#Requires -PSEdition Core
 # Populates a local JetStream-enabled NATS server with a couple of demo
 # streams and a steady trickle of sample messages, so the app's JetStream
 # tab has real, growing streams to look at. See AGENTS.md "Recipe E: Local
@@ -6,6 +7,17 @@
 # Requires the `nats` CLI (https://github.com/nats-io/natscli) on PATH,
 # pointed at a JetStream-enabled server, e.g.:
 #   docker run -d --name nats-js -p 4222:4222 -p 8222:8222 nats:latest -js
+#
+# Must run under PowerShell 7+ (`pwsh`), not Windows PowerShell 5.1
+# (`powershell.exe`): Windows PowerShell's Desktop edition prepends a UTF-8
+# BOM when piping a string to a native process's stdin, no matter how
+# $OutputEncoding is set, which corrupts the JSON payload below from Dart's
+# jsonDecode()'s point of view. The #Requires line above makes that failure
+# an explicit error instead of silently-corrupted test data.
+
+# Belt-and-suspenders: also force BOM-less UTF-8 explicitly (harmless no-op
+# under pwsh, which already defaults to this).
+$OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
 function New-DemoStream {
     param(
@@ -49,8 +61,12 @@ while ($true) {
         timestamp    = (Get-Date).ToString("o")
     } | ConvertTo-Json -Compress
 
-    nats pub "orders.created" $order
-    nats pub "telemetry.reading" $reading
+    # Piped via stdin (--force-stdin) rather than passed as a command-line
+    # argument: some shells/hosts re-parse the argument list on their way to
+    # nats.exe and silently strip the embedded double quotes, corrupting the
+    # JSON (e.g. `{"a":1}` becomes `{a:1}`). Stdin sidesteps that entirely.
+    $order | nats pub "orders.created" --force-stdin --quiet
+    $reading | nats pub "telemetry.reading" --force-stdin --quiet
 
     Start-Sleep -Seconds 2
 }

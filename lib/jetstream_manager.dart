@@ -1,10 +1,10 @@
 import 'dart:async';
 
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
+import 'package:dart_nats/dart_nats.dart' as nats show Consumer;
 
-/// Thin, testable wrapper around a connected [Client] for JetStream read
-/// operations. Milestone 1a is monitoring-only (no stream/consumer
-/// mutations), so this manager intentionally only exposes read calls.
+/// Thin, testable wrapper around a connected [Client] for JetStream
+/// monitoring and management operations.
 class JetStreamManager {
   final Client client;
 
@@ -42,6 +42,51 @@ class JetStreamManager {
   /// the returned [OrderedConsumer] when the browse panel closes.
   OrderedConsumer browseStream(String streamName) {
     return _js.orderedConsumer(streamName, OrderedConsumerConfig());
+  }
+
+  /// Create a new stream from [config].
+  Future<void> createStream(StreamConfig config,
+      {Duration timeout = const Duration(seconds: 5)}) {
+    return _js.createStream(config, timeout: timeout);
+  }
+
+  /// Permanently delete a stream and all of its messages.
+  Future<void> deleteStream(String streamName,
+      {Duration timeout = const Duration(seconds: 5)}) {
+    return _js.deleteStream(streamName, timeout: timeout);
+  }
+
+  /// Purge all messages from a stream, keeping the stream itself.
+  Future<void> purgeStream(String streamName,
+      {Duration timeout = const Duration(seconds: 5)}) {
+    return _js.stream(streamName).purge(timeout: timeout);
+  }
+
+  /// Create a new consumer (push or pull, durable or ephemeral) on [streamName].
+  Future<void> createConsumer(String streamName, ConsumerConfig config,
+      {Duration timeout = const Duration(seconds: 5)}) {
+    return _js.createConsumer(streamName, config, timeout: timeout);
+  }
+
+  /// Permanently delete a consumer from a stream.
+  Future<void> deleteConsumer(String streamName, String consumerName,
+      {Duration timeout = const Duration(seconds: 5)}) {
+    return _js.deleteConsumer(streamName, consumerName, timeout: timeout);
+  }
+
+  /// Publish a string payload into JetStream and wait for the server's
+  /// acknowledgement (stream name + assigned sequence number).
+  Future<PubAck> publish(String subject, String data,
+      {Duration timeout = const Duration(seconds: 5)}) {
+    return _js.publishString(subject, data, timeout: timeout);
+  }
+
+  /// Bind to an existing named consumer to tail its deliveries. Unlike
+  /// [browseStream], the returned handle preserves whatever ack policy the
+  /// consumer was created with, so explicit-ack consumers can actually be
+  /// acked/nak'd/terminated via the delivered [Message]s.
+  nats.Consumer<dynamic> tailConsumer(String streamName, String consumerName) {
+    return _js.consumer(streamName, consumerName);
   }
 
   /// Returns `null` if JetStream is available on the current account,

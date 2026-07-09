@@ -728,8 +728,11 @@ class _MyHomePageState extends State<MyHomePage>
         return SendMessageDialog(
           subjectController: subjectBoxController,
           dataController: dataBoxController,
-          onSend: (subject, data) {
-            sendMessage(subject, data);
+          jetStreamAvailable: jetStreamEnabled &&
+              _jetStreamManager != null &&
+              currentStatus == Status.connected,
+          onSend: (subject, data, useJetStream) {
+            sendMessage(subject, data, useJetStream);
           },
         );
       },
@@ -941,10 +944,37 @@ class _MyHomePageState extends State<MyHomePage>
     prefs.setString(constants.prefPrivateKeyName, '');
   }
 
-  void sendMessage(String subject, String data) {
-    natsClient.pubString(subject, data);
-    if (mounted) {
+  Future<void> sendMessage(String subject, String data,
+      [bool useJetStream = false]) async {
+    if (!useJetStream) {
+      natsClient.pubString(subject, data);
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      return;
+    }
+
+    final manager = _jetStreamManager;
+    if (manager == null) return;
+
+    try {
+      final ack = await manager.publish(subject, data);
+      if (!mounted) return;
       Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'Published to stream "${ack.stream}" at seq ${ack.sequence}.'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(describeJetStreamError(e)),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
     }
   }
 
