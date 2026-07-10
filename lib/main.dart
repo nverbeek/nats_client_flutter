@@ -12,6 +12,7 @@ import 'package:nats_client_flutter/regex_text_highlight.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -24,6 +25,7 @@ import 'send_message_dialog.dart';
 import 'help_dialog.dart';
 import 'settings_dialog.dart';
 import 'security_settings_dialog.dart';
+import 'update_checker.dart';
 
 void main() async {
   // must wait for widgets to initialize before we are able to use SharedPreferences
@@ -283,6 +285,8 @@ class _MyHomePageState extends State<MyHomePage>
   double messageFontSize = 14.0;
   bool messageSingleLine = false;
   int retryInterval = constants.defaultRetryInterval;
+  bool updateCheckEnabled = constants.defaultUpdateCheckEnabled;
+  OverlayEntry? _updateOverlayEntry;
 
   // authentication
   AuthMethod authMethod = AuthMethod.none;
@@ -314,6 +318,7 @@ class _MyHomePageState extends State<MyHomePage>
 
   @override
   void dispose() {
+    _updateOverlayEntry?.remove();
     if (!kIsWeb) {
       windowManager.removeListener(this);
     }
@@ -360,8 +365,126 @@ class _MyHomePageState extends State<MyHomePage>
           constants.defaultRetryInterval;
       jetStreamEnabled = prefs.getBool(constants.prefJetStreamEnabled) ??
           constants.defaultJetStreamEnabled;
+      updateCheckEnabled = prefs.getBool(constants.prefUpdateCheckEnabled) ??
+          constants.defaultUpdateCheckEnabled;
       loadAuthSettings(prefs);
     });
+
+    if (updateCheckEnabled) {
+      checkForUpdates();
+    }
+  }
+
+  /// Checks GitHub for a newer published release than the running app
+  /// version, and if found, surfaces a dismissible popover with a button to
+  /// view it. Best-effort and silent on failure — this is a convenience
+  /// notification, not something that should ever interrupt the user.
+  void checkForUpdates() async {
+    final release = await fetchLatestRelease();
+    if (release == null || !mounted) return;
+    if (!isNewerVersion(release.version, widget.appVersion)) return;
+
+    _showUpdateAvailablePopover(release);
+  }
+
+  /// Shows a small, self-dismissing-only-on-request popover in the
+  /// top-right corner announcing [release]. Uses a raw [OverlayEntry]
+  /// rather than a [SnackBar]/[MaterialBanner] — both anchor to the bottom
+  /// or span the full window width, which is a lot of visual weight for a
+  /// one-line "there's a new version" notice with a single link.
+  void _showUpdateAvailablePopover(ReleaseInfo release) {
+    _updateOverlayEntry?.remove();
+
+    final overlay = Overlay.of(context);
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (context) {
+        final theme = Theme.of(context);
+        return Positioned(
+          top: 16,
+          right: 16,
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            builder: (context, value, child) => Opacity(
+              opacity: value,
+              child: Transform.translate(
+                offset: Offset(0, (1 - value) * -12),
+                child: child,
+              ),
+            ),
+            child: Material(
+              color: theme.colorScheme.surfaceContainerHighest,
+              elevation: 6,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                width: 300,
+                padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.system_update_alt,
+                        color: theme.colorScheme.primary, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Update available',
+                            style: theme.textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 2),
+                          Text('Version ${release.version} is out.',
+                              style: theme.textTheme.bodySmall),
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Transform.translate(
+                              offset: const Offset(-8, 0),
+                              child: TextButton(
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 4),
+                                  minimumSize: const Size(0, 0),
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                onPressed: () {
+                                  launchUrl(Uri.parse(release.htmlUrl),
+                                      mode: LaunchMode.externalApplication);
+                                },
+                                child: const Text('View Release'),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 16),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      tooltip: 'Dismiss',
+                      onPressed: () {
+                        entry.remove();
+                        _updateOverlayEntry = null;
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    _updateOverlayEntry = entry;
+    overlay.insert(entry);
   }
 
   /// Loads persisted authentication settings, but only if the user
@@ -394,6 +517,7 @@ class _MyHomePageState extends State<MyHomePage>
     prefs.setBool('messageSingleLine', messageSingleLine);
     prefs.setInt(constants.prefRetryInterval, retryInterval);
     prefs.setBool(constants.prefJetStreamEnabled, jetStreamEnabled);
+    prefs.setBool(constants.prefUpdateCheckEnabled, updateCheckEnabled);
   }
 
   /// Handles tap logic to distinguish between single and double taps
@@ -827,15 +951,22 @@ class _MyHomePageState extends State<MyHomePage>
           initialSingleLine: messageSingleLine,
           initialRetryInterval: retryInterval,
           initialJetStreamEnabled: jetStreamEnabled,
+          initialUpdateCheckEnabled: updateCheckEnabled,
           onSave: (fontSize, singleLine, retryIntervalValue,
-              jetStreamEnabledValue) {
+              jetStreamEnabledValue, updateCheckEnabledValue) {
+            final updateCheckJustEnabled =
+                updateCheckEnabledValue && !updateCheckEnabled;
             setState(() {
               messageFontSize = fontSize;
               messageSingleLine = singleLine;
               retryInterval = retryIntervalValue;
               jetStreamEnabled = jetStreamEnabledValue;
+              updateCheckEnabled = updateCheckEnabledValue;
             });
             saveMessageSettings();
+            if (updateCheckJustEnabled) {
+              checkForUpdates();
+            }
           },
         );
       },

@@ -18,6 +18,7 @@ Welcome! This document is a living, context-bootstrapping architectural and oper
 - **JetStream Dashboard** (`lib/jetstream_*.dart`, toggleable via the "Enable JetStream" setting): monitor streams and consumers, create/purge/delete streams, create/delete consumers (push or pull, any ack policy), browse a stream's messages live, tail a specific consumer with Ack/Nak/Term actions, and publish with JetStream delivery acknowledgement from the regular Send Message dialog.
 - **Data Syntax Highlighting**: Automatic pretty-printing and syntax highlighting of JSON payloads inside detailed message dialogs.
 - **State & Size Persistence**: Remembers recent connection setups, theme preferences, and window size/position across runs.
+- **Update Notifications** (`lib/update_checker.dart`, toggleable via the "Check for Updates" setting): checks GitHub Releases for this repo on startup and, if newer than the running version, shows a dismissible top-right popover linking to the release. No auto-download/install — this app only distributes via GitHub Releases.
 
 ---
 
@@ -49,7 +50,8 @@ nats_client_flutter/
 │   ├── regex_text_highlight.dart  # Custom inline text highlighting engine using regex substring matching
 │   ├── security_settings_dialog.dart # TLS config file selector (Trusted Cert, Cert Chain, Private Key paths)
 │   ├── send_message_dialog.dart # Form dialog for publishing/sending standard, edit-replay, or JetStream payloads
-│   └── settings_dialog.dart    # App options dialog (font sizes, line wrapping, retry intervals, JetStream toggle)
+│   ├── settings_dialog.dart    # App options dialog (font sizes, line wrapping, retry intervals, JetStream toggle, update-check toggle)
+│   └── update_checker.dart     # Pure logic/network split for the GitHub Releases update check (fetchLatestRelease, isNewerVersion)
 ├── scripts/                    # Icon generator, mockup testing, and screenshot utilities
 │   ├── generate_icons.js       # Custom Node.js sharp-based cross-platform transparent icon generator
 │   ├── generate_icons.bat      # Helper batch script to run generate_icons.js
@@ -60,7 +62,7 @@ nats_client_flutter/
 │   └── package.json            # Node.js dependencies (sharp, png-to-ico) for icon generation
 ├── test/                       # Fast widget/unit tests — fakes only, no server needed (see Recipe F)
 │   ├── jetstream_dashboard_test.dart, jetstream_manager_test.dart, jetstream_*_dialog_test.dart, ...
-│   └── message_detail_dialog_test.dart, settings_dialog_test.dart, security_settings_dialog_test.dart, ...
+│   └── message_detail_dialog_test.dart, settings_dialog_test.dart, security_settings_dialog_test.dart, update_checker_test.dart, ...
 ├── integration_test/           # Real-backend end-to-end tests against a live nats-server (see Recipe E/F)
 │   ├── helpers/nats_test_app.dart       # pumpConnectedApp/disconnectApp/pumpUntil/waitForSnackBarGone
 │   ├── helpers/screenshot_signal.dart   # File-handshake helper used only by screenshot_tour_test.dart (see Recipe G)
@@ -88,6 +90,8 @@ nats_client_flutter/
 - **`markdown_widget`**: Parses and displays rich help text from markdown files.
 - **`flutter_svg`**: Renders SVG vector icons.
 - **`file_picker`**: Supports secure file path selection for TLS/MTLS configurations.
+- **`http`**: Used only by `lib/update_checker.dart` to call the GitHub Releases API — this app's sole outbound HTTP dependency beyond the NATS protocol itself.
+- **`url_launcher`**: Opens the GitHub release page in the system browser from the update-available popover.
 - **`integration_test`** (dev, SDK-native — no version to track): Drives the real app end-to-end against a real `nats-server`. See Recipe E/F.
 
 ### State & Execution Architecture
@@ -213,6 +217,14 @@ The images under `images/` (referenced from the README's "Screenshots" section) 
 The fixture credentials (`integration_test/fixtures/auth/*.conf` and `test-user.creds`) are throwaway, non-expiring, committed test material — not real secrets. The `.creds` one was generated once via the official `nsc` CLI (`nsc init` + `nsc generate config --mem-resolver`); there's no need to regenerate it unless it's lost. The NKey fixture's seed lives directly in `authentication_test.dart` next to its public key in `nkey.conf`.
 
 **Deliberately not automated**: the "wrong credentials show the friendly error" path. `dart_nats`'s `-ERR` handler completes an internal `Completer` that's never awaited on this app's `retryCount: -1` connect path, which Dart reports as an uncaught zone error — harmless for the real app (`runApp()`'s `runZonedGuarded` zone swallows it after logging) but fatal under `flutter test`'s stricter zone. If you need to re-verify this by hand, use a standalone `dart run --packages=.dart_tool/package_config.json some_probe.dart` script with your own `runZonedGuarded`, not `integration_test`.
+
+### Recipe I: Verifying Update Notifications
+`lib/update_checker.dart`'s `isNewerVersion()`/`fetchLatestRelease()` are covered by `test/update_checker_test.dart` against a mocked `http.Client` (`package:http/testing.dart`'s `MockClient`) — no live call needed for routine test runs. But the actual in-app popover (`_showUpdateAvailablePopover()` in `lib/main.dart`) has no fake-injection point and talks to the real `https://api.github.com/repos/nverbeek/nats_client_flutter/releases/latest`, so verifying *that* end-to-end means hitting the live API, not a local fixture like Recipe E/H's server-backed features.
+
+1. Temporarily lower `pubspec.yaml`'s `version:` below the real latest published tag (check it with `curl -s https://api.github.com/repos/nverbeek/nats_client_flutter/releases/latest` if unsure) — this makes the real API register as "newer" without needing a mock.
+2. Drive it with a throwaway `integration_test/` file (`app.main()` + `pumpUntil(() => find.text('Update available').evaluate().isNotEmpty)`, same pattern as every other integration test) and run it via `flutter test <file> -d windows`. Don't commit this file — delete it once you're done; there's nothing here a fixture server could stand in for.
+3. Restore `pubspec.yaml`'s real version afterward. Forgetting this step means the shipped build will nag about "updates" that don't exist.
+4. To check the negative path (no popover when already up to date), temporarily set the version to match the real latest tag instead and confirm no popover appears within a few seconds.
 
 ---
 

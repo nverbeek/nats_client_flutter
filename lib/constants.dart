@@ -43,12 +43,16 @@ const String prefLastPositionX = "LAST_POSITION_X";
 const String prefLastPositionY = "LAST_POSITION_Y";
 const String prefRetryInterval = "RETRY_INTERVAL";
 const String prefJetStreamEnabled = "JETSTREAM_ENABLED";
+const String prefUpdateCheckEnabled = "UPDATE_CHECK_ENABLED";
 
 // retry interval options (in seconds)
 const int defaultRetryInterval = 10;
 
 // JetStream defaults
 const bool defaultJetStreamEnabled = true;
+
+// update check defaults
+const bool defaultUpdateCheckEnabled = true;
 
 // authentication preference keys
 const String prefAuthMethod = "AUTH_METHOD";

@@ -13,6 +13,7 @@ The application provides a settings dialog (⚙️ button in the toolbar) with t
 - **Single Line Messages**: If enabled, each message in the list is displayed on a single line (with ellipsis for overflow). If disabled, messages can span multiple lines (up to 5 lines).
 - **Reconnect Interval**: Controls the amount of time between reconnection attempts.
 - **Enable JetStream**: Shows or hides the JetStream tab (see below). On by default; turning it off doesn't affect your connection or the Live Messages tab, it just hides the JetStream UI for users who don't need it.
+- **Check for Updates**: Controls whether the app checks GitHub for a newer release on startup (see Update Notifications below). On by default.
 
 # Connection
 ## Schemes
@@ -137,3 +138,10 @@ The bar also shows:
 - **Message Count**: Displays the total number of messages currently in the list, as well as how many are displaying (if a filter is applied).
 - **URL**: The current fully-qualified URL being used. If the 🔒 icon appears, it means the connection is using TLS.
 - **Status**: Current connection status.
+
+# Update Notifications
+This app is only distributed through GitHub Releases — there's no app-store or in-place auto-update mechanism. To help you know when a new version is out, the app checks GitHub's Releases API once on startup (a single anonymous request; no data about you or your connections is sent).
+
+If a newer version than the one you're running has been published, a small popover appears in the top-right corner with a **View Release** button that opens the release page in your browser, and an **X** to dismiss it for the rest of the session. Nothing downloads or installs automatically — you still grab the new build from GitHub yourself, same as always.
+
+This check can be turned off entirely via the **Check for Updates** toggle in Settings.

@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nats_client_flutter/settings_dialog.dart';
 
 void main() {
-  Widget buildDialog(void Function(double, bool, int, bool) onSave) {
+  Widget buildDialog(void Function(double, bool, int, bool, bool) onSave) {
     return MaterialApp(
       home: Scaffold(
         body: SettingsDialog(
@@ -11,6 +11,7 @@ void main() {
           initialSingleLine: false,
           initialRetryInterval: 5,
           initialJetStreamEnabled: true,
+          initialUpdateCheckEnabled: true,
           onSave: onSave,
         ),
       ),
@@ -18,21 +19,22 @@ void main() {
   }
 
   testWidgets('shows the initial values', (tester) async {
-    await tester.pumpWidget(buildDialog((_, __, ___, ____) {}));
+    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____) {}));
 
     expect(find.text('14'), findsOneWidget);
     expect(find.text('5 seconds'), findsOneWidget);
 
-    final singleLineSwitch =
-        tester.widget<Switch>(find.byType(Switch).first);
+    final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
+    final singleLineSwitch = switches[0];
+    final jetStreamSwitch = switches[1];
+    final updateCheckSwitch = switches[2];
     expect(singleLineSwitch.value, isFalse);
-
-    final jetStreamSwitch = tester.widget<Switch>(find.byType(Switch).last);
     expect(jetStreamSwitch.value, isTrue);
+    expect(updateCheckSwitch.value, isTrue);
   });
 
   testWidgets('toggling Single Line Messages flips its switch', (tester) async {
-    await tester.pumpWidget(buildDialog((_, __, ___, ____) {}));
+    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____) {}));
 
     await tester.tap(find.byType(Switch).first);
     await tester.pump();
@@ -43,18 +45,29 @@ void main() {
   });
 
   testWidgets('toggling Enable JetStream flips its switch', (tester) async {
-    await tester.pumpWidget(buildDialog((_, __, ___, ____) {}));
+    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____) {}));
+
+    final jetStreamSwitchFinder = find.byType(Switch).at(1);
+    await tester.tap(jetStreamSwitchFinder);
+    await tester.pump();
+
+    final jetStreamSwitch = tester.widget<Switch>(jetStreamSwitchFinder);
+    expect(jetStreamSwitch.value, isFalse);
+  });
+
+  testWidgets('toggling Check for Updates flips its switch', (tester) async {
+    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____) {}));
 
     await tester.tap(find.byType(Switch).last);
     await tester.pump();
 
-    final jetStreamSwitch = tester.widget<Switch>(find.byType(Switch).last);
-    expect(jetStreamSwitch.value, isFalse);
+    final updateCheckSwitch = tester.widget<Switch>(find.byType(Switch).last);
+    expect(updateCheckSwitch.value, isFalse);
   });
 
   testWidgets('changing the Reconnect Interval dropdown updates the value',
       (tester) async {
-    await tester.pumpWidget(buildDialog((_, __, ___, ____) {}));
+    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____) {}));
 
     await tester.tap(find.text('5 seconds'));
     await tester.pumpAndSettle();
@@ -66,7 +79,7 @@ void main() {
 
   testWidgets('dragging the font size slider updates the displayed value',
       (tester) async {
-    await tester.pumpWidget(buildDialog((_, __, ___, ____) {}));
+    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____) {}));
 
     expect(find.text('14'), findsOneWidget);
     await tester.drag(find.byType(Slider), const Offset(200, 0));
@@ -89,7 +102,8 @@ void main() {
                   initialSingleLine: false,
                   initialRetryInterval: 5,
                   initialJetStreamEnabled: true,
-                  onSave: (_, __, ___, ____) => saveCalled = true,
+                  initialUpdateCheckEnabled: true,
+                  onSave: (_, __, ___, ____, _____) => saveCalled = true,
                 ),
               ),
               child: const Text('Open'),
@@ -114,6 +128,7 @@ void main() {
     bool? savedSingleLine;
     int? savedRetryInterval;
     bool? savedJetStreamEnabled;
+    bool? savedUpdateCheckEnabled;
 
     await tester.pumpWidget(MaterialApp(
       home: Builder(
@@ -127,11 +142,14 @@ void main() {
                   initialSingleLine: false,
                   initialRetryInterval: 5,
                   initialJetStreamEnabled: true,
-                  onSave: (fontSize, singleLine, retryInterval, jetStream) {
+                  initialUpdateCheckEnabled: true,
+                  onSave: (fontSize, singleLine, retryInterval, jetStream,
+                      updateCheck) {
                     savedFontSize = fontSize;
                     savedSingleLine = singleLine;
                     savedRetryInterval = retryInterval;
                     savedJetStreamEnabled = jetStream;
+                    savedUpdateCheckEnabled = updateCheck;
                   },
                 ),
               ),
@@ -154,6 +172,7 @@ void main() {
     expect(savedSingleLine, isTrue);
     expect(savedRetryInterval, 5);
     expect(savedJetStreamEnabled, isTrue);
+    expect(savedUpdateCheckEnabled, isTrue);
     expect(find.byType(SettingsDialog), findsNothing);
   });
 }

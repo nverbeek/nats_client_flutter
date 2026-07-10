@@ -1,6 +1,6 @@
 # NATS Client UI — Feature Expansion Roadmap (`ROADMAP.md`)
 
-This living roadmap details the development plan, UI architecture, and implementation milestones for expanding the **NATS Client UI** with core advanced NATS ecosystem capabilities: **JetStream (Phase B)**, **Key-Value Stores (Phase A)**, and **Expanded Authentication (Phase D)**.
+This living roadmap details the development plan, UI architecture, and implementation milestones for expanding the **NATS Client UI** with core advanced NATS ecosystem capabilities: **JetStream (Phase B)**, **Key-Value Stores (Phase A)**, **Expanded Authentication (Phase D)**, and **Update Notifications (Phase E)**.
 
 These features are made possible by our successful migration to the official mainline `dart_nats: ^1.1.1` package.
 
@@ -12,6 +12,7 @@ These features are made possible by our successful migration to the official mai
 - [ ] **Milestone 2**: Design & Implement **Phase A: Key-Value (KV) Store Inspector** (Medium Priority).
 - [~] **Milestone 3**: Clean up, finalize error handling, write widget/unit tests, and bundle releases. Quality Assurance and Platform Verification are done for Windows, Linux, and Web (including confirming JetStream works over the web target's forced `ws://` scheme); macOS is compile-verified in CI only — functional verification still needs someone with a Mac to run it once.
 - [x] **Milestone 4**: Design & Implement **Phase D: Expanded Authentication Support** (username/password, token, NKey, `.creds`) (Medium Priority). Implementation, docs, unit/widget tests, and a live-server verification pass (correct + wrong credentials) are done for all four methods.
+- [x] **Milestone 5**: Design & Implement **Phase E: Update Notifications** (Low Priority). Checks GitHub Releases on startup and surfaces a dismissible in-app notice when a newer version is published; opt-out toggle in Settings. Implementation, unit tests, and a live-API verification pass (both the update-available and up-to-date paths) are done.
 
 ---
 
@@ -204,3 +205,45 @@ Unlike host/port/subjects/TLS cert paths, which are always remembered, the field
   - **Credentials File (`.creds`)**: a throwaway, non-expiring operator/account/user was generated with `nsc` (the official `nats-io/nsc` CLI, downloaded temporarily into the OS scratch dir with the user's explicit go-ahead and deleted afterward; only the generated config/`.creds` fixture files were kept). Worked correctly on the first try, no code changes needed.
   - Because NATS's simple `authorization` block (user/pass, token, bare nkey) and its operator/JWT mode are mutually exclusive server configs, `.github/workflows/build.yml`'s `test` job starts one disposable `nats-server` container per method (as plain steps, not `services:`, since `services:` start before `actions/checkout` — too early to mount these config files) alongside the existing shared JetStream service.
   - Along the way this also surfaced a pre-existing `dart_nats` quirk (not introduced by this milestone, and common to all four methods): when the server's `-ERR Authorization Violation` closes the connection, an internal `Completer` that nothing ever awaits gets `completeError()`'d, which Dart reports as an uncaught zone error. Confirmed harmless for the real app — `runApp()` already runs inside a `runZonedGuarded` zone, which swallows it after logging (verified with standalone `runZonedGuarded` probes against each server config); `flutter test`'s stricter zone is what makes it look fatal there, which is why only the *positive* (correct-credentials) path was automated — see `integration_test/authentication_test.dart`'s doc comment and AGENTS.md's Recipe H for why the negative path is deliberately left as a manual/standalone-probe check instead. Not chased further since fixing it for real would mean changing this app's global reconnect/retry semantics (`retryCount: -1`), a bigger change than this milestone's scope.
+
+---
+
+## Milestone 5: Phase E — Update Notifications (Low Priority)
+
+### Objective
+This app only distributes through GitHub Releases — there's no app-store or in-place auto-update mechanism, so a user has no way of knowing a new version exists short of manually checking the repo. This milestone adds a lightweight, opt-out check on startup: on launch, the app asks GitHub's Releases API for this repo's latest published release and, if it's newer than the running build, shows a dismissible in-app notice with a button to the release page. No download/install automation — the user still gets the new build from GitHub themselves, same as today.
+
+### UI Architecture & Concept
+On startup (after preferences load), the app calls `GET https://api.github.com/repos/nverbeek/nats_client_flutter/releases/latest` (no auth required; a single request per launch is well within GitHub's anonymous rate limit) and compares its `tag_name` against `PackageInfo.fromPlatform()`'s version, already used elsewhere in the app (e.g. the Help dialog's `%APP_VERSION%`). If newer, a small popover fades/slides in at the top-right of the window, built from a raw `OverlayEntry` rather than a `SnackBar` or `MaterialBanner` — both of those anchor to the bottom or span the full window width, which is a lot of visual weight for a one-line "there's a new version" notice with a single link:
+
+```
++---------------------------------------------------------------------------------+
+|  NATS Client UI                                        [SETTINGS] [💡]   +-----+
+|                                                                           |🔄 Up|
+|                                                                           |date |
+|                                                                           |avail|
+|                                                                           |able |
+|                                                                           |     |
+|                                                                           |Vers.|
+|                                                                           |1.1.0|
+|                                                                           |is   |
+|                                                                           |out. |
+|                                                                           |     |
+|                                                                           |[View|
+|                                                                           |Rel.]|
++---------------------------------------------------------------------------------+
+```
+
+(In practice it's a compact ~300px rounded card in the corner, not a full column — see the screenshot in the Real-API verification note below.) "View Release" opens the GitHub release page in the system browser via `url_launcher`; the small `X` in its corner dismisses it for the rest of the session (it isn't persisted — the next launch checks again). The check itself is opt-out via a new "Check for Updates" toggle in the existing Settings dialog, alongside "Enable JetStream", on by default.
+
+### Implementation Checklist
+- [x] **`lib/update_checker.dart`** (new): pure-logic/network split, following the same pattern as `lib/jetstream_manager.dart` and `lib/auth_manager.dart` — `fetchLatestRelease()` hits the GitHub Releases API (injectable `http.Client` for tests, 5s timeout, fails silently to `null` on any error/malformed response since this is a best-effort convenience check, never something that should interrupt the user) and `isNewerVersion()` does a numeric (not lexicographic) dotted-version comparison so `1.2.10` correctly beats `1.2.9`.
+- [x] **`lib/settings_dialog.dart`**: added a "Check for Updates" `Switch` below "Enable JetStream", following the exact same row pattern; `onSave` callback extended with the new bool.
+- [x] **`lib/main.dart`**: `checkForUpdates()` runs once after preferences load if the setting is enabled (and again immediately if the user just flipped it on from within Settings, for instant feedback), calling `_showUpdateAvailablePopover()` when `isNewerVersion()` is true. That method inserts a single `OverlayEntry` (tracked in `_updateOverlayEntry` and cleaned up in `dispose()`) holding a `Material` card with a `TweenAnimationBuilder`-driven fade/slide-in, positioned via `Positioned(top: 16, right: 16)` over the whole window.
+- [x] **`lib/constants.dart`**: new `prefUpdateCheckEnabled` preference key + `defaultUpdateCheckEnabled = true`.
+- [x] Added `http` and `url_launcher` to `pubspec.yaml` (this app's first outbound HTTP dependency beyond the NATS protocol itself).
+- [x] **Unit tests**: `test/update_checker_test.dart` covers `isNewerVersion()` (major/minor/patch bumps, equal versions, numeric-vs-lexicographic edge case, build-suffix stripping, missing trailing parts) and `fetchLatestRelease()` against a mocked `http.Client` (`package:http/testing.dart`'s `MockClient` — success, non-200, malformed JSON, missing fields, thrown exception). `test/settings_dialog_test.dart` extended with the new toggle's initial state, tap-to-flip, and its value flowing through `onSave`.
+- [x] **Real-API verification**: since this app has no test/staging GitHub repo, verification ran against the real `nverbeek/nats_client_flutter` releases API from a real compiled Windows build (`flutter test <file> -d windows`) — no mocking, via a throwaway `integration_test/` file deleted afterward (not committed — this check is exercised live, not via a fixture server like the JetStream/auth milestones, since GitHub Releases isn't something this project can stand up a disposable instance of). See `AGENTS.md`'s new **Recipe I: Verifying Update Notifications** for the repeatable steps. Three passes:
+  - The first pass used a `MaterialBanner`; it worked (appeared with working actions when the local version was set below the real latest tag `v1.0.11`, stayed hidden at version parity) but was replaced after user feedback that a full-width banner was too visually heavy for a one-line notice.
+  - After switching to the `OverlayEntry`-based top-right popover, re-verified against the real API again: confirmed the popover renders at `Positioned(top: 16, right: 16)` (not a `SnackBar` or `MaterialBanner`), shows the correct version text and a working "View Release" button, and its dismiss (`X`) button removes it.
+  - After a UX nit that the "View Release" button's hover highlight hugged the text with no breathing room, added horizontal padding (compensated with a `Transform.translate` so the visible text stays aligned with the version line above it). Verified programmatically against the live popover: hover/hit width grew by 16px while the rendered text's on-screen position stayed within a pixel of its prior spot.

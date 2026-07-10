@@ -24,6 +24,7 @@ This application currently supports Windows, Linux, macOS and Web platforms.
   - Create, purge, and delete streams; create and delete consumers (push or pull, any ack policy)
   - Browse a stream's messages live, or tail a specific consumer and Ack / Nak / Term individual messages
   - Publish messages with JetStream delivery acknowledgement straight from the regular Send Message dialog
+- **Update notifications** (optional, on by default): checks this repo's GitHub Releases on startup and shows a small dismissible popover with a link if a newer version is available. This app only distributes through GitHub, so nothing downloads or installs automatically — it just tells you a new build exists.
 
 # Screenshots
 <br/>
