@@ -29,14 +29,30 @@ class JetStreamMessageView extends StatefulWidget {
   });
 
   @override
-  State<JetStreamMessageView> createState() => _JetStreamMessageViewState();
+  State<JetStreamMessageView> createState() => JetStreamMessageViewState();
 }
 
-class _JetStreamMessageViewState extends State<JetStreamMessageView> {
+class JetStreamMessageViewState extends State<JetStreamMessageView> {
   OrderedConsumer? _consumer;
   StreamSubscription<Message>? _subscription;
   final List<Message> _messages = [];
+  List<Message> _filteredMessages = [];
   String? _errorMessage;
+
+  String _currentFilter = '';
+  String _currentFind = '';
+  final _filterController = TextEditingController();
+  final _findController = TextEditingController();
+  final _filterFocusNode = FocusNode();
+  final _findFocusNode = FocusNode();
+
+  /// Lets the app-wide Ctrl+F / Ctrl+Shift+F shortcut handler in `main.dart`
+  /// reach this view's Find field via the `GlobalKey` held by
+  /// `JetStreamDashboard` when this view is the one currently showing.
+  void focusFindField() => _findFocusNode.requestFocus();
+
+  /// See [focusFindField].
+  void focusFilterField() => _filterFocusNode.requestFocus();
 
   @override
   void initState() {
@@ -50,6 +66,7 @@ class _JetStreamMessageViewState extends State<JetStreamMessageView> {
     if (oldWidget.streamName != widget.streamName) {
       _stopBrowsing();
       _messages.clear();
+      _filteredMessages = [];
       _errorMessage = null;
       _startBrowsing();
     }
@@ -58,6 +75,10 @@ class _JetStreamMessageViewState extends State<JetStreamMessageView> {
   @override
   void dispose() {
     _stopBrowsing();
+    _filterController.dispose();
+    _findController.dispose();
+    _filterFocusNode.dispose();
+    _findFocusNode.dispose();
     super.dispose();
   }
 
@@ -69,6 +90,7 @@ class _JetStreamMessageViewState extends State<JetStreamMessageView> {
         if (!mounted) return;
         setState(() {
           _messages.insert(0, message);
+          _runFilter();
         });
       },
       onError: (Object err) {
@@ -91,9 +113,21 @@ class _JetStreamMessageViewState extends State<JetStreamMessageView> {
     setState(() {
       _errorMessage = null;
       _messages.clear();
+      _filteredMessages = [];
     });
     _stopBrowsing();
     _startBrowsing();
+  }
+
+  void _runFilter() {
+    if (_currentFilter.isEmpty) {
+      _filteredMessages = _messages;
+    } else {
+      _filteredMessages = _messages
+          .where((message) =>
+              message.string.toLowerCase().contains(_currentFilter.toLowerCase()))
+          .toList();
+    }
   }
 
   Future<void> _showDetailDialog(Message message) async {
@@ -159,7 +193,72 @@ class _JetStreamMessageViewState extends State<JetStreamMessageView> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              Text('${_messages.length} received'),
+              Text(_currentFilter.isEmpty
+                  ? '${_messages.length} received'
+                  : '${_filteredMessages.length} / ${_messages.length} shown'),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _filterController,
+                  focusNode: _filterFocusNode,
+                  onChanged: (value) {
+                    setState(() {
+                      _currentFilter = value;
+                      _runFilter();
+                    });
+                  },
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    hintText: 'Filter',
+                    labelText: 'Filter',
+                    prefixIcon: const Icon(Icons.filter_list),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        setState(() {
+                          _filterController.clear();
+                          _currentFilter = '';
+                          _runFilter();
+                        });
+                      },
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextFormField(
+                  controller: _findController,
+                  focusNode: _findFocusNode,
+                  onChanged: (value) {
+                    setState(() {
+                      _currentFind = value;
+                    });
+                  },
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    hintText: 'Find',
+                    labelText: 'Find',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        setState(() {
+                          _findController.clear();
+                          _currentFind = '';
+                        });
+                      },
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -180,12 +279,16 @@ class _JetStreamMessageViewState extends State<JetStreamMessageView> {
           const Expanded(
             child: Center(child: Text('Waiting for messages...')),
           )
+        else if (_filteredMessages.isEmpty)
+          const Expanded(
+            child: Center(child: Text('No messages match filter.')),
+          )
         else
           Expanded(
             child: ListView.builder(
-              itemCount: _messages.length,
+              itemCount: _filteredMessages.length,
               itemBuilder: (context, index) {
-                final message = _messages[index];
+                final message = _filteredMessages[index];
                 final seq = message.streamSequence;
                 return Material(
                   key: ValueKey(message.hashCode),
@@ -193,7 +296,7 @@ class _JetStreamMessageViewState extends State<JetStreamMessageView> {
                     tileColor: index % 2 == 0 ? rowEvenColor : rowOddColor,
                     title: RegexTextHighlight(
                       text: message.string,
-                      searchTerm: '',
+                      searchTerm: _currentFind,
                       fontSize: 14,
                       highlightStyle: TextStyle(
                         background: Paint()

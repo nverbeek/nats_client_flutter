@@ -20,10 +20,10 @@ class JetStreamDashboard extends StatefulWidget {
   const JetStreamDashboard({super.key, required this.manager});
 
   @override
-  State<JetStreamDashboard> createState() => _JetStreamDashboardState();
+  State<JetStreamDashboard> createState() => JetStreamDashboardState();
 }
 
-class _JetStreamDashboardState extends State<JetStreamDashboard> {
+class JetStreamDashboardState extends State<JetStreamDashboard> {
   bool _checkingAvailability = false;
   String? _availabilityError;
 
@@ -41,6 +41,28 @@ class _JetStreamDashboardState extends State<JetStreamDashboard> {
   bool _tailingConsumerExplicitAck = false;
 
   bool _mutating = false;
+
+  /// Lets the app-wide Ctrl+F / Ctrl+Shift+F shortcut handler in `main.dart`
+  /// reach the Browse Messages view's Filter/Find fields when it's the one
+  /// currently showing, via the `GlobalKey` `main.dart` holds on this state.
+  final GlobalKey<JetStreamMessageViewState> _browseViewKey = GlobalKey();
+
+  /// Returns whether the Browse Messages view is currently showing (and, if
+  /// so, focuses its Find field).
+  bool focusFindField() {
+    final state = _browseViewKey.currentState;
+    if (state == null) return false;
+    state.focusFindField();
+    return true;
+  }
+
+  /// See [focusFindField].
+  bool focusFilterField() {
+    final state = _browseViewKey.currentState;
+    if (state == null) return false;
+    state.focusFilterField();
+    return true;
+  }
 
   @override
   void initState() {
@@ -621,7 +643,7 @@ class _JetStreamDashboardState extends State<JetStreamDashboard> {
 
     if (_browsing) {
       return JetStreamMessageView(
-        key: ValueKey(_selectedStreamName),
+        key: _browseViewKey,
         streamName: _selectedStreamName!,
         manager: widget.manager!,
         onClose: () => setState(() => _browsing = false),

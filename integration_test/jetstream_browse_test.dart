@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:nats_client_flutter/regex_text_highlight.dart';
 
 import 'helpers/nats_test_app.dart';
 
@@ -16,6 +17,22 @@ import 'helpers/nats_test_app.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
+  /// The Filter/Find fields both set `hintText` and `labelText` to the same
+  /// string, so `find.widgetWithText` on that text is ambiguous; their
+  /// distinct prefix icons aren't. See the same helper in
+  /// `live_messages_interactions_test.dart`.
+  Finder fieldWithPrefixIcon(IconData icon) {
+    return find.ancestor(
+        of: find.byIcon(icon), matching: find.byType(TextFormField));
+  }
+
+  /// Matches the custom `RegexTextHighlight` widget the message list uses
+  /// for row content — deliberately not `find.text()`, which also matches
+  /// `EditableText` and double-counts every unstyled row via its internal
+  /// `RichText`. See the same helper in `live_messages_interactions_test.dart`.
+  Finder messageRowText(String payload) => find.byWidgetPredicate(
+      (widget) => widget is RegexTextHighlight && widget.text == payload);
+
   testWidgets(
       'Browse Messages shows published messages and its row menu works',
       (tester) async {
@@ -25,6 +42,7 @@ void main() {
     final runId = DateTime.now().microsecondsSinceEpoch;
     final streamName = 'it_browse_$runId';
     final payload = 'it-browse-payload-$runId';
+    final payload2 = 'it-browse-payload-2-$runId';
 
     addTearDown(() async {
       // Best-effort cleanup in case an assertion above failed first.
@@ -59,24 +77,31 @@ void main() {
         () => find.text('Stream "$streamName" created.').evaluate().isNotEmpty);
     await waitForSnackBarGone(tester);
 
-    // 2. Publish a message into it via the Live Messages tab.
+    // 2. Publish two messages into it via the Live Messages tab (two so
+    // Filter/Find below have something to distinguish).
     await tester.tap(find.text('Live Messages'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.send));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-        find.widgetWithText(TextFormField, 'Subject'), '$streamName.created');
-    await tester.enterText(find.widgetWithText(TextFormField, 'Data'), payload);
-    await tester.tap(find.text('Publish via JetStream (get delivery ack)'));
-    await tester.pump();
-    await tester.tap(find.widgetWithText(TextButton, 'Send'));
-    await pumpUntil(
-        tester,
-        () => find
-            .textContaining('Published to stream "$streamName" at seq')
-            .evaluate()
-            .isNotEmpty);
-    await waitForSnackBarGone(tester);
+    Future<void> publishToStream(String data) async {
+      await tester.tap(find.byIcon(Icons.send));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextFormField, 'Subject'),
+          '$streamName.created');
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Data'), data);
+      await tester.tap(find.text('Publish via JetStream (get delivery ack)'));
+      await tester.pump();
+      await tester.tap(find.widgetWithText(TextButton, 'Send'));
+      await pumpUntil(
+          tester,
+          () => find
+              .textContaining('Published to stream "$streamName" at seq')
+              .evaluate()
+              .isNotEmpty);
+      await waitForSnackBarGone(tester);
+    }
+
+    await publishToStream(payload);
+    await publishToStream(payload2);
 
     // 3. Back to JetStream (re-select — dashboard state doesn't survive the
     // tab round trip, see jetstream_lifecycle_test.dart), then Browse.
@@ -88,10 +113,77 @@ void main() {
     await tester.tap(find.widgetWithText(ElevatedButton, 'Browse Messages'));
     await tester.pumpAndSettle();
 
-    await pumpUntil(tester, () => find.text(payload).evaluate().isNotEmpty);
+    await pumpUntil(tester, () => find.text(payload2).evaluate().isNotEmpty);
     expect(find.textContaining('Browsing: $streamName'), findsOneWidget);
+    expect(messageRowText(payload), findsOneWidget);
+    expect(messageRowText(payload2), findsOneWidget);
 
-    // 4. Row menu: Detail opens the Message Detail dialog.
+    // 4. Filter narrows the list to matching messages only.
+    await tester.enterText(fieldWithPrefixIcon(Icons.filter_list), payload2);
+    await tester.pump();
+    expect(messageRowText(payload2), findsOneWidget);
+    expect(messageRowText(payload), findsNothing);
+
+    await tester.tap(find.descendant(
+        of: fieldWithPrefixIcon(Icons.filter_list),
+        matching: find.byIcon(Icons.clear)));
+    await tester.pump();
+    expect(messageRowText(payload), findsOneWidget);
+    expect(messageRowText(payload2), findsOneWidget);
+
+    // 5. Find highlights matches without hiding anything else.
+    await tester.enterText(fieldWithPrefixIcon(Icons.search), payload2);
+    await tester.pump();
+    expect(messageRowText(payload), findsOneWidget);
+    expect(messageRowText(payload2), findsOneWidget);
+
+    await tester.tap(find.descendant(
+        of: fieldWithPrefixIcon(Icons.search),
+        matching: find.byIcon(Icons.clear)));
+    await tester.pump();
+
+    // 6. Ctrl+F / Ctrl+Shift+F reach this view's own Find/Filter fields —
+    // the app-wide shortcut handler in `lib/main.dart` is tab-aware and
+    // routes to `JetStreamDashboardState.focusFindField()`/
+    // `focusFilterField()` (which delegate to this view via a `GlobalKey`)
+    // whenever the JetStream tab is showing Browse Messages, same as it
+    // routes to the Live Messages tab's fields otherwise — see the same
+    // shortcut assertions in `live_messages_interactions_test.dart`.
+    bool fieldHasFocus(IconData icon) =>
+        Focus.of(tester.element(fieldWithPrefixIcon(icon))).hasFocus;
+
+    await tester.tap(fieldWithPrefixIcon(Icons.filter_list));
+    await tester.pump();
+    expect(fieldHasFocus(Icons.filter_list), isTrue);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+    await tester.pump();
+    expect(fieldHasFocus(Icons.search), isTrue,
+        reason: 'Ctrl+F should move focus to this view\'s Find field');
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+    await tester.pump();
+    expect(fieldHasFocus(Icons.filter_list), isTrue,
+        reason: 'Ctrl+Shift+F should move focus to this view\'s Filter field');
+
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+
+    // Filter back down to a single row so the row-menu steps below (which
+    // assert against `payload` specifically) have exactly one
+    // `PopupMenuButton` to target.
+    await tester.enterText(fieldWithPrefixIcon(Icons.filter_list), payload);
+    await tester.pump();
+    expect(messageRowText(payload), findsOneWidget);
+    expect(messageRowText(payload2), findsNothing);
+
+    // 7. Row menu: Detail opens the Message Detail dialog.
     await tester.tap(find.byType(PopupMenuButton<String>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Detail'));
@@ -100,7 +192,7 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'Close'));
     await tester.pumpAndSettle();
 
-    // 5. Row menu: Copy copies the payload to the clipboard.
+    // 8. Row menu: Copy copies the payload to the clipboard.
     final copiedData = <String>[];
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,
@@ -120,7 +212,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(copiedData, contains(payload));
 
-    // 6. Back to stream details, then clean up.
+    // 9. Back to stream details, then clean up.
     await tester.tap(find.byTooltip('Back to stream details'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(OutlinedButton, 'Delete Stream'));

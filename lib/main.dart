@@ -259,6 +259,8 @@ class _MyHomePageState extends State<MyHomePage>
   // JetStream tab
   bool jetStreamEnabled = constants.defaultJetStreamEnabled;
   late TabController _tabController;
+  final GlobalKey<JetStreamDashboardState> _jetStreamDashboardKey =
+      GlobalKey();
 
   // Add a ScrollController for the ListView
   final ScrollController _listScrollController = ScrollController();
@@ -1439,12 +1441,26 @@ class _MyHomePageState extends State<MyHomePage>
             if (HardwareKeyboard.instance.isControlPressed ||
                 HardwareKeyboard.instance.isMetaPressed) {
               if (HardwareKeyboard.instance.isShiftPressed) {
-                // Ctrl+Shift+F or Cmd+Shift+F - Focus Filter field
-                _filterFocusNode.requestFocus();
+                // Ctrl+Shift+F or Cmd+Shift+F - Focus Filter field.
+                // On the JetStream tab, prefer the Browse Messages view's
+                // own Filter field (if it's currently showing); otherwise
+                // fall back to the Live Messages tab's.
+                final focusedJetStream = _tabController.index == 1 &&
+                    (_jetStreamDashboardKey.currentState?.focusFilterField() ??
+                        false);
+                if (!focusedJetStream) {
+                  _filterFocusNode.requestFocus();
+                }
                 return KeyEventResult.handled;
               } else {
-                // Ctrl+F or Cmd+F - Focus Find field
-                _findFocusNode.requestFocus();
+                // Ctrl+F or Cmd+F - Focus Find field (same tab-aware logic
+                // as above).
+                final focusedJetStream = _tabController.index == 1 &&
+                    (_jetStreamDashboardKey.currentState?.focusFindField() ??
+                        false);
+                if (!focusedJetStream) {
+                  _findFocusNode.requestFocus();
+                }
                 return KeyEventResult.handled;
               }
             }
@@ -1676,6 +1692,7 @@ class _MyHomePageState extends State<MyHomePage>
                         _buildLiveMessagesTab(
                             messageRowEvenColor, messageRowOddColor),
                         JetStreamDashboard(
+                          key: _jetStreamDashboardKey,
                           manager: currentStatus == Status.connected
                               ? _jetStreamManager
                               : null,

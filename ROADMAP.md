@@ -13,6 +13,7 @@ These features are made possible by our successful migration to the official mai
 - [~] **Milestone 3**: Clean up, finalize error handling, write widget/unit tests, and bundle releases. Quality Assurance and Platform Verification are done for Windows, Linux, and Web (including confirming JetStream works over the web target's forced `ws://` scheme); macOS is compile-verified in CI only — functional verification still needs someone with a Mac to run it once.
 - [x] **Milestone 4**: Design & Implement **Phase D: Expanded Authentication Support** (username/password, token, NKey, `.creds`) (Medium Priority). Implementation, docs, unit/widget tests, and a live-server verification pass (correct + wrong credentials) are done for all four methods.
 - [x] **Milestone 5**: Design & Implement **Phase E: Update Notifications** (Low Priority). Checks GitHub Releases on startup and surfaces a dismissible in-app notice when a newer version is published; opt-out toggle in Settings. Implementation, unit tests, and a live-API verification pass (both the update-available and up-to-date paths) are done.
+- [ ] **Milestone 6**: Design & Implement **Phase F: Live Message List UX Improvements** (Medium Priority). Bring Filter/Find to the JetStream Browse Messages view, stop the message lists from yanking the user's scroll position when new messages arrive while scrolled away from the top, and add a Pause control.
 
 ---
 
@@ -247,3 +248,31 @@ On startup (after preferences load), the app calls `GET https://api.github.com/r
   - The first pass used a `MaterialBanner`; it worked (appeared with working actions when the local version was set below the real latest tag `v1.0.11`, stayed hidden at version parity) but was replaced after user feedback that a full-width banner was too visually heavy for a one-line notice.
   - After switching to the `OverlayEntry`-based top-right popover, re-verified against the real API again: confirmed the popover renders at `Positioned(top: 16, right: 16)` (not a `SnackBar` or `MaterialBanner`), shows the correct version text and a working "View Release" button, and its dismiss (`X`) button removes it.
   - After a UX nit that the "View Release" button's hover highlight hugged the text with no breathing room, added horizontal padding (compensated with a `Transform.translate` so the visible text stays aligned with the version line above it). Verified programmatically against the live popover: hover/hit width grew by 16px while the rendered text's on-screen position stayed within a pixel of its prior spot.
+
+---
+
+## Milestone 6: Phase F — Live Message List UX Improvements (Medium Priority)
+
+### Objective
+Two related list-UX gaps affect both the Live Messages tab (`lib/main.dart`) and the JetStream "Browse Messages" view (`lib/jetstream_message_view.dart`), which share the same newest-message-at-top `ListView.builder` pattern and the `RegexTextHighlight` widget:
+
+1. **JetStream Browse Messages has no Filter/Find.** The Live Messages tab has both (`filterBoxController`/`findBoxController`, Ctrl+F / Ctrl+Shift+F shortcuts), but `JetStreamMessageView` has neither — there's no way to narrow down or highlight matches while tailing a busy stream.
+2. **Scrolling is unusable on a busy list.** New messages are inserted at index 0 (newest first). If the user scrolls down to read older messages, each newly arriving message shifts every already-visible row down by one slot, moving the viewport out from under the user. On a fast-moving subject this makes it effectively impossible to click/act on a message before it drifts away.
+
+### Desired Behavior
+- If the user has scrolled away from the top, new messages still arrive and get added to the underlying list, but the viewport must not visually move — no jump, no drift.
+- If the user is at the top, today's pinned-to-latest behavior is preserved (new messages appear at the top, in view).
+- A **Pause** control (next to the existing Delete/Clear button) freezes the on-screen list — no new rows rendered, no scroll movement — while the underlying subscription/consumer keeps running and buffering. Resuming reveals everything that arrived while paused, still without forcibly relocating the user's scroll position.
+
+### Implementation Checklist
+- [x] **JetStream Browse Messages — Filter & Find** (Completed):
+  - [x] Add Filter and Find fields to `JetStreamMessageView`'s toolbar, mirroring `lib/main.dart`'s pattern; wire Find into the already-present `RegexTextHighlight` (was passed an empty `searchTerm`, now `_currentFind`). Filter narrows `_filteredMessages`; the header count switches from "`N` received" to "`shown` / `received`" once a filter is active; an empty-filtered-list state ("No messages match filter.") is distinguished from the original "Waiting for messages..." empty state. Verified against a real JetStream-enabled server via an extended `integration_test/jetstream_browse_test.dart` (publishes two distinct payloads, exercises Filter narrowing/clearing and Find highlighting/clearing, then re-filters to a single row before the existing Detail/Copy row-menu assertions, which needed disambiguating once a second row existed).
+  - [x] Extend the existing Ctrl+F / Ctrl+Shift+F shortcuts to this view. `lib/main.dart`'s global `Focus(onKeyEvent: ...)` is now tab-aware: it first asks `JetStreamDashboardState.focusFilterField()`/`focusFindField()` (new, delegating through a `GlobalKey<JetStreamMessageViewState>` held by `JetStreamDashboard`, which in turn wraps new `FocusNode`s on `JetStreamMessageView`'s own Filter/Find fields) when the JetStream tab is active, falling back to the Live Messages tab's fields when that returns `false` (i.e. not currently browsing) or when the Live Messages tab itself is active. Both State classes were made public (dropped their leading underscore) so `main.dart` and `jetstream_dashboard.dart` can hold typed `GlobalKey`s to them. Verified live: extended `integration_test/jetstream_browse_test.dart` with the same focus-check pattern already used in `live_messages_interactions_test.dart` (tap a field to set a baseline, send the key combo, assert `Focus.of(...).hasFocus` on the other field) and re-ran `live_messages_interactions_test.dart` + `jetstream_lifecycle_test.dart` to confirm no regression on the Live Messages tab's shortcuts or the dashboard's tab-switch behavior.
+- [ ] **Scroll-position stability (Live Messages tab and JetStream Browse Messages)**:
+  - [ ] Preserve scroll offset when new messages are inserted above the viewport while the user isn't at the top — likely requires manually adjusting `ScrollController` offset by the inserted rows' height rather than relying on `ListView.builder`'s default behavior, since messages are logically newest-first.
+  - [ ] Keep today's auto-follow behavior when the user is at (or returns to) the top.
+- [ ] **Pause control**:
+  - [ ] Add a "Pause" button next to Delete/Clear on the Live Messages tab.
+  - [ ] Add an equivalent Pause (and Delete/Clear, which it currently lacks) control to `JetStreamMessageView`.
+  - [ ] Paused: subscription/consumer keeps running and buffering; on-screen list stops updating entirely (no new rows, no scroll movement).
+  - [ ] Resume: all buffered messages appear, still respecting the scroll-stability rule above.
