@@ -54,6 +54,7 @@ Future<void> pumpConnectedApp(
   await prefs.setString(constants.prefCertificateChainName, '');
   await prefs.setString(constants.prefPrivateKey, '');
   await prefs.setString(constants.prefPrivateKeyName, '');
+  await prefs.setBool(constants.prefUpdateCheckEnabled, false);
 
   app.main();
   await tester.pumpAndSettle();

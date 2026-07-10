@@ -42,6 +42,7 @@ void main() {
     await prefs.setString(constants.prefCertificateChain, '');
     await prefs.setString(constants.prefPrivateKey, '');
     await prefs.setBool(constants.prefRememberCredentials, true);
+    await prefs.setBool(constants.prefUpdateCheckEnabled, false);
   }
 
   Future<void> connectAndVerify(WidgetTester tester) async {
