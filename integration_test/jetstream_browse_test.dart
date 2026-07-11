@@ -1,7 +1,9 @@
+import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:nats_client_flutter/constants.dart' as constants;
 import 'package:nats_client_flutter/regex_text_highlight.dart';
 
 import 'helpers/nats_test_app.dart';
@@ -33,8 +35,7 @@ void main() {
   Finder messageRowText(String payload) => find.byWidgetPredicate(
       (widget) => widget is RegexTextHighlight && widget.text == payload);
 
-  testWidgets(
-      'Browse Messages shows published messages and its row menu works',
+  testWidgets('Browse Messages shows published messages and its row menu works',
       (tester) async {
     await pumpConnectedApp(tester);
     addTearDown(() => disconnectApp(tester));
@@ -84,10 +85,9 @@ void main() {
     Future<void> publishToStream(String data) async {
       await tester.tap(find.byIcon(Icons.send));
       await tester.pumpAndSettle();
-      await tester.enterText(find.widgetWithText(TextFormField, 'Subject'),
-          '$streamName.created');
       await tester.enterText(
-          find.widgetWithText(TextFormField, 'Data'), data);
+          find.widgetWithText(TextFormField, 'Subject'), '$streamName.created');
+      await tester.enterText(find.widgetWithText(TextFormField, 'Data'), data);
       await tester.tap(find.text('Publish via JetStream (get delivery ack)'));
       await tester.pump();
       await tester.tap(find.widgetWithText(TextButton, 'Send'));
@@ -212,16 +212,58 @@ void main() {
     await tester.pumpAndSettle();
     expect(copiedData, contains(payload));
 
-    // 9. Back to stream details, then clean up.
+    // 9. Pause / Resume: a message published while paused must not appear
+    // until Resume, and the badge should reflect it meanwhile. Publish via
+    // a second, direct `dart_nats` client (rather than switching to the
+    // Live Messages tab) since switching tabs would tear down this whole
+    // Browse session — `JetStreamDashboard`'s state doesn't survive a trip
+    // away from the JetStream tab, per the note in `AGENTS.md` Recipe F.
+    await tester.tap(find.descendant(
+        of: fieldWithPrefixIcon(Icons.filter_list),
+        matching: find.byIcon(Icons.clear)));
+    await tester.pump();
+    expect(messageRowText(payload), findsOneWidget);
+    expect(messageRowText(payload2), findsOneWidget);
+    final payload3 = 'it-browse-payload-3-$runId';
+    final publisher = Client();
+    await publisher.connect(Uri.parse(
+        '${constants.defaultScheme}${constants.defaultHost}:${constants.defaultPort}'));
+    addTearDown(() => publisher.close());
+
+    await tester.tap(find.byIcon(Icons.pause));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.play_arrow), findsOneWidget);
+
+    publisher.pubString('$streamName.created', payload3);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(messageRowText(payload3), findsNothing);
+    final pauseButtonRow = find.ancestor(
+        of: find.byIcon(Icons.play_arrow), matching: find.byType(Row));
+    expect(find.descendant(of: pauseButtonRow, matching: find.text('1')),
+        findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.play_arrow));
+    await pumpUntil(
+        tester, () => messageRowText(payload3).evaluate().isNotEmpty);
+    expect(find.byIcon(Icons.pause), findsOneWidget);
+
+    // 10. Delete/Clear empties the view (the underlying consumer keeps
+    // running — not asserted here, just that the visible list resets).
+    await tester.tap(find.byIcon(Icons.delete));
+    await tester.pumpAndSettle();
+    expect(messageRowText(payload), findsNothing);
+    expect(messageRowText(payload2), findsNothing);
+    expect(messageRowText(payload3), findsNothing);
+    expect(find.text('0 received'), findsOneWidget);
+
+    // 11. Back to stream details, then clean up.
     await tester.tap(find.byTooltip('Back to stream details'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(OutlinedButton, 'Delete Stream'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(TextButton, 'Delete'));
-    await pumpUntil(
-        tester,
-        () =>
-            find.text('Stream "$streamName" deleted.').evaluate().isNotEmpty);
+    await pumpUntil(tester,
+        () => find.text('Stream "$streamName" deleted.').evaluate().isNotEmpty);
     await tester.pumpAndSettle();
     expect(find.text(streamName), findsNothing);
   });

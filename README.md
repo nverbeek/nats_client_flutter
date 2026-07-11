@@ -14,6 +14,7 @@ This application currently supports Windows, Linux, macOS and Web platforms.
 - Automatic re-connect upon lost connection
 - Filter received messages
 - Find text in received messages
+- Pause the message list to freeze it while you work, without stopping arrivals in the background
 - Send custom messages
 - See message details, such as headers, subject and payload. JSON payloads are automatically formatted and syntax highlighted as well!
 - Light and Dark themes
@@ -22,7 +23,7 @@ This application currently supports Windows, Linux, macOS and Web platforms.
 - **JetStream support** (optional, on by default — toggle it off in Settings if you don't need it):
   - Monitor streams and their consumers, including message/byte counts, retention, and ack/redelivery stats
   - Create, purge, and delete streams; create and delete consumers (push or pull, any ack policy)
-  - Browse a stream's messages live, or tail a specific consumer and Ack / Nak / Term individual messages
+  - Browse a stream's messages live (with its own Filter/Find and Pause/Resume), or tail a specific consumer and Ack / Nak / Term individual messages
   - Publish messages with JetStream delivery acknowledgement straight from the regular Send Message dialog
 - **Update notifications** (optional, on by default): checks this repo's GitHub Releases on startup and shows a small dismissible popover with a link if a newer version is available. This app only distributes through GitHub, so nothing downloads or installs automatically — it just tells you a new build exists.
 

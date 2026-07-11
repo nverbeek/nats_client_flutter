@@ -18,6 +18,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import 'auth_manager.dart';
 import 'constants.dart' as constants;
+import 'format_utils.dart';
 import 'jetstream_dashboard.dart';
 import 'jetstream_manager.dart';
 import 'message_detail_dialog.dart';
@@ -215,6 +216,12 @@ class MyApp extends StatelessWidget {
   }
 }
 
+/// Ctrl+Enter (Cmd+Enter on Mac) from the Host/Port/Subjects fields fires
+/// Connect while disconnected — see `_withConnectShortcut` below.
+class _ConnectIntent extends Intent {
+  const _ConnectIntent();
+}
+
 class MyHomePage extends StatefulWidget {
   const MyHomePage(this.appVersion, this.title, this.scheme, this.host,
       this.port, this.subject,
@@ -256,11 +263,23 @@ class _MyHomePageState extends State<MyHomePage>
   List<Message<dynamic>> filteredItems = [];
   List<Message<dynamic>> items = [];
 
+  // Pause: while true, incoming messages are buffered here (still arriving,
+  // still counted) instead of touching `items`/the rendered list at all.
+  bool messagesPaused = false;
+  final List<Message<dynamic>> pendingMessages = [];
+
+  // A NATS subject can deliver far faster than the UI needs to reflect it —
+  // incoming messages land here first (cheap O(1) append) and get flushed
+  // into `items` at most once per `_incomingFlushInterval`, so a burst of
+  // hundreds of messages costs one list mutation, not hundreds.
+  final List<Message<dynamic>> _incomingBatch = [];
+  Timer? _incomingFlushTimer;
+  static const _incomingFlushInterval = Duration(milliseconds: 32);
+
   // JetStream tab
   bool jetStreamEnabled = constants.defaultJetStreamEnabled;
   late TabController _tabController;
-  final GlobalKey<JetStreamDashboardState> _jetStreamDashboardKey =
-      GlobalKey();
+  final GlobalKey<JetStreamDashboardState> _jetStreamDashboardKey = GlobalKey();
 
   // Add a ScrollController for the ListView
   final ScrollController _listScrollController = ScrollController();
@@ -326,6 +345,7 @@ class _MyHomePageState extends State<MyHomePage>
     }
     _listScrollController.dispose(); // Dispose the controller
     _tapTimer?.cancel(); // Cancel any pending timer
+    _incomingFlushTimer?.cancel();
     _filterFocusNode.dispose(); // Dispose focus nodes
     _findFocusNode.dispose();
     _tabController.dispose();
@@ -580,6 +600,34 @@ class _MyHomePageState extends State<MyHomePage>
     }
   }
 
+  /// Wraps a Host/Port/Subjects field so Ctrl+Enter (Cmd+Enter on Mac) fires
+  /// Connect while focus is in it and the client isn't already connected —
+  /// mirrors the same `Shortcuts`/`Actions` pattern `SendMessageDialog` uses
+  /// for its own Ctrl+Enter-to-send shortcut.
+  Widget _withConnectShortcut(Widget child) {
+    return Shortcuts(
+      shortcuts: <LogicalKeySet, Intent>{
+        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.enter):
+            const _ConnectIntent(),
+        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.enter):
+            const _ConnectIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          _ConnectIntent: CallbackAction<_ConnectIntent>(
+            onInvoke: (_ConnectIntent intent) {
+              if (currentStatus == Status.disconnected) {
+                natsConnect();
+              }
+              return null;
+            },
+          ),
+        },
+        child: child,
+      ),
+    );
+  }
+
   void natsConnect() async {
     natsClient = Client();
     _jetStreamManager = JetStreamManager(natsClient);
@@ -770,24 +818,90 @@ class _MyHomePageState extends State<MyHomePage>
   }
 
   void handleIncomingMessage(Message<dynamic> event) {
-    String displayText;
-    try {
-      displayText = event.string;
-    } catch (e) {
-      displayText =
-          '[Binary Data] ${event.byte.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}';
-    }
-    debugPrint(displayText);
-    debugPrint("---");
-
     if (!mounted) return;
+    // Cheap regardless of arrival rate: just buffer, then coalesce into one
+    // UI update per `_incomingFlushInterval` (see the field doc comment).
+    _incomingBatch.add(event);
+    _incomingFlushTimer ??=
+        Timer(_incomingFlushInterval, _flushIncomingMessages);
+  }
+
+  void _flushIncomingMessages() {
+    _incomingFlushTimer = null;
+    if (!mounted || _incomingBatch.isEmpty) return;
+    // `_incomingBatch` accumulates in arrival order (oldest of the batch
+    // first); `items`/`pendingMessages` are newest-first, so reverse it once
+    // here rather than doing anything per-message.
+    final newestFirst = _incomingBatch.reversed.toList(growable: false);
+    _incomingBatch.clear();
+
+    if (messagesPaused) {
+      setState(() {
+        pendingMessages.insertAll(0, newestFirst);
+      });
+      return;
+    }
+
+    _insertMessages(newestFirst);
+  }
+
+  /// Inserts a newest-first batch at the front of `items`, keeping the
+  /// user's view stable.
+  ///
+  /// The list is newest-at-top, top-anchored (a plain, non-reversed
+  /// `ListView`), so new messages are prepended at the top. If the user is
+  /// already at the top they stay there and the new newest simply appears
+  /// above — the natural "follow the latest" behavior. If they've scrolled
+  /// down to read older messages, prepending would otherwise shove the
+  /// whole list down and move the viewport out from under them; to prevent
+  /// that we shift the scroll offset down by exactly the height of the rows
+  /// we just added, so the messages already on screen don't visually move.
+  ///
+  /// That exact compensation is only possible because every row has a fixed
+  /// `_messageRowExtent` (see its doc comment) — the added height is simply
+  /// the growth in `maxScrollExtent`, which for a fixed-extent list is
+  /// exact rather than an estimate.
+  void _insertMessages(List<Message<dynamic>> newestFirst) {
+    if (newestFirst.isEmpty) return;
+    final hasClients = _listScrollController.hasClients;
+    final atTop = !hasClients || _listScrollController.offset <= 1.0;
+    final oldOffset = hasClients ? _listScrollController.offset : 0.0;
+    final oldMax =
+        hasClients ? _listScrollController.position.maxScrollExtent : 0.0;
+
     setState(() {
-      items.insert(0, event);
+      items.insertAll(0, newestFirst);
       if (selectedIndex > -1) {
-        selectedIndex += 1;
+        selectedIndex += newestFirst.length;
       }
     });
     _runFilter();
+
+    // At the top: nothing to do — the offset stays 0 and the new newest
+    // message renders at the top on its own. Scrolled away: shift down by
+    // however much the content above the viewport grew, keeping the same
+    // messages under the user's eyes.
+    if (!atTop) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_listScrollController.hasClients) return;
+        final newMax = _listScrollController.position.maxScrollExtent;
+        final target = oldOffset + (newMax - oldMax);
+        _listScrollController.jumpTo(target > newMax ? newMax : target);
+      });
+    }
+  }
+
+  void _pauseMessageList() {
+    setState(() => messagesPaused = true);
+  }
+
+  void _resumeMessageList() {
+    final buffered = List<Message<dynamic>>.of(pendingMessages);
+    setState(() {
+      pendingMessages.clear();
+      messagesPaused = false;
+    });
+    _insertMessages(buffered);
   }
 
   void setStateConnected() {
@@ -822,6 +936,8 @@ class _MyHomePageState extends State<MyHomePage>
       setState(() {
         items.clear();
         filteredItems.clear();
+        pendingMessages.clear();
+        _incomingBatch.clear();
       });
     }
   }
@@ -1072,7 +1188,8 @@ class _MyHomePageState extends State<MyHomePage>
           },
           onCredsFilePick: () {
             pickFile(allowedExtensions: ['creds']).then((chosenFile) {
-              handleCredsFile(chosenFile.$1, chosenFile.$2, credsFileController);
+              handleCredsFile(
+                  chosenFile.$1, chosenFile.$2, credsFileController);
             });
           },
           onClearCredsFile: () {
@@ -1602,7 +1719,7 @@ class _MyHomePageState extends State<MyHomePage>
                       flex: 2,
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
-                        child: TextFormField(
+                        child: _withConnectShortcut(TextFormField(
                           enabled: (currentStatus == Status.disconnected),
                           initialValue: widget.host,
                           onChanged: (value) {
@@ -1614,12 +1731,12 @@ class _MyHomePageState extends State<MyHomePage>
                             hintText: 'Host',
                             labelText: 'Host',
                           ),
-                        ),
+                        )),
                       ),
                     ),
                     Flexible(
                       flex: 1,
-                      child: TextFormField(
+                      child: _withConnectShortcut(TextFormField(
                         enabled: (currentStatus == Status.disconnected),
                         initialValue: widget.port,
                         onChanged: (value) {
@@ -1631,13 +1748,13 @@ class _MyHomePageState extends State<MyHomePage>
                           hintText: 'Port',
                           labelText: 'Port',
                         ),
-                      ),
+                      )),
                     ),
                     Flexible(
                       flex: 3,
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
-                        child: TextFormField(
+                        child: _withConnectShortcut(TextFormField(
                           enabled: (currentStatus == Status.disconnected),
                           initialValue: widget.subject,
                           onChanged: (value) {
@@ -1648,7 +1765,7 @@ class _MyHomePageState extends State<MyHomePage>
                             hintText: 'Subjects',
                             labelText: 'Subjects',
                           ),
-                        ),
+                        )),
                       ),
                     ),
                     Container(
@@ -1735,6 +1852,26 @@ class _MyHomePageState extends State<MyHomePage>
     );
   }
 
+  /// The fixed height of every message row.
+  ///
+  /// A fixed extent (rather than letting each row size itself to its 1–5
+  /// lines of text) is what lets the list compensate the scroll offset
+  /// *exactly* when new messages are prepended above a scrolled-away
+  /// viewport (see `_insertMessages`), and also lets the scrollbar/fling
+  /// locate any row analytically instead of building off-screen rows to
+  /// measure them — the difference between smooth and janky on a list of
+  /// thousands. Derived from the current font size and single-line setting
+  /// so rows are always tall enough for their text at whatever size the
+  /// user picks; longer text is still clipped with an ellipsis exactly as
+  /// before. The 56px floor keeps a single short line from producing a row
+  /// shorter than the trailing controls' tap target.
+  double get _messageRowExtent {
+    final lines = messageSingleLine ? 1 : 5;
+    final textBlockHeight = lines * messageFontSize * 1.3;
+    final withPadding = textBlockHeight + 24;
+    return withPadding > 56.0 ? withPadding : 56.0;
+  }
+
   /// Builds the "Live Messages" tab content: the scrolling message list plus
   /// the bottom toolbar (clear/send/filter/find). Unchanged from before the
   /// JetStream tab was introduced, just extracted so it can be reused as a
@@ -1748,15 +1885,23 @@ class _MyHomePageState extends State<MyHomePage>
             thumbVisibility: true, // Always show the scrollbar when scrollable
             child: ListView.builder(
               controller: _listScrollController,
-              shrinkWrap: true,
+              // Newest-at-top, top-anchored (a plain, non-reversed list):
+              // messages fill from the top down, the latest arrives at the
+              // top, and a short list sits at the top with empty space
+              // below rather than clinging to the bottom. Stable scrolling
+              // when new messages are prepended above a scrolled-away
+              // viewport is handled in `_insertMessages` by shifting the
+              // offset, which is exact only because every row is a fixed
+              // `_messageRowExtent` tall (see that getter's doc comment).
+              itemExtent: _messageRowExtent,
               itemCount: filteredItems.length,
               itemBuilder: (context, index) {
+                final message = filteredItems[index];
                 return Material(
-                  key: ValueKey(filteredItems[index]
-                      .hashCode), // Add a key to help Flutter track widgets
+                  key: ObjectKey(message),
                   child: ListTile(
                     title: RegexTextHighlight(
-                      text: filteredItems[index].string,
+                      text: message.string,
                       searchTerm: currentFind,
                       fontSize: messageFontSize,
                       highlightStyle: TextStyle(
@@ -1768,24 +1913,29 @@ class _MyHomePageState extends State<MyHomePage>
                       maxLines: messageSingleLine ? 1 : 5,
                       overflow: TextOverflow.ellipsis,
                     ),
+                    // Band by distance from the oldest message (always at
+                    // the bottom), not the raw index: prepending new
+                    // messages shifts every existing row's index, so
+                    // banding on the index would flip every stripe as
+                    // messages arrive. Distance-from-oldest is fixed per
+                    // message, so stripes stay put.
                     tileColor: selectedIndex == index
                         ? Theme.of(context).colorScheme.inversePrimary
-                        : index % 2 == 0
+                        : (filteredItems.length - 1 - index) % 2 == 0
                             ? evenRowColor
                             : oddRowColor,
-                    onTap: () =>
-                        _handleMessageTap(index), // Use the new tap handler
+                    onTap: () => _handleMessageTap(index),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: <Widget>[
                         ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 450),
                           child: Tooltip(
-                            message: filteredItems[index].subject!,
+                            message: message.subject!,
                             child: Padding(
                               padding: const EdgeInsets.fromLTRB(0, 0, 5, 0),
                               child: Chip(
-                                  label: Text(filteredItems[index].subject!,
+                                  label: Text(message.subject!,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
                                         fontSize: messageFontSize,
@@ -1818,6 +1968,55 @@ class _MyHomePageState extends State<MyHomePage>
                         Icons.delete,
                         size: 18,
                       ))),
+            ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(0, 10, 5, 10),
+              // Fixed width rather than letting the button size itself to
+              // its content: the buffered-count pill's text changes length
+              // as the count grows (e.g. "1" -> "1.2k"), and without a
+              // fixed slot that shifted every control to its right on each
+              // flush. Wide enough for icon + a realistic wide count
+              // ("1.2k") plus this `ElevatedButton`'s own padding, verified
+              // against a real overflow this size was previously too
+              // narrow to catch (a single-digit count never exposed it).
+              child: SizedBox(
+                  height: 50,
+                  width: 108,
+                  child: Tooltip(
+                    message: messagesPaused
+                        ? 'Resume (${pendingMessages.length} buffered)'
+                        : 'Pause incoming messages',
+                    child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8)),
+                        onPressed: messagesPaused
+                            ? _resumeMessageList
+                            : _pauseMessageList,
+                        // A `Badge` here used to overlap the icon closely
+                        // enough that it was hard to tell Pause from Resume
+                        // at a glance without the tooltip — a plain Row
+                        // with the count as a separate pill keeps the icon
+                        // fully visible.
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              messagesPaused ? Icons.play_arrow : Icons.pause,
+                              size: 18,
+                            ),
+                            if (messagesPaused && pendingMessages.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 4),
+                                child: Text(
+                                  formatCompactCount(pendingMessages.length),
+                                  overflow: TextOverflow.clip,
+                                  softWrap: false,
+                                ),
+                              ),
+                          ],
+                        )),
+                  )),
             ),
             Container(
               padding: const EdgeInsets.fromLTRB(0, 10, 5, 10),

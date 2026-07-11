@@ -5,6 +5,7 @@ import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'format_utils.dart';
 import 'jetstream_manager.dart';
 import 'message_detail_dialog.dart';
 import 'regex_text_highlight.dart';
@@ -45,6 +46,27 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
   final _findController = TextEditingController();
   final _filterFocusNode = FocusNode();
   final _findFocusNode = FocusNode();
+  final _scrollController = ScrollController();
+
+  // The fixed height of every message row. A fixed extent is what lets
+  // `_insertMessages` compensate the scroll offset exactly when messages
+  // are prepended above a scrolled-away viewport, and lets the
+  // scrollbar/fling locate rows analytically — see the matching
+  // `_messageRowExtent` in `main.dart`. Constant here (rather than derived
+  // from a setting) since this view's rows always use font 14 / 5 lines.
+  static const _messageRowExtent = 5 * 14 * 1.3 + 24;
+
+  // Pause: while true, incoming messages are buffered here instead of
+  // touching `_messages`/the rendered list at all.
+  bool _paused = false;
+  final List<Message> _pendingMessages = [];
+
+  // A stream can deliver far faster than the UI needs to reflect it —
+  // incoming messages land here first (cheap O(1) append) and get flushed
+  // into `_messages` at most once per `_incomingFlushInterval`.
+  final List<Message> _incomingBatch = [];
+  Timer? _incomingFlushTimer;
+  static const _incomingFlushInterval = Duration(milliseconds: 32);
 
   /// Lets the app-wide Ctrl+F / Ctrl+Shift+F shortcut handler in `main.dart`
   /// reach this view's Find field via the `GlobalKey` held by
@@ -68,6 +90,10 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
       _messages.clear();
       _filteredMessages = [];
       _errorMessage = null;
+      _pendingMessages.clear();
+      _incomingBatch.clear();
+      _incomingFlushTimer?.cancel();
+      _incomingFlushTimer = null;
       _startBrowsing();
     }
   }
@@ -75,10 +101,12 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
   @override
   void dispose() {
     _stopBrowsing();
+    _incomingFlushTimer?.cancel();
     _filterController.dispose();
     _findController.dispose();
     _filterFocusNode.dispose();
     _findFocusNode.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -88,10 +116,11 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
     _subscription = consumer.messages().listen(
       (message) {
         if (!mounted) return;
-        setState(() {
-          _messages.insert(0, message);
-          _runFilter();
-        });
+        // Cheap regardless of arrival rate: just buffer, then coalesce into
+        // one UI update per `_incomingFlushInterval` (see the field doc).
+        _incomingBatch.add(message);
+        _incomingFlushTimer ??=
+            Timer(_incomingFlushInterval, _flushIncomingMessages);
       },
       onError: (Object err) {
         if (!mounted) return;
@@ -100,6 +129,77 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
         });
       },
     );
+  }
+
+  void _flushIncomingMessages() {
+    _incomingFlushTimer = null;
+    if (!mounted || _incomingBatch.isEmpty) return;
+    // `_incomingBatch` accumulates in arrival order (oldest of the batch
+    // first); `_messages`/`_pendingMessages` are newest-first, so reverse it
+    // once here rather than doing anything per-message.
+    final newestFirst = _incomingBatch.reversed.toList(growable: false);
+    _incomingBatch.clear();
+
+    if (_paused) {
+      setState(() {
+        _pendingMessages.insertAll(0, newestFirst);
+      });
+      return;
+    }
+
+    _insertMessages(newestFirst);
+  }
+
+  /// Inserts a newest-first batch at the front of `_messages`, keeping the
+  /// user's view stable — see the matching `_insertMessages()` in
+  /// `main.dart` for the full reasoning. In short: newest-at-top,
+  /// top-anchored; at the top the new newest just appears above, and when
+  /// scrolled away the offset is shifted down by exactly the height of the
+  /// prepended rows (exact because every row is a fixed `_messageRowExtent`
+  /// tall) so on-screen messages don't move.
+  void _insertMessages(List<Message> newestFirst) {
+    if (newestFirst.isEmpty) return;
+    final hasClients = _scrollController.hasClients;
+    final atTop = !hasClients || _scrollController.offset <= 1.0;
+    final oldOffset = hasClients ? _scrollController.offset : 0.0;
+    final oldMax =
+        hasClients ? _scrollController.position.maxScrollExtent : 0.0;
+
+    setState(() {
+      _messages.insertAll(0, newestFirst);
+      _runFilter();
+    });
+
+    if (!atTop) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_scrollController.hasClients) return;
+        final newMax = _scrollController.position.maxScrollExtent;
+        final target = oldOffset + (newMax - oldMax);
+        _scrollController.jumpTo(target > newMax ? newMax : target);
+      });
+    }
+  }
+
+  void _pause() {
+    setState(() => _paused = true);
+  }
+
+  void _resume() {
+    final buffered = List<Message>.of(_pendingMessages);
+    setState(() {
+      _pendingMessages.clear();
+      _paused = false;
+    });
+    _insertMessages(buffered);
+  }
+
+  void _clearMessages() {
+    setState(() {
+      _messages.clear();
+      _filteredMessages = [];
+      _pendingMessages.clear();
+      _incomingBatch.clear();
+    });
   }
 
   void _stopBrowsing() {
@@ -114,7 +214,11 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
       _errorMessage = null;
       _messages.clear();
       _filteredMessages = [];
+      _pendingMessages.clear();
+      _incomingBatch.clear();
     });
+    _incomingFlushTimer?.cancel();
+    _incomingFlushTimer = null;
     _stopBrowsing();
     _startBrowsing();
   }
@@ -124,8 +228,9 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
       _filteredMessages = _messages;
     } else {
       _filteredMessages = _messages
-          .where((message) =>
-              message.string.toLowerCase().contains(_currentFilter.toLowerCase()))
+          .where((message) => message.string
+              .toLowerCase()
+              .contains(_currentFilter.toLowerCase()))
           .toList();
     }
   }
@@ -184,7 +289,10 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
                 tooltip: 'Back to stream details',
                 onPressed: widget.onClose,
               ),
-              Icon(Icons.circle, size: 10, color: Colors.green.shade400),
+              Icon(Icons.circle,
+                  size: 10,
+                  color:
+                      _paused ? Colors.grey.shade500 : Colors.green.shade400),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -196,6 +304,43 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
               Text(_currentFilter.isEmpty
                   ? '${_messages.length} received'
                   : '${_filteredMessages.length} / ${_messages.length} shown'),
+              IconButton(
+                icon: const Icon(Icons.delete),
+                tooltip: 'Clear',
+                onPressed: _clearMessages,
+              ),
+              Tooltip(
+                message: _paused
+                    ? 'Resume (${_pendingMessages.length} buffered)'
+                    : 'Pause incoming messages',
+                // Fixed width so the buffered-count pill's text changing
+                // length (e.g. "1" -> "1.2k") doesn't shift this row's
+                // other controls; wide enough for the 48px minimum
+                // IconButton tap target plus a realistic wide count. A
+                // `Badge` here used to overlap the icon closely enough
+                // that it was hard to tell Pause from Resume at a glance
+                // without the tooltip — a plain Row with the count as a
+                // separate pill keeps the icon fully visible.
+                child: SizedBox(
+                  width: 120,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        icon: Icon(_paused ? Icons.play_arrow : Icons.pause),
+                        onPressed: _paused ? _resume : _pause,
+                      ),
+                      if (_paused && _pendingMessages.isNotEmpty)
+                        Text(
+                          formatCompactCount(_pendingMessages.length),
+                          overflow: TextOverflow.clip,
+                          softWrap: false,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -285,75 +430,90 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
           )
         else
           Expanded(
-            child: ListView.builder(
-              itemCount: _filteredMessages.length,
-              itemBuilder: (context, index) {
-                final message = _filteredMessages[index];
-                final seq = message.streamSequence;
-                return Material(
-                  key: ValueKey(message.hashCode),
-                  child: ListTile(
-                    tileColor: index % 2 == 0 ? rowEvenColor : rowOddColor,
-                    title: RegexTextHighlight(
-                      text: message.string,
-                      searchTerm: _currentFind,
-                      fontSize: 14,
-                      highlightStyle: TextStyle(
-                        background: Paint()
-                          ..color = theme.colorScheme.inversePrimary,
+            child: Scrollbar(
+              controller: _scrollController,
+              thumbVisibility: true,
+              child: ListView.builder(
+                controller: _scrollController,
+                // Newest-at-top, top-anchored — see the matching comment in
+                // `main.dart`'s `_buildLiveMessagesTab`. Stable scrolling on
+                // prepend is handled in `_insertMessages` via an exact
+                // offset shift, which relies on this fixed `itemExtent`.
+                itemExtent: _messageRowExtent,
+                itemCount: _filteredMessages.length,
+                itemBuilder: (context, index) {
+                  final message = _filteredMessages[index];
+                  final seq = message.streamSequence;
+                  return Material(
+                    key: ObjectKey(message),
+                    child: ListTile(
+                      // Band by distance from the oldest message (always at
+                      // the bottom), not the raw index, so stripes don't
+                      // flip every time a message is prepended at the top.
+                      tileColor: (_filteredMessages.length - 1 - index) % 2 == 0
+                          ? rowEvenColor
+                          : rowOddColor,
+                      title: RegexTextHighlight(
+                        text: message.string,
+                        searchTerm: _currentFind,
                         fontSize: 14,
+                        highlightStyle: TextStyle(
+                          background: Paint()
+                            ..color = theme.colorScheme.inversePrimary,
+                          fontSize: 14,
+                        ),
+                        maxLines: 5,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 5,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    onTap: () => _showDetailDialog(message),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (seq != null)
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(0, 0, 5, 0),
-                            child: Chip(label: Text('#$seq')),
-                          ),
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 300),
-                          child: Tooltip(
-                            message: message.subject ?? '',
-                            child: Padding(
+                      onTap: () => _showDetailDialog(message),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (seq != null)
+                            Padding(
                               padding: const EdgeInsets.fromLTRB(0, 0, 5, 0),
-                              child: Chip(
-                                label: Text(
-                                  message.subject ?? '',
-                                  overflow: TextOverflow.ellipsis,
+                              child: Chip(label: Text('#$seq')),
+                            ),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 300),
+                            child: Tooltip(
+                              message: message.subject ?? '',
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(0, 0, 5, 0),
+                                child: Chip(
+                                  label: Text(
+                                    message.subject ?? '',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                        PopupMenuButton<String>(
-                          padding: EdgeInsets.zero,
-                          itemBuilder: (context) => const [
-                            PopupMenuItem(value: 'copy', child: Text('Copy')),
-                            PopupMenuItem(
-                                value: 'detail', child: Text('Detail')),
-                          ],
-                          onSelected: (value) {
-                            switch (value) {
-                              case 'copy':
-                                Clipboard.setData(
-                                    ClipboardData(text: message.string));
-                                break;
-                              case 'detail':
-                                _showDetailDialog(message);
-                                break;
-                            }
-                          },
-                        ),
-                      ],
+                          PopupMenuButton<String>(
+                            padding: EdgeInsets.zero,
+                            itemBuilder: (context) => const [
+                              PopupMenuItem(value: 'copy', child: Text('Copy')),
+                              PopupMenuItem(
+                                  value: 'detail', child: Text('Detail')),
+                            ],
+                            onSelected: (value) {
+                              switch (value) {
+                                case 'copy':
+                                  Clipboard.setData(
+                                      ClipboardData(text: message.string));
+                                  break;
+                                case 'detail':
+                                  _showDetailDialog(message);
+                                  break;
+                              }
+                            },
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
       ],

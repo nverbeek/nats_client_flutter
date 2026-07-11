@@ -37,6 +37,7 @@ nats_client_flutter/
 ├── images/                     # App screenshots used in the main README.md
 ├── lib/                        # Core application source code
 │   ├── constants.dart          # Connection state text, defaults, colors, and SharedPreferences keys
+│   ├── format_utils.dart       # formatCompactCount() — "1.1k"-style compact numbers for the Pause buffered-count pill
 │   ├── help_dialog.dart        # Stateless widget dialog that parses and displays assets/app_help.md
 │   ├── highlight_theme.dart    # Theme configurations for the code highlighter
 │   ├── jetstream_consumer_dialog.dart    # "Create Consumer" dialog (push/pull, ack/deliver policy)
@@ -69,7 +70,10 @@ nats_client_flutter/
 │   ├── live_messages_test.dart          # Core pub/sub round trip
 │   ├── live_messages_interactions_test.dart # Filter/Find/row menu/keyboard shortcuts
 │   ├── jetstream_lifecycle_test.dart    # Full stream/consumer mutation lifecycle incl. Ack/Nak/Term
-│   ├── jetstream_browse_test.dart       # The ephemeral "Browse Messages" ordered-consumer view
+│   ├── jetstream_browse_test.dart       # The ephemeral "Browse Messages" ordered-consumer view (Filter/Find, Pause/Resume/Delete)
+│   ├── message_list_pause_test.dart     # Live Messages Pause/Resume, wide buffered-count, scroll-position-stable bursts + row-banding color stability
+│   ├── message_row_extent_test.dart     # Fixed-height row overflow guard (long message, max font size, both line-count settings)
+│   ├── connect_shortcut_test.dart       # Ctrl+Enter in Host/Port/Subjects fires Connect while disconnected
 │   └── screenshot_tour_test.dart        # Drives the app through the README's screenshots — run via scripts/capture_screenshots.ps1, not directly
 ├── Dockerfile                  # Multi-stage Docker container (Debian Flutter builder -> Alpine Nginx host)
 ├── analysis_options.yaml       # Static analysis and lints configuration (extends flutter_lints/flutter.yaml)

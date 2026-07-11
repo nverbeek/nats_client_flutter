@@ -86,7 +86,7 @@ When **Enable JetStream** is on (the default) and you're connected to a server o
 The left-hand pane lists all streams on the account. Selecting a stream shows its subjects, storage type, retention policy, and message/byte counts on the right.
 
 - **Add Stream**: Opens a dialog to create a new stream (name, comma-separated subjects, optional max age in days, and replica count).
-- **Browse Messages**: Opens a live tail of the selected stream's contents. This uses a temporary, auto-cleaning consumer under the hood — no manual consumer setup required just to look at what's in a stream. Disabled when the stream has no messages yet.
+- **Browse Messages**: Opens a live tail of the selected stream's contents. This uses a temporary, auto-cleaning consumer under the hood — no manual consumer setup required just to look at what's in a stream. Disabled when the stream has no messages yet. Includes its own Filter/Find fields, a Pause/Resume toggle, and a Clear button, working the same way as their Live Messages tab counterparts described below.
 - **Purge**: Deletes all messages in the stream but keeps the stream and its consumers. Asks for confirmation first.
 - **Delete Stream**: Permanently deletes the stream, its messages, and its consumers. Asks for confirmation first.
 
@@ -103,10 +103,15 @@ The regular **Send Message** dialog (see Tools, below) gets a **Publish via JetS
 # Keyboard Shortcuts
 
 ## Global Shortcuts
-These shortcuts work from anywhere in the application:
+These shortcuts work from anywhere in the application, targeting whichever message list is currently showing — the Live Messages tab, or the JetStream Browse Messages view if that's what's open:
 
 - **`Ctrl + F`** (Windows/Linux) or **`Cmd + F`** (Mac) - Focus the Find text field
 - **`Ctrl + Shift + F`** (Windows/Linux) or **`Cmd + Shift + F`** (Mac) - Focus the Filter text field
+
+## Connection Bar Shortcuts
+While focus is in the Host, Port, or Subjects field and the client isn't already connected:
+
+- **`Ctrl + Enter`** (Windows/Linux) or **`Cmd + Enter`** (Mac) - Connect
 
 ## Message-Specific Shortcuts
 When a message is selected (highlighted), the following keyboard shortcuts are available:
@@ -126,6 +131,7 @@ When the Send Message dialog is open:
 At the bottom of the window are several tools:
 
 - **Clear**: Removes all current messages from the view. This is a permanent operation.
+- **Pause**: Freezes the on-screen list — no new rows appear — while the connection stays open and messages keep arriving in the background. The button shows a small count of how many arrived while paused (e.g. `12`, `1.1k`); pressing it again (now labeled **Resume**) reveals everything that came in.
 - **Send Message**: Opens a dialog with subject and data fields, allowing the user to send a custom message.
 - **Filter**: This field filters the message list upon each character typed in the box. The filter operation is a **case-insensitive contains** on the message data only.
 - **Find**: This field will highlight results found in the message data. Searches all items and highlights matches within the list.
