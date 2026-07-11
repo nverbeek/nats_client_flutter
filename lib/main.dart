@@ -24,6 +24,8 @@ import 'jetstream_manager.dart';
 import 'kv_dashboard.dart';
 import 'kv_manager.dart';
 import 'message_detail_dialog.dart';
+import 'object_store_dashboard.dart';
+import 'object_store_manager.dart';
 import 'send_message_dialog.dart';
 import 'help_dialog.dart';
 import 'settings_dialog.dart';
@@ -287,6 +289,11 @@ class _MyHomePageState extends State<MyHomePage>
   bool kvEnabled = constants.defaultKvEnabled;
   final GlobalKey<KvDashboardState> _kvDashboardKey = GlobalKey();
 
+  // Object Store tab
+  bool objectStoreEnabled = constants.defaultObjectStoreEnabled;
+  final GlobalKey<ObjectStoreDashboardState> _objectStoreDashboardKey =
+      GlobalKey();
+
   // Add a ScrollController for the ListView
   final ScrollController _listScrollController = ScrollController();
 
@@ -302,6 +309,7 @@ class _MyHomePageState extends State<MyHomePage>
   late Client natsClient;
   JetStreamManager? _jetStreamManager;
   KvManager? _kvManager;
+  ObjectStoreManager? _objectStoreManager;
   bool isConnected = false;
   String connectionStateString = constants.disconnected;
 
@@ -402,6 +410,8 @@ class _MyHomePageState extends State<MyHomePage>
           constants.defaultJetStreamEnabled;
       kvEnabled =
           prefs.getBool(constants.prefKvEnabled) ?? constants.defaultKvEnabled;
+      objectStoreEnabled = prefs.getBool(constants.prefObjectStoreEnabled) ??
+          constants.defaultObjectStoreEnabled;
       updateCheckEnabled = prefs.getBool(constants.prefUpdateCheckEnabled) ??
           constants.defaultUpdateCheckEnabled;
       loadAuthSettings(prefs);
@@ -556,6 +566,7 @@ class _MyHomePageState extends State<MyHomePage>
     prefs.setInt(constants.prefRetryInterval, retryInterval);
     prefs.setBool(constants.prefJetStreamEnabled, jetStreamEnabled);
     prefs.setBool(constants.prefKvEnabled, kvEnabled);
+    prefs.setBool(constants.prefObjectStoreEnabled, objectStoreEnabled);
     prefs.setBool(constants.prefUpdateCheckEnabled, updateCheckEnabled);
   }
 
@@ -617,13 +628,18 @@ class _MyHomePageState extends State<MyHomePage>
     }
   }
 
-  /// Live Messages is always tab 0; JetStream and Key-Value each add one
-  /// more tab, in that order, when their respective settings toggle is on.
+  /// Live Messages is always tab 0; JetStream, Key-Value, and Object Store
+  /// each add one more tab, in that order, when their respective settings
+  /// toggle is on.
   int get _visibleTabCount =>
-      1 + (jetStreamEnabled ? 1 : 0) + (kvEnabled ? 1 : 0);
+      1 +
+      (jetStreamEnabled ? 1 : 0) +
+      (kvEnabled ? 1 : 0) +
+      (objectStoreEnabled ? 1 : 0);
 
   /// `TabController.length` is fixed at construction, but which tabs are
-  /// visible can change at runtime (the JetStream/KV toggles in Settings).
+  /// visible can change at runtime (the JetStream/KV/Object Store toggles in
+  /// Settings).
   /// Call this any time either toggle changes so the controller always
   /// matches what's actually shown; a no-op if the count didn't change.
   void _ensureTabController() {
@@ -670,6 +686,7 @@ class _MyHomePageState extends State<MyHomePage>
     natsClient = Client();
     _jetStreamManager = JetStreamManager(natsClient);
     _kvManager = KvManager(natsClient);
+    _objectStoreManager = ObjectStoreManager(natsClient);
 
     // surface authentication failures distinctly from generic connection
     // failures (a bad password/token/nkey/creds file closes the connection
@@ -1127,9 +1144,17 @@ class _MyHomePageState extends State<MyHomePage>
           initialRetryInterval: retryInterval,
           initialJetStreamEnabled: jetStreamEnabled,
           initialKvEnabled: kvEnabled,
+          initialObjectStoreEnabled: objectStoreEnabled,
           initialUpdateCheckEnabled: updateCheckEnabled,
-          onSave: (fontSize, singleLine, retryIntervalValue,
-              jetStreamEnabledValue, kvEnabledValue, updateCheckEnabledValue) {
+          onSave: (
+            fontSize,
+            singleLine,
+            retryIntervalValue,
+            jetStreamEnabledValue,
+            kvEnabledValue,
+            objectStoreEnabledValue,
+            updateCheckEnabledValue,
+          ) {
             final updateCheckJustEnabled =
                 updateCheckEnabledValue && !updateCheckEnabled;
             setState(() {
@@ -1138,6 +1163,7 @@ class _MyHomePageState extends State<MyHomePage>
               retryInterval = retryIntervalValue;
               jetStreamEnabled = jetStreamEnabledValue;
               kvEnabled = kvEnabledValue;
+              objectStoreEnabled = objectStoreEnabledValue;
               updateCheckEnabled = updateCheckEnabledValue;
               _ensureTabController();
             });
@@ -1866,6 +1892,7 @@ class _MyHomePageState extends State<MyHomePage>
                   const Tab(text: 'Live Messages'),
                   if (jetStreamEnabled) const Tab(text: 'JetStream'),
                   if (kvEnabled) const Tab(text: 'Key-Value Stores'),
+                  if (objectStoreEnabled) const Tab(text: 'Object Store'),
                 ],
               ),
             Expanded(
@@ -1887,6 +1914,13 @@ class _MyHomePageState extends State<MyHomePage>
                             key: _kvDashboardKey,
                             manager: currentStatus == Status.connected
                                 ? _kvManager
+                                : null,
+                          ),
+                        if (objectStoreEnabled)
+                          ObjectStoreDashboard(
+                            key: _objectStoreDashboardKey,
+                            manager: currentStatus == Status.connected
+                                ? _objectStoreManager
                                 : null,
                           ),
                       ],

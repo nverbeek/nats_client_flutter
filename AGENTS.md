@@ -17,6 +17,7 @@ Welcome! This document is a living, context-bootstrapping architectural and oper
 - **Real-Time Stream**: Subscribe to multiple comma-separated subjects (supporting wildcards like `*` and `>`), filter incoming payloads in real-time, search and highlight text with regex, and send/publish custom messages.
 - **JetStream Dashboard** (`lib/jetstream_*.dart`, toggleable via the "Enable JetStream" setting): monitor streams and consumers, create/purge/delete streams, create/delete consumers (push or pull, any ack policy), browse a stream's messages live, tail a specific consumer with Ack/Nak/Term actions, and publish with JetStream delivery acknowledgement from the regular Send Message dialog.
 - **Key-Value Stores Dashboard** (`lib/kv_*.dart`, toggleable via the "Enable Key-Value Stores" setting): monitor and manage KV buckets (backed by JetStream) — create/delete buckets, put/edit/delete/purge keys with optimistic-concurrency conflict detection on edit, per-key revision history, live search, and real-time updates via `KeyValue.watch()` (including changes made by other clients).
+- **Object Store Dashboard** (`lib/object_store_*.dart`, toggleable via the "Enable Object Store" setting): monitor and manage Object Store buckets (also backed by JetStream) — create/delete buckets, upload/download/delete objects (blobs), live search. Object Store is an `EXPERIMENTAL` API in the underlying `dart_nats` package, and has no `watch()` equivalent (unlike KV), so the object list needs an explicit Refresh rather than updating live.
 - **Data Syntax Highlighting**: Automatic pretty-printing and syntax highlighting of JSON payloads inside detailed message dialogs.
 - **State & Size Persistence**: Remembers recent connection setups, theme preferences, and window size/position across runs.
 - **Update Notifications** (`lib/update_checker.dart`, toggleable via the "Check for Updates" setting): checks GitHub Releases for this repo on startup and, if newer than the running version, shows a dismissible top-right popover linking to the release. No auto-download/install — this app only distributes via GitHub Releases.
@@ -53,16 +54,21 @@ nats_client_flutter/
 │   ├── kv_put_dialog.dart       # "Put Value"/"Edit Value" dialog (locks Key + shows revision on edit)
 │   ├── main.dart               # Main entry point, ThemeModel provider, and MyHomePage (core state machine)
 │   ├── message_detail_dialog.dart # Dialog widget for inspecting subject, headers, and pretty JSON payloads
+│   ├── object_store_bucket_dialog.dart # "Create Bucket" dialog (name, storage, max size, TTL, replicas)
+│   ├── object_store_dashboard.dart     # Bucket/object monitor + upload/download/delete (Object Store tab's main widget; no live watch)
+│   ├── object_store_manager.dart       # Thin, testable wrapper around client.jetStream()/ObjectStore calls
 │   ├── regex_text_highlight.dart  # Custom inline text highlighting engine using regex substring matching
 │   ├── security_settings_dialog.dart # TLS config file selector (Trusted Cert, Cert Chain, Private Key paths)
 │   ├── send_message_dialog.dart # Form dialog for publishing/sending standard, edit-replay, or JetStream payloads
-│   ├── settings_dialog.dart    # App options dialog (font sizes, line wrapping, retry intervals, JetStream toggle, Key-Value toggle, update-check toggle)
+│   ├── settings_dialog.dart    # App options dialog (font sizes, line wrapping, retry intervals, JetStream toggle, Key-Value toggle, Object Store toggle, update-check toggle)
 │   └── update_checker.dart     # Pure logic/network split for the GitHub Releases update check (fetchLatestRelease, isNewerVersion)
 ├── scripts/                    # Icon generator, mockup testing, and screenshot utilities
 │   ├── generate_icons.js       # Custom Node.js sharp-based cross-platform transparent icon generator
 │   ├── generate_icons.bat      # Helper batch script to run generate_icons.js
 │   ├── jetstream_demo.ps1      # pwsh-only (see Recipe E): seeds demo streams + a publish loop (or -Iterations N for a finite run)
 │   ├── kv_demo.ps1             # pwsh-only: seeds a demo KV bucket ("app-config") with a handful of realistic keys, for Recipe G's screenshot
+│   ├── object_store_demo.ps1   # pwsh-only: seeds a demo Object Store bucket ("documents") via seed_object_store.dart, for Recipe G's screenshot
+│   ├── seed_object_store.dart  # dart_nats-based Object Store seeder (avoids a CLI mtime-parsing mismatch — see Recipe G)
 │   ├── message_pub.ps1         # PowerShell script publishing mockup JSON payload streams to NATS subjects
 │   ├── capture_screenshots.ps1 # pwsh-only (see Recipe G): regenerates images/*.png used by the README
 │   ├── _image_processing.ps1  # Shared crop/round-corner helper, dot-sourced by capture_screenshots.ps1 and images/process_screenshots.ps1
@@ -70,6 +76,7 @@ nats_client_flutter/
 ├── test/                       # Fast widget/unit tests — fakes only, no server needed (see Recipe F)
 │   ├── jetstream_dashboard_test.dart, jetstream_manager_test.dart, jetstream_*_dialog_test.dart, ...
 │   ├── kv_dashboard_test.dart, kv_manager_test.dart, kv_bucket_dialog_test.dart, kv_put_dialog_test.dart
+│   ├── object_store_dashboard_test.dart, object_store_manager_test.dart, object_store_bucket_dialog_test.dart
 │   └── message_detail_dialog_test.dart, settings_dialog_test.dart, security_settings_dialog_test.dart, update_checker_test.dart, ...
 ├── integration_test/           # Real-backend end-to-end tests against a live nats-server (see Recipe E/F)
 │   ├── helpers/nats_test_app.dart       # pumpConnectedApp/disconnectApp/pumpUntil/waitForSnackBarGone
@@ -78,11 +85,12 @@ nats_client_flutter/
 │   ├── live_messages_interactions_test.dart # Filter/Find/row menu/keyboard shortcuts
 │   ├── jetstream_lifecycle_test.dart    # Full stream/consumer mutation lifecycle incl. Ack/Nak/Term
 │   ├── kv_lifecycle_test.dart           # Full KV bucket/key mutation lifecycle incl. live external updates + optimistic-concurrency conflict
+│   ├── object_store_lifecycle_test.dart # Full Object Store bucket/object lifecycle incl. explicit-Refresh (no watch()) + byte-for-byte download verification
 │   ├── jetstream_browse_test.dart       # The ephemeral "Browse Messages" ordered-consumer view (Filter/Find, Pause/Resume/Delete)
 │   ├── message_list_pause_test.dart     # Live Messages Pause/Resume, wide buffered-count, scroll-position-stable bursts + row-banding color stability
 │   ├── message_row_extent_test.dart     # Fixed-height row overflow guard (long message, max font size, both line-count settings)
 │   ├── connect_shortcut_test.dart       # Ctrl+Enter in Host/Port/Subjects fires Connect while disconnected
-│   ├── settings_tab_toggle_test.dart    # Regression: toggling JetStream/KV off+on in Settings must not break the TabController (no server needed)
+│   ├── settings_tab_toggle_test.dart    # Regression: toggling JetStream/KV/Object Store off+on in Settings must not break the TabController (no server needed)
 │   └── screenshot_tour_test.dart        # Drives the app through the README's screenshots — run via scripts/capture_screenshots.ps1, not directly
 ├── Dockerfile                  # Multi-stage Docker container (Debian Flutter builder -> Alpine Nginx host)
 ├── analysis_options.yaml       # Static analysis and lints configuration (extends flutter_lints/flutter.yaml)
@@ -190,7 +198,7 @@ The JetStream tab (Milestone 1 in `ROADMAP.md`) needs a JetStream-*enabled* serv
    This creates a couple of sample streams (e.g. `orders`, `telemetry`) via `nats stream add` and then loops `nats pub`, so switching to the JetStream tab shows real, growing streams and "Browse Messages" has live data to tail.
 4. When finished: `docker rm -f nats-js`.
 
-KV buckets are themselves backed by JetStream streams (`KV_<bucket>`), so the Key-Value Stores tab and `integration_test/kv_lifecycle_test.dart` need no separate fixture — the same JetStream-enabled server above is sufficient.
+KV buckets are themselves backed by JetStream streams (`KV_<bucket>`), so the Key-Value Stores tab and `integration_test/kv_lifecycle_test.dart` need no separate fixture — the same JetStream-enabled server above is sufficient. The same is true of Object Store buckets (`OBJ_<bucket>`) and `integration_test/object_store_lifecycle_test.dart`.
 
 ### Recipe F: Writing New Tests
 Two distinct suites, two distinct patterns — don't mix them up:
@@ -207,12 +215,14 @@ Two distinct suites, two distinct patterns — don't mix them up:
 ### Recipe G: Regenerating README Screenshots
 The images under `images/` (referenced from the README's "Screenshots" section) are captured automatically, not hand-taken. A real OS-level window screenshot (title bar and all) can only come from a process other than the one being photographed, so this is two cooperating processes: `scripts/capture_screenshots.ps1` (host) and `integration_test/screenshot_tour_test.dart` (drives the real app), trading turns through plain files under `build/.screenshot_signals/` — see `integration_test/helpers/screenshot_signal.dart` for the handshake and `scripts/capture_screenshots.ps1`'s header comment for the Win32 capture side.
 
-1. Prerequisites on `PATH`: `flutter`, `docker`, the `nats` CLI, and ImageMagick (`magick`) — same as Recipe E/F plus the same ImageMagick dependency as `images/process_screenshots.ps1`.
+1. Prerequisites on `PATH`: `flutter`, `dart` (ships with the Flutter SDK — needed by `object_store_demo.ps1`, see below), `docker`, the `nats` CLI, and ImageMagick (`magick`) — same as Recipe E/F plus the same ImageMagick dependency as `images/process_screenshots.ps1`.
 2. Run (from the repo root, under `pwsh`, not Windows PowerShell):
    ```powershell
    pwsh ./scripts/capture_screenshots.ps1
    ```
-3. What it does: starts a disposable JetStream-enabled `nats-server` in Docker (or reuses whatever's already listening on port 4222, e.g. a Recipe E container you left running), seeds it (`jetstream_demo.ps1 -Iterations 5`, then `kv_demo.ps1` for the `app-config` demo bucket — KV rides on the same JetStream-enabled server, no separate container), launches `flutter test integration_test/screenshot_tour_test.dart -d windows`, and as that test reaches each screen (Messages, Filter and Sort, Message Detail, JetStream, Key-Value Stores), captures the live "NATS Client" window and writes the cropped/rounded result straight into `images/<name>.png`, overwriting the existing file. The Messages capture's seed step also publishes 15 filler rows, styled as plausible telemetry/system traffic on their own subjects (never matched by the 'animal'/'family' filter-and-find demo), purely so the list overflows the window — the test then scrolls down and pauses before capturing, so that one screenshot shows the Pause and Jump-to-top buttons in their active states instead of adding dedicated screenshots for them.
+3. What it does: starts a disposable JetStream-enabled `nats-server` in Docker (or reuses whatever's already listening on port 4222, e.g. a Recipe E container you left running), seeds it (`jetstream_demo.ps1 -Iterations 5`, then `kv_demo.ps1` for the `app-config` demo bucket, then `object_store_demo.ps1` for the `documents` demo bucket — KV and Object Store both ride on the same JetStream-enabled server, no separate containers), launches `flutter test integration_test/screenshot_tour_test.dart -d windows`, and as that test reaches each screen (Messages, Filter and Sort, Message Detail, JetStream, Key-Value Stores, Object Store), captures the live "NATS Client" window and writes the cropped/rounded result straight into `images/<name>.png`, overwriting the existing file. The Messages capture's seed step also publishes 15 filler rows, styled as plausible telemetry/system traffic on their own subjects (never matched by the 'animal'/'family' filter-and-find demo), purely so the list overflows the window — the test then scrolls down and pauses before capturing, so that one screenshot shows the Pause and Jump-to-top buttons in their active states instead of adding dedicated screenshots for them.
+
+   `object_store_demo.ps1` is the odd one out: it seeds through a small `dart run` script (`scripts/seed_object_store.dart`) calling `dart_nats`'s own `ObjectStore.put()` directly, rather than the `nats object put` CLI command `kv_demo.ps1`'s KV equivalent uses. Confirmed live: the CLI's own object-metadata writer leaves `mtime` as Go's zero-value time (`0001-01-01T00:00:00Z`), which `dart_nats` parses literally — the app would then show something like "739807d ago" instead of "just now" for CLI-seeded demo objects. Real uploads through the app's own Upload button are unaffected (the app's own `ObjectStore.put()` call always sets `mtime` itself); this only bit the *demo seeding* path.
 4. If you add a new screen worth screenshotting, add a checkpoint to `screenshot_tour_test.dart` (call `signaler.capture(tester, 'Some Name')` once the screen is settled) and reference `./images/Some%20Name.png` from the README. If it needs its own demo data (like the KV bucket above), add a seed step to `capture_screenshots.ps1`'s "Seeding..." block too — otherwise no changes needed to the capture script itself.
 5. Only the Windows target has been wired up (matches how `images/process_screenshots.ps1` already assumes `magick`/pwsh on Windows) — there's no Linux/macOS equivalent of the Win32 `PrintWindow` capture yet.
 

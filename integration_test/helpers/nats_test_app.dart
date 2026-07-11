@@ -49,6 +49,7 @@ Future<void> pumpConnectedApp(
   await prefs.setString(constants.prefSubject, subject);
   await prefs.setBool(constants.prefJetStreamEnabled, true);
   await prefs.setBool(constants.prefKvEnabled, true);
+  await prefs.setBool(constants.prefObjectStoreEnabled, true);
   await prefs.setString(constants.prefTrustedCertificate, '');
   await prefs.setString(constants.prefTrustedCertificateName, '');
   await prefs.setString(constants.prefCertificateChain, '');
@@ -81,6 +82,7 @@ Future<void> pumpDisconnectedApp(
   await prefs.setString(constants.prefSubject, subject);
   await prefs.setBool(constants.prefJetStreamEnabled, true);
   await prefs.setBool(constants.prefKvEnabled, true);
+  await prefs.setBool(constants.prefObjectStoreEnabled, true);
   await prefs.setString(constants.prefTrustedCertificate, '');
   await prefs.setString(constants.prefTrustedCertificateName, '');
   await prefs.setString(constants.prefCertificateChain, '');

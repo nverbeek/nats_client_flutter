@@ -129,5 +129,20 @@ void main() {
     await tester.pumpAndSettle();
     await pumpUntil(tester, () => find.text('db.host').evaluate().isNotEmpty);
     await signaler.capture(tester, 'Key-Value Stores');
+
+    // 6. Object Store: select the "documents" bucket seeded by
+    // `scripts/object_store_demo.ps1` so the dashboard shows real objects
+    // rather than an empty state. Object Store has no watch()/live update
+    // (unlike KV), so the objects only appear after the bucket is selected
+    // — no extra Refresh tap is needed here since selecting a bucket always
+    // loads its objects fresh.
+    await tester.tap(find.text('Object Store'));
+    await tester.pumpAndSettle();
+    await pumpUntil(tester, () => find.text('documents').evaluate().isNotEmpty);
+    await tester.tap(find.text('documents'));
+    await tester.pumpAndSettle();
+    await pumpUntil(
+        tester, () => find.text('diagnostics-bundle.tar.gz').evaluate().isNotEmpty);
+    await signaler.capture(tester, 'Object Store');
   });
 }

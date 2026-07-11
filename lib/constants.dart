@@ -44,6 +44,7 @@ const String prefLastPositionY = "LAST_POSITION_Y";
 const String prefRetryInterval = "RETRY_INTERVAL";
 const String prefJetStreamEnabled = "JETSTREAM_ENABLED";
 const String prefKvEnabled = "KV_ENABLED";
+const String prefObjectStoreEnabled = "OBJECT_STORE_ENABLED";
 const String prefUpdateCheckEnabled = "UPDATE_CHECK_ENABLED";
 
 // retry interval options (in seconds)
@@ -54,6 +55,9 @@ const bool defaultJetStreamEnabled = true;
 
 // Key-Value defaults
 const bool defaultKvEnabled = true;
+
+// Object Store defaults
+const bool defaultObjectStoreEnabled = true;
 
 // update check defaults
 const bool defaultUpdateCheckEnabled = true;

@@ -3,7 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nats_client_flutter/settings_dialog.dart';
 
 void main() {
-  Widget buildDialog(void Function(double, bool, int, bool, bool, bool) onSave) {
+  Widget buildDialog(
+      void Function(double, bool, int, bool, bool, bool, bool) onSave) {
     return MaterialApp(
       home: Scaffold(
         body: SettingsDialog(
@@ -12,6 +13,7 @@ void main() {
           initialRetryInterval: 5,
           initialJetStreamEnabled: true,
           initialKvEnabled: true,
+          initialObjectStoreEnabled: true,
           initialUpdateCheckEnabled: true,
           onSave: onSave,
         ),
@@ -20,7 +22,8 @@ void main() {
   }
 
   testWidgets('shows the initial values', (tester) async {
-    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____, ______) {}));
+    await tester
+        .pumpWidget(buildDialog((_, __, ___, ____, _____, ______, _______) {}));
 
     expect(find.text('14'), findsOneWidget);
     expect(find.text('5 seconds'), findsOneWidget);
@@ -29,15 +32,18 @@ void main() {
     final singleLineSwitch = switches[0];
     final jetStreamSwitch = switches[1];
     final kvSwitch = switches[2];
-    final updateCheckSwitch = switches[3];
+    final objectStoreSwitch = switches[3];
+    final updateCheckSwitch = switches[4];
     expect(singleLineSwitch.value, isFalse);
     expect(jetStreamSwitch.value, isTrue);
     expect(kvSwitch.value, isTrue);
+    expect(objectStoreSwitch.value, isTrue);
     expect(updateCheckSwitch.value, isTrue);
   });
 
   testWidgets('toggling Single Line Messages flips its switch', (tester) async {
-    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____, ______) {}));
+    await tester
+        .pumpWidget(buildDialog((_, __, ___, ____, _____, ______, _______) {}));
 
     await tester.tap(find.byType(Switch).first);
     await tester.pump();
@@ -48,7 +54,8 @@ void main() {
   });
 
   testWidgets('toggling Enable JetStream flips its switch', (tester) async {
-    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____, ______) {}));
+    await tester
+        .pumpWidget(buildDialog((_, __, ___, ____, _____, ______, _______) {}));
 
     final jetStreamSwitchFinder = find.byType(Switch).at(1);
     await tester.tap(jetStreamSwitchFinder);
@@ -60,7 +67,8 @@ void main() {
 
   testWidgets('toggling Enable Key-Value Stores flips its switch',
       (tester) async {
-    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____, ______) {}));
+    await tester
+        .pumpWidget(buildDialog((_, __, ___, ____, _____, ______, _______) {}));
 
     final kvSwitchFinder = find.byType(Switch).at(2);
     await tester.tap(kvSwitchFinder);
@@ -70,9 +78,27 @@ void main() {
     expect(kvSwitch.value, isFalse);
   });
 
-  testWidgets('toggling Check for Updates flips its switch', (tester) async {
-    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____, ______) {}));
+  testWidgets('toggling Enable Object Store flips its switch', (tester) async {
+    await tester
+        .pumpWidget(buildDialog((_, __, ___, ____, _____, ______, _______) {}));
 
+    final objectStoreSwitchFinder = find.byType(Switch).at(3);
+    await tester.tap(objectStoreSwitchFinder);
+    await tester.pump();
+
+    final objectStoreSwitch = tester.widget<Switch>(objectStoreSwitchFinder);
+    expect(objectStoreSwitch.value, isFalse);
+  });
+
+  testWidgets('toggling Check for Updates flips its switch', (tester) async {
+    await tester
+        .pumpWidget(buildDialog((_, __, ___, ____, _____, ______, _______) {}));
+
+    // The dialog's content became scrollable once the Object Store toggle
+    // pushed it past the fixed content height — scroll the last switch into
+    // view before tapping it, or the tap misses (hits whatever's on top of
+    // the still-off-screen widget instead).
+    await tester.ensureVisible(find.byType(Switch).last);
     await tester.tap(find.byType(Switch).last);
     await tester.pump();
 
@@ -82,7 +108,8 @@ void main() {
 
   testWidgets('changing the Reconnect Interval dropdown updates the value',
       (tester) async {
-    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____, ______) {}));
+    await tester
+        .pumpWidget(buildDialog((_, __, ___, ____, _____, ______, _______) {}));
 
     await tester.tap(find.text('5 seconds'));
     await tester.pumpAndSettle();
@@ -94,7 +121,8 @@ void main() {
 
   testWidgets('dragging the font size slider updates the displayed value',
       (tester) async {
-    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____, ______) {}));
+    await tester
+        .pumpWidget(buildDialog((_, __, ___, ____, _____, ______, _______) {}));
 
     expect(find.text('14'), findsOneWidget);
     await tester.drag(find.byType(Slider), const Offset(200, 0));
@@ -118,8 +146,9 @@ void main() {
                   initialRetryInterval: 5,
                   initialJetStreamEnabled: true,
                   initialKvEnabled: true,
+                  initialObjectStoreEnabled: true,
                   initialUpdateCheckEnabled: true,
-                  onSave: (_, __, ___, ____, _____, ______) =>
+                  onSave: (_, __, ___, ____, _____, ______, _______) =>
                       saveCalled = true,
                 ),
               ),
@@ -146,6 +175,7 @@ void main() {
     int? savedRetryInterval;
     bool? savedJetStreamEnabled;
     bool? savedKvEnabled;
+    bool? savedObjectStoreEnabled;
     bool? savedUpdateCheckEnabled;
 
     await tester.pumpWidget(MaterialApp(
@@ -161,14 +191,16 @@ void main() {
                   initialRetryInterval: 5,
                   initialJetStreamEnabled: true,
                   initialKvEnabled: true,
+                  initialObjectStoreEnabled: true,
                   initialUpdateCheckEnabled: true,
                   onSave: (fontSize, singleLine, retryInterval, jetStream,
-                      kv, updateCheck) {
+                      kv, objectStore, updateCheck) {
                     savedFontSize = fontSize;
                     savedSingleLine = singleLine;
                     savedRetryInterval = retryInterval;
                     savedJetStreamEnabled = jetStream;
                     savedKvEnabled = kv;
+                    savedObjectStoreEnabled = objectStore;
                     savedUpdateCheckEnabled = updateCheck;
                   },
                 ),
@@ -193,6 +225,7 @@ void main() {
     expect(savedRetryInterval, 5);
     expect(savedJetStreamEnabled, isTrue);
     expect(savedKvEnabled, isTrue);
+    expect(savedObjectStoreEnabled, isTrue);
     expect(savedUpdateCheckEnabled, isTrue);
     expect(find.byType(SettingsDialog), findsNothing);
   });

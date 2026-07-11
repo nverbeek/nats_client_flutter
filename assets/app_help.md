@@ -14,6 +14,7 @@ The application provides a settings dialog (⚙️ button in the toolbar) with t
 - **Reconnect Interval**: Controls the amount of time between reconnection attempts.
 - **Enable JetStream**: Shows or hides the JetStream tab (see below). On by default; turning it off doesn't affect your connection or the Live Messages tab, it just hides the JetStream UI for users who don't need it.
 - **Enable Key-Value Stores**: Shows or hides the Key-Value Stores tab (see below). On by default; same "just hides the UI" behavior as the JetStream toggle.
+- **Enable Object Store**: Shows or hides the Object Store tab (see below). On by default; same "just hides the UI" behavior as the JetStream toggle.
 - **Check for Updates**: Controls whether the app checks GitHub for a newer release on startup (see Update Notifications below). On by default.
 
 # Connection
@@ -120,6 +121,27 @@ Once a bucket is selected, its keys are listed with their current value, revisio
     - **History**: Shows every past revision of the key (value and operation), newest first.
     - **Delete**: Adds a deletion tombstone. Past revisions are kept and still visible in History. Asks for confirmation first.
     - **Purge**: Permanently removes all history for the key, not just the current value. Asks for confirmation first.
+
+# Object Store
+When **Enable Object Store** is on (the default) and you're connected to a server or account with JetStream enabled (Object Store buckets are themselves backed by JetStream streams), an **Object Store** tab appears. It's a monitoring and management dashboard for Object Store buckets and the objects (blobs/files) inside them.
+
+**Object Store is an `EXPERIMENTAL` feature of the underlying NATS client library** — its behavior may change in a future release of this app as the library evolves. Unlike Key-Value Stores, it also has no live-update mechanism: the object list is a point-in-time snapshot, so use **Refresh** to see objects uploaded by other clients.
+
+## Buckets
+The left-hand pane lists all Object Store buckets on the account. Selecting a bucket shows its objects on the right, with live search.
+
+- **Create Bucket**: Opens a dialog to create a new bucket — name, storage type (File or Memory), optional max size in MB, optional TTL in days, and replica count.
+- **Delete** (trash icon on each bucket row): Permanently deletes the bucket and all of its objects. Asks for confirmation first.
+
+## Objects
+Once a bucket is selected, its objects are listed with their size, chunk count, a shortened SHA-256 digest, and last-modified time.
+
+- **Search Objects**: Narrows the list to objects whose name contains the search text (case-insensitive).
+- **Refresh**: Reloads the object list from the server — there's no live watch for Object Store, so this is the only way to see objects uploaded by other clients.
+- **Upload**: Opens your OS's file picker; the selected file is uploaded under its original filename, overwriting any existing object with that name.
+- Each object row offers:
+    - **Download**: Opens your OS's save-file dialog and writes the downloaded bytes there, after the client verifies the object's SHA-256 digest.
+    - **Delete**: Permanently deletes the object. Asks for confirmation first.
 
 # Keyboard Shortcuts
 

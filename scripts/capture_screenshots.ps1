@@ -67,6 +67,7 @@ function Test-CommandExists {
 Write-Host "Checking prerequisites..." -ForegroundColor Cyan
 $missing = @()
 if (-not (Test-CommandExists "flutter")) { $missing += "flutter" }
+if (-not (Test-CommandExists "dart")) { $missing += "dart (ships with the Flutter SDK)" }
 if (-not (Test-CommandExists "docker")) { $missing += "docker" }
 if (-not (Test-CommandExists "nats")) { $missing += "nats (natscli)" }
 if (-not (Test-ImageMagick)) { $missing += "magick (ImageMagick)" }
@@ -123,6 +124,9 @@ try {
 
     Write-Host "Seeding Key-Value demo bucket..." -ForegroundColor Cyan
     pwsh -File (Join-Path $PSScriptRoot "kv_demo.ps1")
+
+    Write-Host "Seeding Object Store demo bucket..." -ForegroundColor Cyan
+    pwsh -File (Join-Path $PSScriptRoot "object_store_demo.ps1")
 
     # --- Win32 window capture -------------------------------------------------
     Add-Type -AssemblyName System.Drawing

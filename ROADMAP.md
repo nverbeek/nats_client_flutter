@@ -14,9 +14,15 @@ These features are made possible by our successful migration to the official mai
 - [x] **Milestone 4**: Design & Implement **Phase D: Expanded Authentication Support** (username/password, token, NKey, `.creds`) (Medium Priority). Implementation, docs, unit/widget tests, and a live-server verification pass (correct + wrong credentials) are done for all four methods.
 - [x] **Milestone 5**: Design & Implement **Phase E: Update Notifications** (Low Priority). Checks GitHub Releases on startup and surfaces a dismissible in-app notice when a newer version is published; opt-out toggle in Settings. Implementation, unit tests, and a live-API verification pass (both the update-available and up-to-date paths) are done.
 - [x] **Milestone 6**: Design & Implement **Phase F: Live Message List UX Improvements** (Medium Priority). Filter/Find on the JetStream Browse Messages view (plus tab-aware Ctrl+F/Ctrl+Shift+F), scroll-position-preserving inserts on both message lists (verified correct and performant at thousands-of-messages/large-burst scale), and a Pause/Resume control on both. Implementation and a live-server verification pass are done.
-- [ ] **Milestone 7**: Design & Implement **Message Direction Indicator (Incoming vs. Outgoing)** (Low/Medium Priority). Not started.
-- [ ] **Milestone 8**: Design & Implement **Request/Reply Correlation Improvements** (Medium Priority). Not started.
-- [ ] **Milestone 9**: Investigate & Implement **Code Signing for Windows & macOS Builds** (Low Priority, cost-gated). Not started — research done, decision on which paid/free path pending.
+- [x] **Milestone 7**: Design & Implement **Object Store Inspector** (Medium Priority). Implementation, docs, unit/widget tests, and a live-server verification pass (bucket/object lifecycle, chunked upload/download with digest verification, explicit-Refresh-since-there's-no-`watch()`) are done.
+- [ ] **Milestone 8**: Design & Implement **Message Headers on Send** (Low/Medium Priority). Not started.
+- [ ] **Milestone 9**: Design & Implement **Queue Group Subscriptions** (Medium Priority). Not started.
+- [ ] **Milestone 10**: Design & Implement **JetStream Account Info Panel** (Low Priority). Not started.
+- [ ] **Milestone 11**: Design & Implement **Subscription Manager & Per-Subscription Color Indicators** (Medium Priority). Not started.
+- [ ] **Milestone 12**: Design & Implement **Connection Host/Port History** (Low/Medium Priority). Not started.
+- [ ] **Milestone 13**: Design & Implement **Message Direction Indicator (Incoming vs. Outgoing)** (Low/Medium Priority). Not started.
+- [ ] **Milestone 14**: Design & Implement **Request/Reply Correlation Improvements** (Medium Priority). Not started.
+- [ ] **Milestone 15**: Investigate & Implement **Code Signing for Windows & macOS Builds** (Low Priority, cost-gated). Not started — research done, decision on which paid/free path pending.
 
 ---
 
@@ -303,7 +309,124 @@ Small, standalone UX addition unrelated to the message list work above: Ctrl+Ent
 
 ---
 
-## Milestone 7: Message Direction Indicator (Incoming vs. Outgoing) (Low/Medium Priority)
+## Milestone 7: Object Store Inspector (Medium Priority)
+
+### Objective
+`dart_nats: ^1.1.1` ships a full JetStream-backed blob store — `lib/src/object_store.dart` — that this app has never touched (verified: no `object_store`/`ObjectStore` reference anywhere under `lib/`). It's the object-storage sibling of the KV milestone: same "bucket backed by a magic-prefixed JetStream stream" shape, just for arbitrary byte payloads (files/blobs) instead of small key/value pairs. This milestone adds a fourth tab mirroring the existing KV Dashboard's bucket-list/object-list pattern.
+
+### What `dart_nats` actually supports (verified against `dart_nats-1.1.1/lib/src/object_store.dart`)
+- `client.jetStream().createObjectStore(ObjectStoreConfig(bucket:, storage:, replicas:, maxBytes:, ttl:))` / `objectStore(bucket, {create})` / `deleteObjectStore(bucket)` — backing stream `OBJ_<bucket>`, subjects `$O.<bucket>.>`.
+- `ObjectStore.put(name, Uint8List, {description})` / `putBytes` / `putString` — chunks the payload into 128 KiB pieces published to `$O.<bucket>.C.<nuid>`, computes a SHA-256 digest, then publishes JSON metadata (`ObjectInfo`) to `$O.<bucket>.M.<base64(name)>`.
+- `ObjectStore.get(name)` / `getBytes` / `getString` — resolves metadata via a JetStream direct-get call, spins up an ephemeral push consumer filtered to that object's chunk subject, reassembles the chunks, and verifies the SHA-256 digest before returning (throws on mismatch).
+- `ObjectStore.delete(name)` — tombstones the metadata entry (`deleted: true`) and purges the chunk subject to reclaim space.
+- `ObjectStore.list()` — an ephemeral consumer over `$O.<bucket>.M.>`, folding the metadata event stream into the current live object set (a later `deleted: true` removes an earlier `put` for the same name) — snapshot-only, timeout-bounded; unlike `KeyValue`, `ObjectStore` has **no `watch()`**, so the object list needs an explicit refresh rather than KV's automatic live updates.
+- `ObjectStore.addLink()` / `addBucketLink()` — an object (or a whole bucket) can point at another object/bucket; `get()` resolves links recursively up to 5 hops.
+- **Caveat worth surfacing in the UI/docs**: the package's own doc comment marks `ObjectStore` `EXPERIMENTAL: subject to change in future releases` — unlike `KeyValue`, which carries no such warning. Also worth re-checking live (per the KV milestone's lesson about `KeyValueConfig.toStreamConfig()` silently dropping `ttl`/replicas): confirm `ObjectStoreConfig.toStreamConfig()` doesn't have the same bug before trusting it.
+
+**Live-server verification findings (2026-07-11)**: before writing any UI, probed the real API against a Docker `nats:latest -js` server (create bucket with `ttl`/`replicas` set → put a small object → put a 300 KiB object spanning 3 chunks → list → get both back and byte-compare → delete → list again → delete bucket). Everything worked correctly, including chunk reassembly and the SHA-256 digest check on download. Unlike the KV milestone, **`ObjectStoreConfig.toStreamConfig()` does *not* drop `ttl`/`replicas`** — confirmed via a raw `$JS.API.STREAM.INFO.<name>` request (bypassing the client's own parsing) that both actually reached the server. The one real gap found: `StreamInfo.fromJson()` in `dart_nats-1.1.1/lib/src/jetstream.dart` doesn't parse `max_age`/`num_replicas`/several other `StreamConfig` fields back out of the server's response at all (they're silently `null` on any `StreamInfo` read back, for *any* stream type, not just Object Store — a pre-existing gap, not specific to this milestone). This never blocked anything here because — like the KV and JetStream dashboards before it — the Object Store bucket list only ever displays `StreamInfo.state` (message/byte counts), never reads `.config` back for display. No in-app workaround was needed and no fork revival was warranted.
+
+### UI Architecture & Concept
+Fourth tab (`[📦 Object Store]`) alongside Live Messages / JetStream / KV, gated behind a new opt-in "Enable Object Store" setting (same pattern as JetStream/KV). Reuses the KV dashboard's master/detail layout: left pane lists buckets (Create/Delete), right pane lists objects in the selected bucket (name, size, chunk count, digest, mtime) with per-row Upload (native file picker → `put`), Download (native save dialog → `get` → write bytes), and Delete.
+
+### Implementation Checklist
+- [x] `lib/object_store_manager.dart` — thin wrapper mirroring `KvManager`/`JetStreamManager`: `listBuckets()`, `createBucket()`, `deleteBucket()`, `listObjects(bucket)`, `putObject()`, `getObject()`, `deleteObject()`. Unlike `KvManager`, `createBucket()` goes straight through the package's own `createObjectStore(ObjectStoreConfig(...))` rather than building a `StreamConfig` by hand, since live verification confirmed the package's own `toStreamConfig()` conversion isn't buggy here (see above).
+- [x] `lib/object_store_bucket_dialog.dart` — Create Bucket form (name, storage, max size in MB, TTL in days, replicas), following `kv_bucket_dialog.dart`'s pattern.
+- [x] `lib/object_store_dashboard.dart` — master/detail dashboard. Upload/Download are injectable (`pickUploadFile`/`saveDownloadedFile` constructor params, defaulting to real `file_picker`-backed implementations using the same `kIsWeb`/`dart:io` split as `main.dart`'s own `pickFile()`), so widget tests can drive the full upload/download flow with a fake file instead of the OS dialog.
+- [x] Object row detail: name, human-readable size, chunk count, a shortened SHA-256 digest, and relative mtime. **Deleted state was dropped from scope** — `ObjectStore.list()` already folds tombstoned objects out of its result (a later `deleted: true` metadata event removes the earlier `put`), so a "deleted" flag would never be true on anything the list actually returns.
+- [x] New pref `prefObjectStoreEnabled` / `defaultObjectStoreEnabled` (true, same "opt-out" pattern as JetStream/KV); the dynamic `TabController` (already built for 1–3 tabs since the KV milestone) now extends to 1–4.
+- [x] Unit tests (pure-logic split, mirroring `kv_manager_test.dart`) + fake-manager widget tests (`test/object_store_manager_test.dart`, `test/object_store_bucket_dialog_test.dart`, `test/object_store_dashboard_test.dart` — the last covers Upload/Download/Delete/Refresh via the injected fake file-picker callbacks) + a live-server `integration_test/object_store_lifecycle_test.dart`: create bucket via the UI → a second, direct `dart_nats` client uploads a 300 KiB (3-chunk) object straight into the bucket → confirmed it does **not** appear until Refresh is tapped (no `watch()`) → tapping Refresh shows it → download (via the same manager class, bypassing only the native save-file dialog itself — see the test's doc comment) verified byte-for-byte against the original → delete object via the UI, confirmed gone server-side too → delete bucket via the UI.
+- [x] Documented the upstream `EXPERIMENTAL` status in both `assets/app_help.md` (new "Object Store" section) and directly in the dashboard UI itself (an italic caption under the bucket list header), plus the no-live-`watch()`/explicit-Refresh caveat in both places.
+
+---
+
+## Milestone 8: Message Headers on Send (Low/Medium Priority)
+
+### Objective
+A symmetry gap: incoming NATS message headers are already parsed and displayed in all three message views (`main.dart:1043-1045`, `jetstream_message_view.dart:263-265`, `jetstream_consumer_tail_view.dart:103-105`), but there's no way to attach custom headers when publishing from `SendMessageDialog`. Headers are commonly used for correlation IDs, content-type, and tracing metadata — right now testing header-dependent server-side logic means reaching for another tool to publish.
+
+### What `dart_nats` actually supports
+`client.pub(subject, data, {String? replyTo, Header? header})` / `pubString(..., header: Header?)` (`client.dart:902-966`) — `Header` (`message.dart:9-81`) is an ordered key/value map plus a version line, sent using NATS's `HPUB` wire format.
+
+### Implementation Checklist
+- [ ] Add an optional, collapsible "Headers" section to `SendMessageDialog` — a dynamic key/value row list (add/remove rows), following the existing conditional-field disclosure pattern from the Security Settings dialog's Authentication section.
+- [ ] Wire it through `sendMessage()` in `lib/main.dart`: build a `Header` from non-empty rows and pass it to `pub()`/`pubString()`. Verify `JetStream.publish()`/`publishString()` (`jetstream.dart:401-438`) also accept a `header` before assuming parity with the plain-pub path — the JetStream-ack toggle uses a different call path.
+- [ ] Reflect sent headers in the UI's own feedback where relevant (e.g. if the message loops back and appears in the list, its headers should render the same way received headers already do).
+- [ ] Unit/widget tests for the header row list (add/remove/empty-value handling) + a live-server `integration_test` publishing with headers and asserting the receiving side's `message.header` matches.
+
+---
+
+## Milestone 9: Queue Group Subscriptions (Medium Priority)
+
+### Objective
+`client.sub<T>(subject, {String? queueGroup})` (`client.dart:991-995`) supports NATS queue groups — the standard load-balancing primitive where only one member of a named group receives each message — but the app's only subscribe call site, `subscribeToSubject()` (`main.dart:850-857`), never passes one. Anyone wanting to verify queue-group behavior (e.g. "does my service correctly load-balance across replicas") currently has to reach for another tool alongside this one.
+
+### Implementation Checklist
+- [ ] Add an optional queue-group field per subscription (naturally a field in Milestone 11's Subscription Manager dialog if that lands first; otherwise a standalone field next to today's Subjects box as an interim step).
+- [ ] Thread `queueGroup` through `subscribeToSubject()` into `natsClient.sub()`.
+- [ ] Surface the queue group (if any) somewhere per-subscription in the UI so it's clear which subscriptions are grouped together.
+- [ ] Live-server verification: two subscribers (the app + a second direct `dart_nats` client, or two app instances) in the same queue group on the same subject, confirming messages alternate/split between them rather than both receiving every message.
+
+**Note**: this pairs naturally with Milestone 11 (Subscription Manager) — likely worth implementing together, since a queue group is a natural per-subscription attribute in that dialog rather than a bolt-on to today's single comma-delimited text field.
+
+---
+
+## Milestone 10: JetStream Account Info Panel (Low Priority)
+
+### Objective
+`checkAvailability()` in both `jetstream_manager.dart:94-97` and `kv_manager.dart:23-26` already calls `js.accountInfo()` on every JetStream/KV dashboard load, but only checks that it didn't throw — the real payload is discarded. `AccountInfo` (`jetstream.dart`, `Tier`/`APIStats`/`AccountInfo` classes) carries genuinely useful operational data that's already being fetched for free: memory/storage usage vs. reserved limits, stream/consumer counts, and API call/error/inflight stats.
+
+### Implementation Checklist
+- [ ] Have `checkAvailability()` (or a sibling method) return the fetched `AccountInfo` instead of discarding it.
+- [ ] Add a small "Account Info" entry point (icon button or menu item) on the JetStream and/or KV dashboard header, opening a compact read-only dialog: memory/storage used vs. reserved, stream/consumer counts, API totals/errors/inflight, domain.
+- [ ] Unit tests for any new pure formatting logic (byte formatting, ratio display) + a widget test for the dialog against a fake `AccountInfo`; live-server verification that real values populate the dialog sensibly (doesn't need to assert exact numbers).
+
+---
+
+## Milestone 11: Subscription Manager & Per-Subscription Color Indicators (Medium Priority)
+
+### Objective
+Today, subscribing to more than one subject means typing a comma-delimited list into a single Subjects text field (`main.dart:738-747`), parsed once at connect time — there's no way to add or remove an individual subscription after connecting, see which subjects are currently active at a glance, or tell which subscription a given Live Messages row actually matched once more than one is active. This milestone replaces the raw text field with a compact display + management dialog, and adds a small colored indicator per message row keyed to its originating subscription.
+
+### What `dart_nats` actually supports
+Each `Subscription` returned by `client.sub()` has its own numeric `sid`, and every `Message` carries the `sid` of the subscription that delivered it (`message.dart`: `Message(this.subject, this.sid, ...)`). That means messages can be tagged with their origin subscription for free — no need to re-derive it from subject-pattern matching, which would be ambiguous with overlapping wildcards — just track subscriptions in a `Map<int, SubscriptionInfo>` keyed by `sid` and look up by `event.sid` on arrival. `client.unSub(Subscription)` / `unSubById(int)` (`client.dart:1027-1044`) already support removing a single subscription without touching the others, which today's app never calls (subscriptions only ever end at disconnect).
+
+### UI Architecture & Concept
+Replace the free-text Subjects field in the connection bar with a compact read-only display (e.g. "3 subscriptions" or the first subject + "+2 more") plus a "Manage..." button opening a dialog: a list of active subscriptions, each showing its subject pattern, assigned color swatch, and (if Milestone 9 lands) queue group, with Add/Remove controls. Removing a row while connected calls `unSub()` immediately, not just at next reconnect. Each subscription gets a color automatically assigned from a small fixed palette (cycling if subscriptions outnumber the palette — this is a quick visual grouping aid, not a precise identity system). A small colored dot/bar per message row in the Live Messages list shows which subscription that message arrived on; a legend in the Manage dialog (or a tooltip on the dot) ties color back to subject.
+
+### Implementation Checklist
+- [ ] Define a small themed color palette (6–8 colors, distinguishable in both light and dark mode — check contrast against both row-stripe backgrounds from Milestone 6, since dots sit inside those rows) in `lib/constants.dart` or a new small file.
+- [ ] `SubscriptionInfo` model (subject, sid, assigned color, optional queue group) + a `Map<int, SubscriptionInfo>` keyed by `sid`, replacing the current implicit list built from `subject.split(',')`.
+- [ ] `lib/subscription_manager_dialog.dart` — list + Add (subject [+ queue group] entry) + Remove (calls `natsClient.unSub()`) per row, following the existing dialog conventions (`kv_bucket_dialog.dart` is a reasonable model for a simple list-management dialog).
+- [ ] Replace the Subjects `TextFormField` in the connection bar with the compact summary + "Manage..." trigger; keep the underlying persisted preference format compatible (or migrate it) so existing saved subject lists still load.
+- [ ] Tag each `Message` with its subscription's color at arrival time (via `event.sid` lookup) and thread it through `items`/the row-builder to render a small leading color indicator; confirm it composes cleanly with the existing Filter/Find highlighting and the fixed-`itemExtent` row layout from Milestone 6 (the indicator needs to fit inside the fixed row height, not push other content).
+- [ ] Decide explicitly whether JetStream Browse Messages needs the same treatment before starting — it currently binds to one stream/consumer at a time rather than multiple ad hoc subscriptions, so it's probably out of scope.
+- [ ] Unit/widget tests for `SubscriptionManagerDialog` (add/remove, color assignment/cycling) + a live-server `integration_test` verifying: subscribing to two subjects via the dialog, publishing to both from a second client, and asserting the two resulting rows carry different indicator colors; removing one subscription then publishing again and confirming no new row appears for it.
+
+---
+
+## Milestone 12: Connection Host/Port History (Low/Medium Priority)
+
+### Objective
+Today only the single most-recently-used host and port are persisted (`constants.prefHost`/`prefPort`, overwritten on every successful connect — `main.dart:687-688`, loaded once at startup — `main.dart:91-92`). There's no way to quickly reconnect to a server used a few connections ago without retyping it. This is a pure app-side UX improvement — not tied to any `dart_nats` API — but rounds out the connection-bar UX alongside the Milestone 7-11 batch it's slated to ship alongside.
+
+### Desired Behavior
+Keep a small rolling history (~5 entries) of previously-used host/port **pairs** (a single paired entry per history item — selecting one fills both fields atomically to a combination that was actually connected with before), most-recent-first, deduplicated. Surfaced as a dropdown next to the Host field that also filters as the user types (not a separate free-floating autocomplete widget) — pick from history, or keep typing to narrow it, or ignore it and type a brand-new host.
+
+### Decided
+- **Paired**, not independent host/port histories.
+- **Dropdown that filters as you type** (not a plain `Autocomplete` popup, not a static unfilterable list) — e.g. a `DropdownMenu`-style affordance anchored to the Host field, filtering its entries as the field's text changes.
+- Cap: flat 5 entries.
+
+### Implementation Checklist
+- [ ] New preference key storing a bounded, most-recent-first, deduplicated list of paired entries (e.g. a JSON-encoded `List<String>` of `"host:port"` via `SharedPreferences`, capped at 5 — trim on insert, move-to-front on reuse of an existing entry). No direct existing analog to reuse — `prefHost`/`prefPort` today store only a single value each.
+- [ ] Update history on every successful connect (`Status.connected`), not on every connect attempt — a failed connect shouldn't pollute the history with typos or unreachable hosts.
+- [ ] UI: a dropdown anchored to the Host field, filtering its 5 entries as the user types; selecting an entry fills both Host and Port fields atomically.
+- [ ] Selecting a history entry fills the field(s) but does not auto-connect — consistent with today's Connect-is-an-explicit-action behavior (including the existing Ctrl+Enter shortcut).
+- [ ] Unit tests for the pure history-list logic (insert/dedupe/cap/move-to-front) + a widget test for the dropdown/filter UI + a test confirming a failed connect doesn't add to history.
+
+---
+
+## Milestone 13: Message Direction Indicator (Incoming vs. Outgoing) (Low/Medium Priority)
 
 ### Objective
 On the Live Messages tab, a sent (published) message currently doesn't appear in the message list at all unless the client also happens to be subscribed back to that exact subject (loopback) — `sendMessage()` (`lib/main.dart` around line 1399) calls `natsClient.pubString()` / `JetStreamManager.publish()` directly and never adds an entry to `items` itself. That makes "did I send this or receive this" hard to track even on subjects where both directions are visible today. This milestone adds: (1) tracking locally-sent messages as first-class list entries regardless of loopback subscription, and (2) a small visual indicator on each row distinguishing outgoing from incoming.
@@ -322,7 +445,7 @@ On the Live Messages tab, a sent (published) message currently doesn't appear in
 
 ---
 
-## Milestone 8: Request/Reply Correlation Improvements (Medium Priority)
+## Milestone 14: Request/Reply Correlation Improvements (Medium Priority)
 
 ### Objective
 User feedback asked whether request/reply correlation could be improved. Today, "Reply To" (`lib/main.dart` around lines 1525-1532) only pre-fills the Send dialog's subject field with the original message's `replyTo` subject — it's an ordinary publish with no automatic pairing. True NATS request/reply (a private per-request inbox subject, awaited for a single correlated response) isn't used anywhere in the app today, so a real request/reply round trip wouldn't even show up in the message list (the app isn't subscribed to the inbox subject it would use).
@@ -331,7 +454,7 @@ User feedback asked whether request/reply correlation could be improved. Today, 
 `Client.request<T>(subject, data, {timeout = 2s, jsonDecoder, header})` / `requestString<T>(...)`: lazily creates one shared wildcard subscription to `_INBOX.<clientNuid>.>`, generates a unique per-call reply subject, publishes with `replyTo` set to it, and awaits the first message seen on that inbox (default 2s timeout, throws `TimeoutException` on expiry). Correlation is a subject-string match inside the shared subscription's stream, not a keyed dispatch map. Calls are serialized via an internal `Mutex` — concurrent `request()` calls queue rather than run in parallel. The generated inbox subject isn't returned separately; the response `Message.subject` *is* the correlation key.
 
 ### Possible Directions (not yet decided)
-- Add a "Request" mode to the Send dialog (alongside the existing JetStream-ack toggle) that calls `request()`/`requestString()` instead of a plain publish, then inserts both the outgoing request and its correlated incoming reply into the list as a linked pair — depends on Milestone 7's outgoing-message tracking.
+- Add a "Request" mode to the Send dialog (alongside the existing JetStream-ack toggle) that calls `request()`/`requestString()` instead of a plain publish, then inserts both the outgoing request and its correlated incoming reply into the list as a linked pair — depends on Milestone 13's outgoing-message tracking.
 - Alternatively/additionally, improve correlation for the plain-pub/sub style of request/reply many NATS users actually use (subscribe to a reply subject, publish with `replyTo` set, no `client.request()` involved) — likely worth supporting both patterns rather than assuming everyone uses the built-in `request()`.
 - Visually link paired rows (shared correlation id, "jump to reply"/"jump to request", or adjacent grouping) instead of leaving the user to scan for a matching subject.
 - A clear timeout/no-reply failure state in the UI, since `request()` throws `TimeoutException` rather than hanging silently.
@@ -339,14 +462,14 @@ User feedback asked whether request/reply correlation could be improved. Today, 
 
 ### Implementation Checklist
 - [ ] Decide UX: dedicated "Request" send mode using `client.request()`, enhanced correlation for the existing plain pub/sub "Reply To" flow, or both.
-- [ ] Implement the chosen mechanism, building on Milestone 7's outgoing-message tracking so both halves of a pair are visible in the list.
+- [ ] Implement the chosen mechanism, building on Milestone 13's outgoing-message tracking so both halves of a pair are visible in the list.
 - [ ] Visual/interaction linking between paired rows.
 - [ ] Timeout/failure UX.
 - [ ] Unit tests + live-server `integration_test` coverage.
 
 ---
 
-## Milestone 9: Code Signing for Windows & macOS Builds (Low Priority, cost-gated)
+## Milestone 15: Code Signing for Windows & macOS Builds (Low Priority, cost-gated)
 
 ### Objective
 Windows and macOS builds are currently unsigned: users hit "Unknown Publisher"/SmartScreen warnings on Windows and Gatekeeper "unidentified developer" blocks on macOS when running a downloaded build. Researched July 2026 — both are technically straightforward to wire into the existing [.github/workflows/build.yml](.github/workflows/build.yml); the real blocker is cost/eligibility, not feasibility.

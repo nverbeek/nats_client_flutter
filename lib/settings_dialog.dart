@@ -6,8 +6,9 @@ class SettingsDialog extends StatefulWidget {
   final int initialRetryInterval;
   final bool initialJetStreamEnabled;
   final bool initialKvEnabled;
+  final bool initialObjectStoreEnabled;
   final bool initialUpdateCheckEnabled;
-  final void Function(double, bool, int, bool, bool, bool) onSave;
+  final void Function(double, bool, int, bool, bool, bool, bool) onSave;
 
   const SettingsDialog({
     super.key,
@@ -16,6 +17,7 @@ class SettingsDialog extends StatefulWidget {
     required this.initialRetryInterval,
     required this.initialJetStreamEnabled,
     required this.initialKvEnabled,
+    required this.initialObjectStoreEnabled,
     required this.initialUpdateCheckEnabled,
     required this.onSave,
   });
@@ -30,6 +32,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late int tempRetryInterval;
   late bool tempJetStreamEnabled;
   late bool tempKvEnabled;
+  late bool tempObjectStoreEnabled;
   late bool tempUpdateCheckEnabled;
 
   @override
@@ -40,6 +43,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     tempRetryInterval = widget.initialRetryInterval;
     tempJetStreamEnabled = widget.initialJetStreamEnabled;
     tempKvEnabled = widget.initialKvEnabled;
+    tempObjectStoreEnabled = widget.initialObjectStoreEnabled;
     tempUpdateCheckEnabled = widget.initialUpdateCheckEnabled;
   }
 
@@ -59,121 +63,138 @@ class _SettingsDialogState extends State<SettingsDialog> {
           ),
         ],
       ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              const Text('Message Font Size'),
-              Expanded(
-                child: Slider(
-                  min: 10,
-                  max: 30,
-                  divisions: 20,
-                  value: tempFontSize,
-                  label: tempFontSize.round().toString(),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                const Text('Message Font Size'),
+                Expanded(
+                  child: Slider(
+                    min: 10,
+                    max: 30,
+                    divisions: 20,
+                    value: tempFontSize,
+                    label: tempFontSize.round().toString(),
+                    onChanged: (v) {
+                      setState(() {
+                        tempFontSize = v;
+                      });
+                    },
+                  ),
+                ),
+                SizedBox(
+                  width: 40,
+                  child: Text(tempFontSize.round().toString()),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Single Line Messages'),
+                Switch(
+                  value: tempSingleLine,
                   onChanged: (v) {
                     setState(() {
-                      tempFontSize = v;
+                      tempSingleLine = v;
                     });
                   },
                 ),
-              ),
-              SizedBox(
-                width: 40,
-                child: Text(tempFontSize.round().toString()),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Single Line Messages'),
-              Switch(
-                value: tempSingleLine,
-                onChanged: (v) {
-                  setState(() {
-                    tempSingleLine = v;
-                  });
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              const Text('Reconnect Interval'),
-              const SizedBox(width: 16),
-              Expanded(
-                child: DropdownButtonFormField<int>(
-                  initialValue: tempRetryInterval,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const Text('Reconnect Interval'),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: DropdownButtonFormField<int>(
+                    initialValue: tempRetryInterval,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 3, child: Text('3 seconds')),
+                      DropdownMenuItem(value: 5, child: Text('5 seconds')),
+                      DropdownMenuItem(value: 10, child: Text('10 seconds')),
+                      DropdownMenuItem(value: 30, child: Text('30 seconds')),
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                        tempRetryInterval = value!;
+                      });
+                    },
                   ),
-                  items: const [
-                    DropdownMenuItem(value: 3, child: Text('3 seconds')),
-                    DropdownMenuItem(value: 5, child: Text('5 seconds')),
-                    DropdownMenuItem(value: 10, child: Text('10 seconds')),
-                    DropdownMenuItem(value: 30, child: Text('30 seconds')),
-                  ],
-                  onChanged: (value) {
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Enable JetStream'),
+                Switch(
+                  value: tempJetStreamEnabled,
+                  onChanged: (v) {
                     setState(() {
-                      tempRetryInterval = value!;
+                      tempJetStreamEnabled = v;
                     });
                   },
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Enable JetStream'),
-              Switch(
-                value: tempJetStreamEnabled,
-                onChanged: (v) {
-                  setState(() {
-                    tempJetStreamEnabled = v;
-                  });
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Enable Key-Value Stores'),
-              Switch(
-                value: tempKvEnabled,
-                onChanged: (v) {
-                  setState(() {
-                    tempKvEnabled = v;
-                  });
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Check for Updates'),
-              Switch(
-                value: tempUpdateCheckEnabled,
-                onChanged: (v) {
-                  setState(() {
-                    tempUpdateCheckEnabled = v;
-                  });
-                },
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Enable Key-Value Stores'),
+                Switch(
+                  value: tempKvEnabled,
+                  onChanged: (v) {
+                    setState(() {
+                      tempKvEnabled = v;
+                    });
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Enable Object Store'),
+                Switch(
+                  value: tempObjectStoreEnabled,
+                  onChanged: (v) {
+                    setState(() {
+                      tempObjectStoreEnabled = v;
+                    });
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Check for Updates'),
+                Switch(
+                  value: tempUpdateCheckEnabled,
+                  onChanged: (v) {
+                    setState(() {
+                      tempUpdateCheckEnabled = v;
+                    });
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
       actions: [
         TextButton(
@@ -185,8 +206,14 @@ class _SettingsDialogState extends State<SettingsDialog> {
         TextButton(
           child: const Text('Save'),
           onPressed: () {
-            widget.onSave(tempFontSize, tempSingleLine, tempRetryInterval,
-                tempJetStreamEnabled, tempKvEnabled, tempUpdateCheckEnabled);
+            widget.onSave(
+                tempFontSize,
+                tempSingleLine,
+                tempRetryInterval,
+                tempJetStreamEnabled,
+                tempKvEnabled,
+                tempObjectStoreEnabled,
+                tempUpdateCheckEnabled);
             Navigator.of(context).pop();
           },
         ),

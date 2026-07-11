@@ -31,6 +31,11 @@ This application currently supports Windows, Linux, macOS and Web platforms.
   - Put, edit, delete, and purge keys, with optimistic-concurrency protection so a stale edit is rejected instead of silently overwriting someone else's change
   - View a key's full revision history
   - Key list updates live as changes happen — including changes made by other clients
+- **Object Store support** (optional, on by default — toggle it off in Settings if you don't need it). This uses an `EXPERIMENTAL` API in the underlying NATS client library, so its behavior may change in a future release:
+  - Browse Object Store buckets and their objects, with live search
+  - Create and delete buckets (name, storage type, max size, TTL, replicas)
+  - Upload, download, and delete objects (blobs/files) of any size — large uploads are chunked automatically, and downloads are verified against the object's SHA-256 digest
+  - Object list is a snapshot refreshed on demand (no live-update mechanism, unlike Key-Value Stores)
 - **Update notifications** (optional, on by default): checks this repo's GitHub Releases on startup and shows a small dismissible popover with a link if a newer version is available. This app only distributes through GitHub, so nothing downloads or installs automatically — it just tells you a new build exists.
 
 # Screenshots
@@ -53,6 +58,10 @@ This application currently supports Windows, Linux, macOS and Web platforms.
 <br/>
 
 ![Key-Value Stores](./images/Key-Value%20Stores.png)
+
+<br/>
+
+![Object Store](./images/Object%20Store.png)
 
 These are generated automatically — see `scripts/capture_screenshots.ps1` if you're regenerating them after a UI change.
 

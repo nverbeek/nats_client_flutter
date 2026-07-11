@@ -23,6 +23,9 @@ import 'helpers/nats_test_app.dart';
 /// by switching to `TickerProviderStateMixin`, which explicitly supports
 /// creating and disposing any number of tickers over a State's lifetime.
 ///
+/// Object Store (Milestone 7) added a fourth toggleable tab following the
+/// exact same pattern as JetStream/Key-Value, so it's exercised here too.
+///
 /// No live NATS server is needed — Settings and the tab bar work whether
 /// or not the app is connected, so this uses `pumpDisconnectedApp` rather
 /// than spinning up `nats-server`.
@@ -40,21 +43,23 @@ void main() {
   }
 
   testWidgets(
-      'turning JetStream and Key-Value off then back on does not crash the tab bar',
+      'turning JetStream, Key-Value, and Object Store off then back on does not crash the tab bar',
       (tester) async {
     await pumpDisconnectedApp(tester);
 
-    // Starts with both enabled (seeded prefs): three tabs.
+    // Starts with all three enabled (seeded prefs): four tabs.
     expect(find.text('Live Messages'), findsOneWidget);
     expect(find.text('JetStream'), findsOneWidget);
     expect(find.text('Key-Value Stores'), findsOneWidget);
+    expect(find.text('Object Store'), findsOneWidget);
 
-    // Turn both off and save.
+    // Turn all three off and save.
     await openSettings(tester);
     // Switches, in order: Single Line, Enable JetStream, Enable Key-Value
-    // Stores, Check for Updates.
+    // Stores, Enable Object Store, Check for Updates.
     await tester.tap(find.byType(Switch).at(1));
     await tester.tap(find.byType(Switch).at(2));
+    await tester.tap(find.byType(Switch).at(3));
     await saveSettings(tester);
     expect(tester.takeException(), isNull);
 
@@ -65,17 +70,20 @@ void main() {
     expect(find.textContaining('Total Messages:'), findsOneWidget);
     expect(find.text('JetStream'), findsNothing);
     expect(find.text('Key-Value Stores'), findsNothing);
+    expect(find.text('Object Store'), findsNothing);
 
-    // Turn both back on and save — this is the step that used to crash.
+    // Turn all three back on and save — this is the step that used to crash.
     await openSettings(tester);
     await tester.tap(find.byType(Switch).at(1));
     await tester.tap(find.byType(Switch).at(2));
+    await tester.tap(find.byType(Switch).at(3));
     await saveSettings(tester);
     expect(tester.takeException(), isNull);
 
     expect(find.text('Live Messages'), findsOneWidget);
     expect(find.text('JetStream'), findsOneWidget);
     expect(find.text('Key-Value Stores'), findsOneWidget);
+    expect(find.text('Object Store'), findsOneWidget);
 
     // The tab bar must still be interactive (this is what actually
     // exercised the disposed-controller crash in manual testing — the
@@ -87,9 +95,12 @@ void main() {
     await tester.tap(find.text('Key-Value Stores'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+    await tester.tap(find.text('Object Store'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
   });
 
-  testWidgets('toggling just one of JetStream/Key-Value off and on works',
+  testWidgets('toggling just one of JetStream/Key-Value/Object Store off and on works',
       (tester) async {
     await pumpDisconnectedApp(tester);
 
@@ -99,6 +110,7 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('JetStream'), findsNothing);
     expect(find.text('Key-Value Stores'), findsOneWidget);
+    expect(find.text('Object Store'), findsOneWidget);
 
     await openSettings(tester);
     await tester.tap(find.byType(Switch).at(1)); // JetStream back on
@@ -106,5 +118,22 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('JetStream'), findsOneWidget);
     expect(find.text('Key-Value Stores'), findsOneWidget);
+    expect(find.text('Object Store'), findsOneWidget);
+
+    await openSettings(tester);
+    await tester.tap(find.byType(Switch).at(3)); // Object Store off
+    await saveSettings(tester);
+    expect(tester.takeException(), isNull);
+    expect(find.text('JetStream'), findsOneWidget);
+    expect(find.text('Key-Value Stores'), findsOneWidget);
+    expect(find.text('Object Store'), findsNothing);
+
+    await openSettings(tester);
+    await tester.tap(find.byType(Switch).at(3)); // Object Store back on
+    await saveSettings(tester);
+    expect(tester.takeException(), isNull);
+    expect(find.text('JetStream'), findsOneWidget);
+    expect(find.text('Key-Value Stores'), findsOneWidget);
+    expect(find.text('Object Store'), findsOneWidget);
   });
 }
