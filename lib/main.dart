@@ -1090,8 +1090,10 @@ class _MyHomePageState extends State<MyHomePage>
   /// Displays a dialog allowing a user to send a custom message.
   /// Subject box will be pre-filled with [subject] or [replyToSubject] if provided.
   /// Data box will be pre-filled with [data] if provided.
+  /// Header rows will be pre-filled with [initialHeaders] if provided.
   Future<void> showSendMessageDialog(
-      String? subject, String? replyToSubject, String? data) async {
+      String? subject, String? replyToSubject, String? data,
+      [Map<String, String>? initialHeaders]) async {
     var subjectBoxController = TextEditingController();
     var dataBoxController = TextEditingController();
 
@@ -1113,8 +1115,9 @@ class _MyHomePageState extends State<MyHomePage>
           jetStreamAvailable: jetStreamEnabled &&
               _jetStreamManager != null &&
               currentStatus == Status.connected,
-          onSend: (subject, data, useJetStream) {
-            sendMessage(subject, data, useJetStream);
+          initialHeaders: initialHeaders,
+          onSend: (subject, data, useJetStream, headers) {
+            sendMessage(subject, data, useJetStream, headers);
           },
         );
       },
@@ -1459,9 +1462,12 @@ class _MyHomePageState extends State<MyHomePage>
   }
 
   Future<void> sendMessage(String subject, String data,
-      [bool useJetStream = false]) async {
+      [bool useJetStream = false, Map<String, String>? headers]) async {
+    final header =
+        (headers != null && headers.isNotEmpty) ? Header(headers: headers) : null;
+
     if (!useJetStream) {
-      natsClient.pubString(subject, data);
+      natsClient.pubString(subject, data, header: header);
       if (mounted) {
         Navigator.of(context).pop();
       }
@@ -1472,7 +1478,7 @@ class _MyHomePageState extends State<MyHomePage>
     if (manager == null) return;
 
     try {
-      final ack = await manager.publish(subject, data);
+      final ack = await manager.publish(subject, data, header: header);
       if (!mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1581,13 +1587,17 @@ class _MyHomePageState extends State<MyHomePage>
             case 'replay':
               if (mounted && currentStatus == Status.connected) {
                 natsClient.pubString(filteredItems[index].subject!,
-                    decodeMessageText(filteredItems[index].byte));
+                    decodeMessageText(filteredItems[index].byte),
+                    header: filteredItems[index].header);
               }
               break;
             case 'edit_and_send':
               if (mounted && currentStatus == Status.connected) {
-                showSendMessageDialog(filteredItems[index].subject!, null,
-                    decodeMessageText(filteredItems[index].byte));
+                showSendMessageDialog(
+                    filteredItems[index].subject!,
+                    null,
+                    decodeMessageText(filteredItems[index].byte),
+                    filteredItems[index].header?.headers);
               }
               break;
             case 'reply_to':
@@ -1684,15 +1694,19 @@ class _MyHomePageState extends State<MyHomePage>
             } else if (event.logicalKey == LogicalKeyboardKey.keyR) {
               if (currentStatus == Status.connected) {
                 natsClient.pubString(filteredItems[selectedIndex].subject!,
-                    decodeMessageText(filteredItems[selectedIndex].byte));
+                    decodeMessageText(filteredItems[selectedIndex].byte),
+                    header: filteredItems[selectedIndex].header);
               } else {
                 showSnackBar('Not connected, cannot replay message');
               }
               return KeyEventResult.handled;
             } else if (event.logicalKey == LogicalKeyboardKey.keyE) {
               if (currentStatus == Status.connected) {
-                showSendMessageDialog(filteredItems[selectedIndex].subject!,
-                    null, decodeMessageText(filteredItems[selectedIndex].byte));
+                showSendMessageDialog(
+                    filteredItems[selectedIndex].subject!,
+                    null,
+                    decodeMessageText(filteredItems[selectedIndex].byte),
+                    filteredItems[selectedIndex].header?.headers);
               } else {
                 showSnackBar('Not connected, cannot send message');
               }

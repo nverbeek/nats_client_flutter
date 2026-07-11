@@ -6,17 +6,34 @@ class SendIntent extends Intent {
   const SendIntent();
 }
 
+class _HeaderRow {
+  final TextEditingController keyController;
+  final TextEditingController valueController;
+
+  _HeaderRow({String key = '', String value = ''})
+      : keyController = TextEditingController(text: key),
+        valueController = TextEditingController(text: value);
+
+  void dispose() {
+    keyController.dispose();
+    valueController.dispose();
+  }
+}
+
 class SendMessageDialog extends StatefulWidget {
   final TextEditingController subjectController;
   final TextEditingController dataController;
   final bool jetStreamAvailable;
-  final void Function(String subject, String data, bool useJetStream) onSend;
+  final Map<String, String>? initialHeaders;
+  final void Function(String subject, String data, bool useJetStream,
+      Map<String, String> headers) onSend;
 
   const SendMessageDialog({
     super.key,
     required this.subjectController,
     required this.dataController,
     this.jetStreamAvailable = false,
+    this.initialHeaders,
     required this.onSend,
   });
 
@@ -26,10 +43,43 @@ class SendMessageDialog extends StatefulWidget {
 
 class _SendMessageDialogState extends State<SendMessageDialog> {
   bool _useJetStream = false;
+  late final List<_HeaderRow> _headerRows;
+
+  @override
+  void initState() {
+    super.initState();
+    _headerRows = widget.initialHeaders == null
+        ? []
+        : widget.initialHeaders!.entries
+            .map((e) => _HeaderRow(key: e.key, value: e.value))
+            .toList();
+  }
+
+  @override
+  void dispose() {
+    for (final row in _headerRows) {
+      row.dispose();
+    }
+    super.dispose();
+  }
+
+  void _addHeaderRow() {
+    setState(() => _headerRows.add(_HeaderRow()));
+  }
+
+  void _removeHeaderRow(int index) {
+    setState(() => _headerRows.removeAt(index).dispose());
+  }
 
   void _send() {
+    final headers = <String, String>{};
+    for (final row in _headerRows) {
+      final key = row.keyController.text.trim();
+      if (key.isEmpty) continue;
+      headers[key] = row.valueController.text;
+    }
     widget.onSend(widget.subjectController.text, widget.dataController.text,
-        _useJetStream);
+        _useJetStream, headers);
   }
 
   @override
@@ -66,7 +116,7 @@ class _SendMessageDialogState extends State<SendMessageDialog> {
           ),
           content: SizedBox(
             width: 400, // Optional: set a width for better appearance
-            height: widget.jetStreamAvailable ? 340 : 300,
+            height: widget.jetStreamAvailable ? 500 : 460,
             child: Column(
               children: <Widget>[
                 TextFormField(
@@ -92,6 +142,87 @@ class _SendMessageDialogState extends State<SendMessageDialog> {
                       labelText: 'Data',
                     ),
                   ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Text('Headers', style: Theme.of(context).textTheme.labelLarge),
+                    const Spacer(),
+                    TextButton.icon(
+                      onPressed: _addHeaderRow,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Add'),
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 0),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                SizedBox(
+                  height: 100,
+                  child: _headerRows.isEmpty
+                      ? Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'No headers',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.color
+                                      ?.withValues(alpha: 0.6),
+                                ),
+                          ),
+                        )
+                      : ListView.builder(
+                          itemCount: _headerRows.length,
+                          itemBuilder: (context, index) {
+                            final row = _headerRows[index];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: row.keyController,
+                                      maxLines: 1,
+                                      decoration: const InputDecoration(
+                                        isDense: true,
+                                        border: OutlineInputBorder(),
+                                        hintText: 'Key',
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: row.valueController,
+                                      maxLines: 1,
+                                      decoration: const InputDecoration(
+                                        isDense: true,
+                                        border: OutlineInputBorder(),
+                                        hintText: 'Value',
+                                      ),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.close, size: 18),
+                                    onPressed: () => _removeHeaderRow(index),
+                                    tooltip: 'Remove header',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                 ),
                 if (widget.jetStreamAvailable)
                   CheckboxListTile(

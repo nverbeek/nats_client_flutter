@@ -77,8 +77,8 @@ class JetStreamManager {
   /// Publish a string payload into JetStream and wait for the server's
   /// acknowledgement (stream name + assigned sequence number).
   Future<PubAck> publish(String subject, String data,
-      {Duration timeout = const Duration(seconds: 5)}) {
-    return _js.publishString(subject, data, timeout: timeout);
+      {Duration timeout = const Duration(seconds: 5), Header? header}) {
+    return _js.publishString(subject, data, timeout: timeout, header: header);
   }
 
   /// Bind to an existing named consumer to tail its deliveries. Unlike

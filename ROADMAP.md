@@ -15,7 +15,7 @@ These features are made possible by our successful migration to the official mai
 - [x] **Milestone 5**: Design & Implement **Phase E: Update Notifications** (Low Priority). Checks GitHub Releases on startup and surfaces a dismissible in-app notice when a newer version is published; opt-out toggle in Settings. Implementation, unit tests, and a live-API verification pass (both the update-available and up-to-date paths) are done.
 - [x] **Milestone 6**: Design & Implement **Phase F: Live Message List UX Improvements** (Medium Priority). Filter/Find on the JetStream Browse Messages view (plus tab-aware Ctrl+F/Ctrl+Shift+F), scroll-position-preserving inserts on both message lists (verified correct and performant at thousands-of-messages/large-burst scale), and a Pause/Resume control on both. Implementation and a live-server verification pass are done.
 - [x] **Milestone 7**: Design & Implement **Object Store Inspector** (Medium Priority). Implementation, docs, unit/widget tests, and a live-server verification pass (bucket/object lifecycle, chunked upload/download with digest verification, explicit-Refresh-since-there's-no-`watch()`) are done.
-- [ ] **Milestone 8**: Design & Implement **Message Headers on Send** (Low/Medium Priority). Not started.
+- [x] **Milestone 8**: Design & Implement **Message Headers on Send** (Low/Medium Priority). Implementation, unit/widget tests, and a live-server verification pass (published header round-trips back through the app's own loopback subscription and appears in Message Detail) are done.
 - [ ] **Milestone 9**: Design & Implement **Queue Group Subscriptions** (Medium Priority). Not started.
 - [ ] **Milestone 10**: Design & Implement **JetStream Account Info Panel** (Low Priority). Not started.
 - [ ] **Milestone 11**: Design & Implement **Subscription Manager & Per-Subscription Color Indicators** (Medium Priority). Not started.
@@ -348,10 +348,10 @@ A symmetry gap: incoming NATS message headers are already parsed and displayed i
 `client.pub(subject, data, {String? replyTo, Header? header})` / `pubString(..., header: Header?)` (`client.dart:902-966`) — `Header` (`message.dart:9-81`) is an ordered key/value map plus a version line, sent using NATS's `HPUB` wire format.
 
 ### Implementation Checklist
-- [ ] Add an optional, collapsible "Headers" section to `SendMessageDialog` — a dynamic key/value row list (add/remove rows), following the existing conditional-field disclosure pattern from the Security Settings dialog's Authentication section.
-- [ ] Wire it through `sendMessage()` in `lib/main.dart`: build a `Header` from non-empty rows and pass it to `pub()`/`pubString()`. Verify `JetStream.publish()`/`publishString()` (`jetstream.dart:401-438`) also accept a `header` before assuming parity with the plain-pub path — the JetStream-ack toggle uses a different call path.
-- [ ] Reflect sent headers in the UI's own feedback where relevant (e.g. if the message loops back and appears in the list, its headers should render the same way received headers already do).
-- [ ] Unit/widget tests for the header row list (add/remove/empty-value handling) + a live-server `integration_test` publishing with headers and asserting the receiving side's `message.header` matches.
+- [x] Add a "Headers" section to `SendMessageDialog` — a dynamic key/value row list (add/remove rows) in a fixed-height, internally-scrollable area so the dialog doesn't resize as rows are added; rows with a blank key are dropped from what's sent. `initialHeaders` lets callers prefill it.
+- [x] Wire it through `sendMessage()` in `lib/main.dart`: build a `Header` from non-empty rows and pass it to `pub()`/`pubString()`. `JetStream.publish()`/`publishString()` (`jetstream.dart:401-438`) already accept a `header`, so `JetStreamManager.publish()` was extended with the same optional param to forward it — the JetStream-ack toggle uses a different call path and needed its own plumbing.
+- [x] Reflect sent headers in the UI's own feedback: the loopback subscription already round-trips a message's `Header` back through `Message.header`, and `MessageDetailDialog` already renders it — no receive-side changes needed. As a symmetry bonus, Replay (row menu and the `R` shortcut) and Edit & Send (row menu, the `E` shortcut, and `SendMessageDialog`'s `initialHeaders`) now also preserve/prefill the original message's headers instead of dropping them.
+- [x] Unit/widget tests for the header row list (add/remove/empty-value handling, prefill) in `test/send_message_dialog_test.dart` + a live-server `integration_test/send_message_headers_test.dart` publishing with a header via the UI and asserting it round-trips into the received message's Detail dialog.
 
 ---
 

@@ -10,7 +10,7 @@ void main() {
         body: SendMessageDialog(
           subjectController: TextEditingController(),
           dataController: TextEditingController(),
-          onSend: (_, __, ___) {},
+          onSend: (_, __, ___, ____) {},
         ),
       ),
     ));
@@ -30,7 +30,7 @@ void main() {
           subjectController: TextEditingController(text: 'orders.new'),
           dataController: TextEditingController(text: '{}'),
           jetStreamAvailable: true,
-          onSend: (subject, data, useJetStream) {
+          onSend: (subject, data, useJetStream, headers) {
             sentSubject = subject;
             sentData = data;
             sentUseJetStream = useJetStream;
@@ -62,7 +62,7 @@ void main() {
           subjectController: TextEditingController(text: 'orders.new'),
           dataController: TextEditingController(text: '{}'),
           jetStreamAvailable: true,
-          onSend: (_, __, useJetStream) => sentUseJetStream = useJetStream,
+          onSend: (_, __, useJetStream, ___) => sentUseJetStream = useJetStream,
         ),
       ),
     ));
@@ -82,7 +82,7 @@ void main() {
         body: SendMessageDialog(
           subjectController: TextEditingController(text: 'orders.new'),
           dataController: TextEditingController(text: '{}'),
-          onSend: (subject, data, _) {
+          onSend: (subject, data, _, __) {
             sentSubject = subject;
             sentData = data;
           },
@@ -117,7 +117,7 @@ void main() {
                 builder: (context) => SendMessageDialog(
                   subjectController: TextEditingController(),
                   dataController: TextEditingController(),
-                  onSend: (_, __, ___) {},
+                  onSend: (_, __, ___, ____) {},
                 ),
               ),
               child: const Text('Open'),
@@ -138,5 +138,121 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'Close'));
     await tester.pumpAndSettle();
     expect(find.byType(SendMessageDialog), findsNothing);
+  });
+
+  testWidgets('shows "No headers" with no rows and no Add-button prefill',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SendMessageDialog(
+          subjectController: TextEditingController(),
+          dataController: TextEditingController(),
+          onSend: (_, __, ___, ____) {},
+        ),
+      ),
+    ));
+
+    expect(find.text('No headers'), findsOneWidget);
+    expect(find.widgetWithText(TextFormField, 'Key'), findsNothing);
+  });
+
+  testWidgets('Add adds a header row, and sends entered key/value pairs',
+      (tester) async {
+    Map<String, String>? sentHeaders;
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SendMessageDialog(
+          subjectController: TextEditingController(text: 'orders.new'),
+          dataController: TextEditingController(text: '{}'),
+          onSend: (_, __, ___, headers) => sentHeaders = headers,
+        ),
+      ),
+    ));
+
+    await tester.tap(find.widgetWithText(TextButton, 'Add'));
+    await tester.pump();
+
+    expect(find.byType(TextFormField), findsNWidgets(4)); // subject, data, key, value
+
+    // Field order is subject(0), data(1), header key(2), header value(3).
+    await tester.enterText(find.byType(TextFormField).at(2), 'X-Trace-Id');
+    await tester.enterText(find.byType(TextFormField).at(3), 'abc-123');
+    await tester.pump();
+
+    await tester.tap(find.widgetWithText(TextButton, 'Send'));
+    await tester.pump();
+
+    expect(sentHeaders, {'X-Trace-Id': 'abc-123'});
+  });
+
+  testWidgets('a header row with a blank key is dropped from onSend',
+      (tester) async {
+    Map<String, String>? sentHeaders;
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SendMessageDialog(
+          subjectController: TextEditingController(text: 'orders.new'),
+          dataController: TextEditingController(text: '{}'),
+          onSend: (_, __, ___, headers) => sentHeaders = headers,
+        ),
+      ),
+    ));
+
+    await tester.tap(find.widgetWithText(TextButton, 'Add'));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(TextButton, 'Send'));
+    await tester.pump();
+
+    expect(sentHeaders, isEmpty);
+  });
+
+  testWidgets('the close icon on a header row removes it', (tester) async {
+    Map<String, String>? sentHeaders;
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SendMessageDialog(
+          subjectController: TextEditingController(text: 'orders.new'),
+          dataController: TextEditingController(text: '{}'),
+          onSend: (_, __, ___, headers) => sentHeaders = headers,
+        ),
+      ),
+    ));
+
+    await tester.tap(find.widgetWithText(TextButton, 'Add'));
+    await tester.pump();
+    expect(find.text('No headers'), findsNothing);
+
+    await tester.tap(find.byTooltip('Remove header'));
+    await tester.pump();
+    expect(find.text('No headers'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Send'));
+    await tester.pump();
+    expect(sentHeaders, isEmpty);
+  });
+
+  testWidgets('prefills header rows from initialHeaders', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SendMessageDialog(
+          subjectController: TextEditingController(),
+          dataController: TextEditingController(),
+          initialHeaders: const {'Content-Type': 'application/json'},
+          onSend: (_, __, ___, ____) {},
+        ),
+      ),
+    ));
+
+    expect(find.text('No headers'), findsNothing);
+    // Field order is subject(0), data(1), header key(2), header value(3).
+    expect(
+        tester.widget<TextFormField>(find.byType(TextFormField).at(2)).controller?.text,
+        'Content-Type');
+    expect(
+        tester.widget<TextFormField>(find.byType(TextFormField).at(3)).controller?.text,
+        'application/json');
   });
 }

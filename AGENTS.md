@@ -83,6 +83,7 @@ nats_client_flutter/
 │   ├── helpers/screenshot_signal.dart   # File-handshake helper used only by screenshot_tour_test.dart (see Recipe G)
 │   ├── live_messages_test.dart          # Core pub/sub round trip
 │   ├── live_messages_interactions_test.dart # Filter/Find/row menu/keyboard shortcuts
+│   ├── send_message_headers_test.dart   # A header attached in Send Message round-trips into the received message's Detail dialog
 │   ├── jetstream_lifecycle_test.dart    # Full stream/consumer mutation lifecycle incl. Ack/Nak/Term
 │   ├── kv_lifecycle_test.dart           # Full KV bucket/key mutation lifecycle incl. live external updates + optimistic-concurrency conflict
 │   ├── object_store_lifecycle_test.dart # Full Object Store bucket/object lifecycle incl. explicit-Refresh (no watch()) + byte-for-byte download verification
