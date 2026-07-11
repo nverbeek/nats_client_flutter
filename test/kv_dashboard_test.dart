@@ -27,9 +27,12 @@ class FakeKvManager extends KvManager {
   Future<bool> Function(String, String)? purgeKeyImpl;
   Future<List<KeyValueEntry>> Function(String, String)? keyHistoryImpl;
 
+  Future<AccountInfo> Function()? fetchAccountInfoImpl;
+
   int checkAvailabilityCalls = 0;
   int listBucketsCalls = 0;
   int deleteBucketCalls = 0;
+  int fetchAccountInfoCalls = 0;
   String? lastCreatedBucket;
   int? lastCreatedHistory;
   Duration? lastCreatedTtl;
@@ -52,6 +55,12 @@ class FakeKvManager extends KvManager {
   Future<String?> checkAvailability({Duration? timeout}) {
     checkAvailabilityCalls++;
     return checkAvailabilityImpl();
+  }
+
+  @override
+  Future<AccountInfo> fetchAccountInfo({Duration? timeout}) {
+    fetchAccountInfoCalls++;
+    return fetchAccountInfoImpl!();
   }
 
   @override
@@ -507,5 +516,36 @@ void main() {
         _entry('db.port', '', revision: 6, op: KeyValueOp.delete));
     await tester.pumpAndSettle();
     expect(find.text('db.port'), findsNothing);
+  });
+
+  testWidgets(
+      'Account info button shows the cached snapshot without refetching',
+      (tester) async {
+    final manager = FakeKvManager();
+    manager.lastAccountInfo = AccountInfo(
+      domain: '',
+      api: APIStats(level: 0, total: 4, errors: 0, inflight: 0),
+      tier: Tier(
+        memory: 512,
+        storage: 1024,
+        reservedMemory: 0,
+        reservedStorage: 0,
+        streams: 2,
+        consumers: 0,
+      ),
+      tiers: const {},
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: KvDashboard(manager: manager))),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithIcon(IconButton, Icons.info_outline));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Account Info'), findsOneWidget);
+    expect(find.text('2 streams'), findsOneWidget);
+    expect(manager.fetchAccountInfoCalls, 0);
   });
 }

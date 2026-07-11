@@ -17,7 +17,7 @@ These features are made possible by our successful migration to the official mai
 - [x] **Milestone 7**: Design & Implement **Object Store Inspector** (Medium Priority). Implementation, docs, unit/widget tests, and a live-server verification pass (bucket/object lifecycle, chunked upload/download with digest verification, explicit-Refresh-since-there's-no-`watch()`) are done.
 - [x] **Milestone 8**: Design & Implement **Message Headers on Send** (Low/Medium Priority). Implementation, unit/widget tests, and a live-server verification pass (published header round-trips back through the app's own loopback subscription and appears in Message Detail) are done.
 - [ ] **Milestone 9**: Design & Implement **Queue Group Subscriptions** (Medium Priority). Not started.
-- [ ] **Milestone 10**: Design & Implement **JetStream Account Info Panel** (Low Priority). Not started.
+- [x] **Milestone 10**: Design & Implement **JetStream Account Info Panel** (Low Priority). Implementation, unit/widget tests, and a live-server verification pass are done. The pass caught a real bug in vendored `dart_nats-1.1.1`'s `JetStream.accountInfo()` (see Milestone 10's section below) — fetching account info now bypasses it entirely.
 - [ ] **Milestone 11**: Design & Implement **Subscription Manager & Per-Subscription Color Indicators** (Medium Priority). Not started.
 - [ ] **Milestone 12**: Design & Implement **Connection Host/Port History** (Low/Medium Priority). Not started.
 - [ ] **Milestone 13**: Design & Implement **Message Direction Indicator (Incoming vs. Outgoing)** (Low/Medium Priority). Not started.
@@ -370,15 +370,22 @@ A symmetry gap: incoming NATS message headers are already parsed and displayed i
 
 ---
 
-## Milestone 10: JetStream Account Info Panel (Low Priority)
+## Milestone 10: JetStream Account Info Panel (Low Priority) — Completed
 
 ### Objective
 `checkAvailability()` in both `jetstream_manager.dart:94-97` and `kv_manager.dart:23-26` already calls `js.accountInfo()` on every JetStream/KV dashboard load, but only checks that it didn't throw — the real payload is discarded. `AccountInfo` (`jetstream.dart`, `Tier`/`APIStats`/`AccountInfo` classes) carries genuinely useful operational data that's already being fetched for free: memory/storage usage vs. reserved limits, stream/consumer counts, and API call/error/inflight stats.
 
 ### Implementation Checklist
-- [ ] Have `checkAvailability()` (or a sibling method) return the fetched `AccountInfo` instead of discarding it.
-- [ ] Add a small "Account Info" entry point (icon button or menu item) on the JetStream and/or KV dashboard header, opening a compact read-only dialog: memory/storage used vs. reserved, stream/consumer counts, API totals/errors/inflight, domain.
-- [ ] Unit tests for any new pure formatting logic (byte formatting, ratio display) + a widget test for the dialog against a fake `AccountInfo`; live-server verification that real values populate the dialog sensibly (doesn't need to assert exact numbers).
+- [x] Have `checkAvailability()` (or a sibling method) return the fetched `AccountInfo` instead of discarding it.
+- [x] Add a small "Account Info" entry point (icon button or menu item) on the JetStream and/or KV dashboard header, opening a compact read-only dialog: memory/storage used vs. reserved, stream/consumer counts, API totals/errors/inflight, domain.
+- [x] Unit tests for any new pure formatting logic (byte formatting, ratio display) + a widget test for the dialog against a fake `AccountInfo`; live-server verification that real values populate the dialog sensibly (doesn't need to assert exact numbers).
+
+### Implementation Notes
+Both managers gained `AccountInfo? lastAccountInfo` (populated as a side effect of `checkAvailability()`, so the dialog can open instantly with data already in hand) and `Future<AccountInfo> fetchAccountInfo()` for a manual refresh. A new shared `lib/account_info_dialog.dart` (`AccountInfoDialog`) is used by both `JetStreamDashboard` and `KvDashboard` — `AccountInfo` describes the whole account, not a specific stream/bucket, so one dialog covers both entry points (an `Icons.info_outline` button next to each dashboard's existing refresh button).
+
+**Real bug found by live-server verification, not by reading the source** (same pattern as the NKey-auth and KV-`ttl`/replica-count findings from Milestones 4 and 2): vendored `dart_nats-1.1.1`'s `AccountInfo.fromJson()` (`jetstream.dart`) reads usage/limits from a nested `json['tier']` key. A real server's `$JS.API.INFO` response has no `tier` key at all for the common case of a single-tier (non-multi-tenant) account — those fields (`memory`, `storage`, `reserved_memory`, `reserved_storage`, `streams`, `consumers`) are at the top level instead. So `JetStream.accountInfo()` silently returns an all-zero `Tier` for almost every real deployment, which would have made this entire milestone useless. Fix: `jetstream_manager.dart` now has its own `fetchRawAccountInfo()` (raw `$JS.API.INFO` request) plus `accountInfoFromJson()`/`tierFromJson()` that read the correct top-level fields; both managers' `checkAvailability()`/`fetchAccountInfo()` go through these instead of `JetStream.accountInfo()`. A second, smaller finding along the way: a server represents an unset `reserved_storage` limit as a uint64 `-1` sentinel, which after JSON round-tripping through a double arrives as `18446744073709552000.0` — `tierFromJson` parses fields as `num?` rather than `int?` so this doesn't throw on cast, and `AccountInfoDialog` treats any reserved value `>= 2^62` as "unlimited" (alongside the `<= 0` case) so it doesn't render a multi-exabyte figure.
+
+Test coverage: `test/jetstream_manager_test.dart` (`tierFromJson`/`accountInfoFromJson`, including a fixture captured verbatim from a live server's response and the huge-sentinel case), `test/account_info_dialog_test.dart` (cached-data render, fetch-when-nothing-cached, manual refresh, error state, the unlimited-usage-bar-omitted case for both `reserved <= 0` and the huge-sentinel case, Close button), plus a case in each of `test/jetstream_dashboard_test.dart` and `test/kv_dashboard_test.dart` confirming the dashboard's Account Info button surfaces `manager.lastAccountInfo` without an extra fetch. Live-server verification: a standalone script against a real `nats:latest -js` container (one JetStream stream + one KV bucket created first) confirmed `fetchAccountInfo()` now returns correct non-zero `streams`/`storage`/`api.total`, and that the sentinel-clamped `reservedStorage` doesn't throw.
 
 ---
 

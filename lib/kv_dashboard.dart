@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:flutter/material.dart';
 
+import 'account_info_dialog.dart';
 import 'format_utils.dart';
 import 'jetstream_manager.dart' show formatBytes, formatRelativeTime;
 import 'kv_bucket_dialog.dart';
@@ -237,6 +238,18 @@ class KvDashboardState extends State<KvDashboard> {
     }
   }
 
+  void _showAccountInfoDialog() {
+    final manager = widget.manager;
+    if (manager == null) return;
+    showDialog<void>(
+      context: context,
+      builder: (context) => AccountInfoDialog(
+        initial: manager.lastAccountInfo,
+        onRefresh: manager.fetchAccountInfo,
+      ),
+    );
+  }
+
   void _showCreateBucketDialog() {
     showDialog<void>(
       context: context,
@@ -465,6 +478,11 @@ class KvDashboardState extends State<KvDashboard> {
               const Expanded(
                 child: Text('Buckets',
                     style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+              IconButton(
+                icon: const Icon(Icons.info_outline),
+                tooltip: 'Account info',
+                onPressed: _showAccountInfoDialog,
               ),
               IconButton(
                 icon: const Icon(Icons.refresh),

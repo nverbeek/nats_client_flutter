@@ -1,6 +1,7 @@
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:flutter/material.dart';
 
+import 'account_info_dialog.dart';
 import 'jetstream_consumer_dialog.dart';
 import 'jetstream_consumer_tail_view.dart';
 import 'jetstream_manager.dart';
@@ -185,6 +186,18 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
         _loadingConsumers = false;
       });
     }
+  }
+
+  void _showAccountInfoDialog() {
+    final manager = widget.manager;
+    if (manager == null) return;
+    showDialog<void>(
+      context: context,
+      builder: (context) => AccountInfoDialog(
+        initial: manager.lastAccountInfo,
+        onRefresh: manager.fetchAccountInfo,
+      ),
+    );
   }
 
   void _showConsumerDetail(ConsumerInfo info) {
@@ -445,6 +458,11 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
               const Expanded(
                 child: Text('Streams',
                     style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+              IconButton(
+                icon: const Icon(Icons.info_outline),
+                tooltip: 'Account info',
+                onPressed: _showAccountInfoDialog,
               ),
               IconButton(
                 icon: const Icon(Icons.refresh),

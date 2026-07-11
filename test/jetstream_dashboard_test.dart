@@ -27,11 +27,14 @@ class FakeJetStreamManager extends JetStreamManager {
   Future<void> Function(String, ConsumerConfig)? createConsumerImpl;
   Future<void> Function(String, String)? deleteConsumerImpl;
 
+  Future<AccountInfo> Function()? fetchAccountInfoImpl;
+
   int checkAvailabilityCalls = 0;
   int listStreamsCalls = 0;
   int deleteStreamCalls = 0;
   int purgeStreamCalls = 0;
   int deleteConsumerCalls = 0;
+  int fetchAccountInfoCalls = 0;
   StreamConfig? lastCreatedStreamConfig;
   ConsumerConfig? lastCreatedConsumerConfig;
 
@@ -39,6 +42,12 @@ class FakeJetStreamManager extends JetStreamManager {
   Future<String?> checkAvailability({Duration? timeout}) {
     checkAvailabilityCalls++;
     return checkAvailabilityImpl();
+  }
+
+  @override
+  Future<AccountInfo> fetchAccountInfo({Duration? timeout}) {
+    fetchAccountInfoCalls++;
+    return fetchAccountInfoImpl!();
   }
 
   @override
@@ -504,5 +513,69 @@ void main() {
 
     expect(manager.deleteConsumerCalls, 0);
     expect(find.text('billing-processor'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Account info button shows the cached snapshot without refetching',
+      (tester) async {
+    final manager = FakeJetStreamManager();
+    manager.lastAccountInfo = AccountInfo(
+      domain: 'hub',
+      api: APIStats(level: 1, total: 10, errors: 1, inflight: 0),
+      tier: Tier(
+        memory: 1024,
+        storage: 2048,
+        reservedMemory: 4096,
+        reservedStorage: 0,
+        streams: 3,
+        consumers: 5,
+      ),
+      tiers: const {},
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithIcon(IconButton, Icons.info_outline));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Account Info'), findsOneWidget);
+    expect(find.text('Domain: hub'), findsOneWidget);
+    expect(find.text('3 streams'), findsOneWidget);
+    expect(find.text('5 consumers'), findsOneWidget);
+    expect(find.textContaining('Memory:'), findsOneWidget);
+    expect(find.textContaining('Storage: 2.0 KB'), findsOneWidget);
+    expect(manager.fetchAccountInfoCalls, 0);
+  });
+
+  testWidgets('Account info dialog fetches fresh data when nothing cached',
+      (tester) async {
+    final manager = FakeJetStreamManager();
+    manager.fetchAccountInfoImpl = () async => AccountInfo(
+          domain: '',
+          api: APIStats(level: 0, total: 0, errors: 0, inflight: 0),
+          tier: Tier(
+            memory: 0,
+            storage: 0,
+            reservedMemory: 0,
+            reservedStorage: 0,
+            streams: 0,
+            consumers: 0,
+          ),
+          tiers: const {},
+        );
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithIcon(IconButton, Icons.info_outline));
+    await tester.pumpAndSettle();
+
+    expect(manager.fetchAccountInfoCalls, 1);
+    expect(find.text('0 streams'), findsOneWidget);
   });
 }

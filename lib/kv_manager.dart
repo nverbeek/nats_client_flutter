@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 
-import 'jetstream_manager.dart' show describeJetStreamError;
+import 'jetstream_manager.dart' show describeJetStreamError, fetchRawAccountInfo;
 
 /// Prefix JetStream uses for the backing stream of every KV bucket. Bucket
 /// names shown in the UI have this stripped back off.
@@ -17,17 +17,34 @@ class KvManager {
 
   JetStream get _js => client.jetStream();
 
+  /// The most recently fetched account usage/limits snapshot, populated as a
+  /// side effect of [checkAvailability] (which already fetches it on every
+  /// dashboard load to probe JetStream/KV availability). `null` until the
+  /// first successful [checkAvailability] or [fetchAccountInfo] call.
+  AccountInfo? lastAccountInfo;
+
   /// Returns `null` if JetStream (and therefore KV, which is built on top of
   /// it) is available on the current account, otherwise a short, user-facing
   /// description of why it isn't.
   Future<String?> checkAvailability(
       {Duration timeout = const Duration(seconds: 3)}) async {
     try {
-      await _js.accountInfo(timeout: timeout);
+      lastAccountInfo = await fetchRawAccountInfo(client, timeout: timeout);
       return null;
     } catch (e) {
       return describeJetStreamError(e);
     }
+  }
+
+  /// Fetches a fresh account usage/limits snapshot from the server, updating
+  /// [lastAccountInfo]. See `JetStreamManager.fetchAccountInfo` for why this
+  /// is separate from [checkAvailability], and `fetchRawAccountInfo` for why
+  /// this doesn't go through `JetStream.accountInfo()`.
+  Future<AccountInfo> fetchAccountInfo(
+      {Duration timeout = const Duration(seconds: 3)}) async {
+    final info = await fetchRawAccountInfo(client, timeout: timeout);
+    lastAccountInfo = info;
+    return info;
   }
 
   /// List all KV buckets visible to the current account, by listing streams
