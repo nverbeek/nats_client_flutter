@@ -21,6 +21,8 @@ import 'constants.dart' as constants;
 import 'format_utils.dart';
 import 'jetstream_dashboard.dart';
 import 'jetstream_manager.dart';
+import 'kv_dashboard.dart';
+import 'kv_manager.dart';
 import 'message_detail_dialog.dart';
 import 'send_message_dialog.dart';
 import 'help_dialog.dart';
@@ -248,7 +250,7 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage>
-    with WindowListener, SingleTickerProviderStateMixin {
+    with WindowListener, TickerProviderStateMixin {
   String host = constants.defaultHost;
   String port = constants.defaultPort;
   String subject = constants.defaultSubject;
@@ -281,6 +283,10 @@ class _MyHomePageState extends State<MyHomePage>
   late TabController _tabController;
   final GlobalKey<JetStreamDashboardState> _jetStreamDashboardKey = GlobalKey();
 
+  // Key-Value tab
+  bool kvEnabled = constants.defaultKvEnabled;
+  final GlobalKey<KvDashboardState> _kvDashboardKey = GlobalKey();
+
   // Add a ScrollController for the ListView
   final ScrollController _listScrollController = ScrollController();
 
@@ -295,6 +301,7 @@ class _MyHomePageState extends State<MyHomePage>
   // nats stuff
   late Client natsClient;
   JetStreamManager? _jetStreamManager;
+  KvManager? _kvManager;
   bool isConnected = false;
   String connectionStateString = constants.disconnected;
 
@@ -332,7 +339,7 @@ class _MyHomePageState extends State<MyHomePage>
     port = widget.port;
     subject = widget.subject;
     updateFullUri();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: _visibleTabCount, vsync: this);
     _listScrollController.addListener(_updateJumpToTopVisibility);
     super.initState();
 
@@ -393,9 +400,12 @@ class _MyHomePageState extends State<MyHomePage>
           constants.defaultRetryInterval;
       jetStreamEnabled = prefs.getBool(constants.prefJetStreamEnabled) ??
           constants.defaultJetStreamEnabled;
+      kvEnabled =
+          prefs.getBool(constants.prefKvEnabled) ?? constants.defaultKvEnabled;
       updateCheckEnabled = prefs.getBool(constants.prefUpdateCheckEnabled) ??
           constants.defaultUpdateCheckEnabled;
       loadAuthSettings(prefs);
+      _ensureTabController();
     });
 
     if (updateCheckEnabled) {
@@ -545,6 +555,7 @@ class _MyHomePageState extends State<MyHomePage>
     prefs.setBool('messageSingleLine', messageSingleLine);
     prefs.setInt(constants.prefRetryInterval, retryInterval);
     prefs.setBool(constants.prefJetStreamEnabled, jetStreamEnabled);
+    prefs.setBool(constants.prefKvEnabled, kvEnabled);
     prefs.setBool(constants.prefUpdateCheckEnabled, updateCheckEnabled);
   }
 
@@ -606,6 +617,27 @@ class _MyHomePageState extends State<MyHomePage>
     }
   }
 
+  /// Live Messages is always tab 0; JetStream and Key-Value each add one
+  /// more tab, in that order, when their respective settings toggle is on.
+  int get _visibleTabCount =>
+      1 + (jetStreamEnabled ? 1 : 0) + (kvEnabled ? 1 : 0);
+
+  /// `TabController.length` is fixed at construction, but which tabs are
+  /// visible can change at runtime (the JetStream/KV toggles in Settings).
+  /// Call this any time either toggle changes so the controller always
+  /// matches what's actually shown; a no-op if the count didn't change.
+  void _ensureTabController() {
+    final desired = _visibleTabCount;
+    if (_tabController.length == desired) return;
+    final oldIndex = _tabController.index;
+    _tabController.dispose();
+    _tabController = TabController(
+      length: desired,
+      vsync: this,
+      initialIndex: oldIndex.clamp(0, desired - 1),
+    );
+  }
+
   /// Wraps a Host/Port/Subjects field so Ctrl+Enter (Cmd+Enter on Mac) fires
   /// Connect while focus is in it and the client isn't already connected —
   /// mirrors the same `Shortcuts`/`Actions` pattern `SendMessageDialog` uses
@@ -637,6 +669,7 @@ class _MyHomePageState extends State<MyHomePage>
   void natsConnect() async {
     natsClient = Client();
     _jetStreamManager = JetStreamManager(natsClient);
+    _kvManager = KvManager(natsClient);
 
     // surface authentication failures distinctly from generic connection
     // failures (a bad password/token/nkey/creds file closes the connection
@@ -1093,9 +1126,10 @@ class _MyHomePageState extends State<MyHomePage>
           initialSingleLine: messageSingleLine,
           initialRetryInterval: retryInterval,
           initialJetStreamEnabled: jetStreamEnabled,
+          initialKvEnabled: kvEnabled,
           initialUpdateCheckEnabled: updateCheckEnabled,
           onSave: (fontSize, singleLine, retryIntervalValue,
-              jetStreamEnabledValue, updateCheckEnabledValue) {
+              jetStreamEnabledValue, kvEnabledValue, updateCheckEnabledValue) {
             final updateCheckJustEnabled =
                 updateCheckEnabledValue && !updateCheckEnabled;
             setState(() {
@@ -1103,7 +1137,9 @@ class _MyHomePageState extends State<MyHomePage>
               messageSingleLine = singleLine;
               retryInterval = retryIntervalValue;
               jetStreamEnabled = jetStreamEnabledValue;
+              kvEnabled = kvEnabledValue;
               updateCheckEnabled = updateCheckEnabledValue;
+              _ensureTabController();
             });
             saveMessageSettings();
             if (updateCheckJustEnabled) {
@@ -1423,7 +1459,13 @@ class _MyHomePageState extends State<MyHomePage>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(describeJetStreamError(e)),
+          content: Text(
+            describeJetStreamError(e),
+            // The theme's default SnackBar text color (`onSurface`) doesn't
+            // contrast against an `error` background — see the identical
+            // comment in JetStreamDashboard._showSnack.
+            style: TextStyle(color: Theme.of(context).colorScheme.onError),
+          ),
           backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );
@@ -1817,27 +1859,36 @@ class _MyHomePageState extends State<MyHomePage>
               ),
             ),
             const Divider(height: 1), // Divider below the top toolbar
-            if (jetStreamEnabled)
+            if (_visibleTabCount > 1)
               TabBar(
                 controller: _tabController,
-                tabs: const [
-                  Tab(text: 'Live Messages'),
-                  Tab(text: 'JetStream'),
+                tabs: [
+                  const Tab(text: 'Live Messages'),
+                  if (jetStreamEnabled) const Tab(text: 'JetStream'),
+                  if (kvEnabled) const Tab(text: 'Key-Value Stores'),
                 ],
               ),
             Expanded(
-              child: jetStreamEnabled
+              child: _visibleTabCount > 1
                   ? TabBarView(
                       controller: _tabController,
                       children: [
                         _buildLiveMessagesTab(
                             messageRowEvenColor, messageRowOddColor),
-                        JetStreamDashboard(
-                          key: _jetStreamDashboardKey,
-                          manager: currentStatus == Status.connected
-                              ? _jetStreamManager
-                              : null,
-                        ),
+                        if (jetStreamEnabled)
+                          JetStreamDashboard(
+                            key: _jetStreamDashboardKey,
+                            manager: currentStatus == Status.connected
+                                ? _jetStreamManager
+                                : null,
+                          ),
+                        if (kvEnabled)
+                          KvDashboard(
+                            key: _kvDashboardKey,
+                            manager: currentStatus == Status.connected
+                                ? _kvManager
+                                : null,
+                          ),
                       ],
                     )
                   : _buildLiveMessagesTab(

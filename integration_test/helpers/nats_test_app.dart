@@ -48,6 +48,7 @@ Future<void> pumpConnectedApp(
   await prefs.setString(constants.prefPort, constants.defaultPort);
   await prefs.setString(constants.prefSubject, subject);
   await prefs.setBool(constants.prefJetStreamEnabled, true);
+  await prefs.setBool(constants.prefKvEnabled, true);
   await prefs.setString(constants.prefTrustedCertificate, '');
   await prefs.setString(constants.prefTrustedCertificateName, '');
   await prefs.setString(constants.prefCertificateChain, '');
@@ -64,6 +65,32 @@ Future<void> pumpConnectedApp(
     tester,
     () => find.text('Status: ${constants.connected}').evaluate().isNotEmpty,
   );
+}
+
+/// Same preference seeding as [pumpConnectedApp], but skips tapping Connect
+/// — for tests that only need the app's own UI (Settings, tab bar, etc.)
+/// and have no reason to require a locally-running `nats-server`.
+Future<void> pumpDisconnectedApp(
+  WidgetTester tester, {
+  String subject = constants.defaultSubject,
+}) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString(constants.prefScheme, constants.defaultScheme);
+  await prefs.setString(constants.prefHost, constants.defaultHost);
+  await prefs.setString(constants.prefPort, constants.defaultPort);
+  await prefs.setString(constants.prefSubject, subject);
+  await prefs.setBool(constants.prefJetStreamEnabled, true);
+  await prefs.setBool(constants.prefKvEnabled, true);
+  await prefs.setString(constants.prefTrustedCertificate, '');
+  await prefs.setString(constants.prefTrustedCertificateName, '');
+  await prefs.setString(constants.prefCertificateChain, '');
+  await prefs.setString(constants.prefCertificateChainName, '');
+  await prefs.setString(constants.prefPrivateKey, '');
+  await prefs.setString(constants.prefPrivateKeyName, '');
+  await prefs.setBool(constants.prefUpdateCheckEnabled, false);
+
+  app.main();
+  await tester.pumpAndSettle();
 }
 
 /// Waits for any currently-showing `SnackBar` to finish its auto-dismiss.

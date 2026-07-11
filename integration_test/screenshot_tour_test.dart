@@ -117,5 +117,17 @@ void main() {
     await tester.pumpAndSettle();
     await waitForSnackBarGone(tester);
     await signaler.capture(tester, 'JetStream');
+
+    // 5. Key-Value Stores: select the "app-config" bucket seeded by
+    // `scripts/kv_demo.ps1` so the dashboard shows real keys rather than an
+    // empty state.
+    await tester.tap(find.text('Key-Value Stores'));
+    await tester.pumpAndSettle();
+    await pumpUntil(
+        tester, () => find.text('app-config').evaluate().isNotEmpty);
+    await tester.tap(find.text('app-config'));
+    await tester.pumpAndSettle();
+    await pumpUntil(tester, () => find.text('db.host').evaluate().isNotEmpty);
+    await signaler.capture(tester, 'Key-Value Stores');
   });
 }

@@ -121,6 +121,9 @@ try {
     Write-Host "Seeding JetStream demo streams + messages..." -ForegroundColor Cyan
     pwsh -File (Join-Path $PSScriptRoot "jetstream_demo.ps1") -Iterations 5
 
+    Write-Host "Seeding Key-Value demo bucket..." -ForegroundColor Cyan
+    pwsh -File (Join-Path $PSScriptRoot "kv_demo.ps1")
+
     # --- Win32 window capture -------------------------------------------------
     Add-Type -AssemblyName System.Drawing
     Add-Type @"

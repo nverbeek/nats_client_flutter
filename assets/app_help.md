@@ -13,6 +13,7 @@ The application provides a settings dialog (⚙️ button in the toolbar) with t
 - **Single Line Messages**: If enabled, each message in the list is displayed on a single line (with ellipsis for overflow). If disabled, messages can span multiple lines (up to 5 lines).
 - **Reconnect Interval**: Controls the amount of time between reconnection attempts.
 - **Enable JetStream**: Shows or hides the JetStream tab (see below). On by default; turning it off doesn't affect your connection or the Live Messages tab, it just hides the JetStream UI for users who don't need it.
+- **Enable Key-Value Stores**: Shows or hides the Key-Value Stores tab (see below). On by default; same "just hides the UI" behavior as the JetStream toggle.
 - **Check for Updates**: Controls whether the app checks GitHub for a newer release on startup (see Update Notifications below). On by default.
 
 # Connection
@@ -99,6 +100,26 @@ Each stream's consumers are listed below its details. Tapping a consumer opens a
 
 ## Publishing into a stream
 The regular **Send Message** dialog (see Tools, below) gets a **Publish via JetStream (get delivery ack)** checkbox whenever JetStream is available and connected. Checking it publishes through JetStream instead of a plain core NATS publish, and shows the stream name and assigned sequence number once the server acknowledges it.
+
+# Key-Value Stores
+When **Enable Key-Value Stores** is on (the default) and you're connected to a server or account with JetStream enabled (KV buckets are themselves backed by JetStream streams), a **Key-Value Stores** tab appears. It's a monitoring and management dashboard for KV buckets and their keys.
+
+## Buckets
+The left-hand pane lists all KV buckets on the account. Selecting a bucket shows its keys on the right, with live search.
+
+- **Create Bucket**: Opens a dialog to create a new bucket — name, history depth (how many past revisions are kept per key), optional TTL in days, and replica count.
+- **Delete** (trash icon on each bucket row): Permanently deletes the bucket and all of its keys. Asks for confirmation first.
+
+## Keys
+Once a bucket is selected, its keys are listed with their current value, revision number, and last-updated time. The list updates live as keys change, including changes made by other clients.
+
+- **Search Keys**: Narrows the list to keys whose name contains the search text (case-insensitive).
+- **Put Value**: Opens a dialog to create a new key with a text/JSON value.
+- Each key's 3-dot menu (or tapping the row) offers:
+    - **Edit**: Opens the same dialog pre-filled with the key's current value, using an optimistic-concurrency check — if the key changed since it was loaded, the save is rejected rather than silently overwriting someone else's change.
+    - **History**: Shows every past revision of the key (value and operation), newest first.
+    - **Delete**: Adds a deletion tombstone. Past revisions are kept and still visible in History. Asks for confirmation first.
+    - **Purge**: Permanently removes all history for the key, not just the current value. Asks for confirmation first.
 
 # Keyboard Shortcuts
 

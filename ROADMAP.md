@@ -9,11 +9,14 @@ These features are made possible by our successful migration to the official mai
 ## Progress Overview
 - [x] **Milestone 0**: Migrate custom fork to mainline `dart_nats: ^1.1.1` and verify compatibility.
 - [x] **Milestone 1**: Design & Implement **Phase B: JetStream Stream & Consumer Monitor** (High Priority). 1a (read-only monitor) and 1b (mutations) complete.
-- [ ] **Milestone 2**: Design & Implement **Phase A: Key-Value (KV) Store Inspector** (Medium Priority).
+- [x] **Milestone 2**: Design & Implement **Phase A: Key-Value (KV) Store Inspector** (Medium Priority). Implementation, docs, unit/widget tests, and a live-server verification pass (full bucket/key lifecycle, live cross-client updates, and the optimistic-concurrency conflict path) are done.
 - [x] **Milestone 3**: Clean up, finalize error handling, write widget/unit tests, and bundle releases. Quality Assurance and Platform Verification are done for Windows, Linux, and Web (including confirming JetStream works over the web target's forced `ws://` scheme).
 - [x] **Milestone 4**: Design & Implement **Phase D: Expanded Authentication Support** (username/password, token, NKey, `.creds`) (Medium Priority). Implementation, docs, unit/widget tests, and a live-server verification pass (correct + wrong credentials) are done for all four methods.
 - [x] **Milestone 5**: Design & Implement **Phase E: Update Notifications** (Low Priority). Checks GitHub Releases on startup and surfaces a dismissible in-app notice when a newer version is published; opt-out toggle in Settings. Implementation, unit tests, and a live-API verification pass (both the update-available and up-to-date paths) are done.
 - [x] **Milestone 6**: Design & Implement **Phase F: Live Message List UX Improvements** (Medium Priority). Filter/Find on the JetStream Browse Messages view (plus tab-aware Ctrl+F/Ctrl+Shift+F), scroll-position-preserving inserts on both message lists (verified correct and performant at thousands-of-messages/large-burst scale), and a Pause/Resume control on both. Implementation and a live-server verification pass are done.
+- [ ] **Milestone 7**: Design & Implement **Message Direction Indicator (Incoming vs. Outgoing)** (Low/Medium Priority). Not started.
+- [ ] **Milestone 8**: Design & Implement **Request/Reply Correlation Improvements** (Medium Priority). Not started.
+- [ ] **Milestone 9**: Investigate & Implement **Code Signing for Windows & macOS Builds** (Low Priority, cost-gated). Not started — research done, decision on which paid/free path pending.
 
 ---
 
@@ -108,20 +111,28 @@ A clean multi-column layout. The left column lists active KV buckets, and the ri
 +---------------------------------------+-----------------------------------------+
 ```
 
+### What `dart_nats` actually supports (verified against `dart_nats-1.1.1/lib/src/kv.dart` and `jetstream.dart`, not assumed)
+- `client.jetStream().keyValue(bucket)` / `KeyValue(client, bucket)` binds to a bucket; `createKeyValue()`/`deleteKeyValue()` create/delete the backing `KV_<bucket>` stream.
+- `KeyValue.get(key)` already filters out tombstoned (deleted/purged) entries, returning `null` for them — no extra filtering needed on this app's side.
+- `kv.keys()` and `kv.watch()` both work by spinning up a temporary/ephemeral JetStream consumer filtered to `$KV.<bucket>.>` and reading the stream — not a dedicated KV-index API. `watch()` returns `Stream<KeyValueEntry?>` with a `KeyValueOp` (`put`/`delete`/`purge`) per event.
+- **Real bug caught only by live-server testing, not by reading the source**: `KeyValueConfig.toStreamConfig()` (used internally by `createKeyValue()`) silently drops both `ttl` and replica count — neither field makes it onto the wire. `KvManager.createBucket()` therefore builds the `StreamConfig` itself (mirroring what that conversion *should* do) rather than going through the package's own bucket-creation helper, so TTL and replicas set in the Create Bucket dialog actually take effect.
+- `kv.update(key, value, revision)` is the primitive for optimistic concurrency: it publishes with `PubOpts(expectLastSubjectSeq: revision)`, and the server rejects with a "wrong last sequence" `NatsException` if the key changed since that revision — this is what backs the Edit dialog's conflict detection (distinct from `kv.put()`, a blind overwrite used only for brand-new keys).
+
 ### Implementation Checklist
-- [ ] **Bucket Selection**:
-  - [ ] Fetch the list of all registered KV buckets using standard management APIs.
-  - [ ] Implement a **"Create Bucket"** form (specifying Bucket Name, history depth, TTL, replicas).
-  - [ ] Implement a **"Delete Bucket"** command.
-- [ ] **Key-Value Inspection Backend (`lib/kv_manager.dart`)**:
-  - [ ] Bind selected bucket to `KeyValue` controller using `js.keyValue(bucketName)`.
-  - [ ] Fetch key entries using `kv.get(key)`. Include automatic filtering of tombstones (deleted/purged keys) supported in `dart_nats 1.1.1`.
-- [ ] **Key Mutation & Concurrency**:
-  - [ ] Build **"Put Value"** dialog form supporting JSON/text string values.
-  - [ ] Implement key deletions (`kv.delete(key)`) and purges (`kv.purge(key)`).
-  - [ ] Add Optimistic Concurrency checks using revisions retrieved via `kv.getRevision(key)`.
-- [ ] **Live Watcher Integration**:
-  - [ ] Support real-time updates of the key listing pane using stream listeners on `kv.watch()`.
+- [x] **Bucket Selection**:
+  - [x] Fetch the list of all registered KV buckets using standard management APIs — `KvManager.listBuckets()` lists streams and filters to the `KV_` name prefix (mirrors `JetStreamManager.listStreams()`).
+  - [x] Implement a **"Create Bucket"** form (specifying Bucket Name, history depth, TTL, replicas) — `lib/kv_bucket_dialog.dart`.
+  - [x] Implement a **"Delete Bucket"** command — trash icon per bucket row, with confirmation.
+- [x] **Key-Value Inspection Backend (`lib/kv_manager.dart`)**:
+  - [x] Bind selected bucket to `KeyValue` controller using `js.keyValue(bucketName)` (constructed directly as `KeyValue(client, bucket)` — the package's own `keyValue()` helper is `async` only to support an optional `create: true`, unneeded here since bucket creation is a separate explicit step).
+  - [x] Fetch key entries using `kv.get(key)`. Tombstone filtering is handled by the package itself (see above) — no extra logic needed.
+- [x] **Key Mutation & Concurrency**:
+  - [x] Build **"Put Value"** dialog form supporting text/JSON string values — `lib/kv_put_dialog.dart`, shared between create (`kv.putString()`) and edit (`kv.updateString()` with the loaded revision) via an `existingRevision` parameter that also locks the Key field on edit.
+  - [x] Implement key deletions (`kv.delete(key)`) and purges (`kv.purge(key)`) — both available from each key row's menu, with confirmation.
+  - [x] Add Optimistic Concurrency checks using revisions — edit calls `kv.updateString(key, value, expectedRevision)`; a stale edit surfaces "This key changed since it was loaded — reload and try again." (`describeKvError()`) instead of silently overwriting someone else's change. (Roadmap originally named `kv.getRevision(key)` for this; in practice the revision already carried on the `KeyValueEntry` loaded into the list — from the initial `get()` or a live `watch()` update — is what's passed through, so a separate revision fetch turned out to be unnecessary.)
+- [x] **Live Watcher Integration**:
+  - [x] Support real-time updates of the key listing pane using stream listeners on `kv.watch()` — after the initial key list loads, `KvDashboard` subscribes to `manager.watch(bucket)` and applies each `put`/`delete`/`purge` event to the in-memory key map, so changes from *any* client (not just this app) appear live with no manual refresh.
+- [x] **Tests & live-server verification**: `test/kv_manager_test.dart` (pure `bucketNameFromStream()`/`describeKvError()` logic), `test/kv_bucket_dialog_test.dart`, `test/kv_put_dialog_test.dart`, and `test/kv_dashboard_test.dart` (fake-manager widget tests, mirroring the JetStream dashboard's `FakeJetStreamManager` pattern) cover the UI against fakes. `integration_test/kv_lifecycle_test.dart` runs the full lifecycle against a real JetStream-enabled `nats-server` in one ordered scenario: create bucket → put → a *second, direct* `dart_nats` client's write shows up live via `watch()` with no manual refresh → edit → a stale-edit conflict (opened while a concurrent external write lands) is correctly rejected rather than clobbering it → history → delete key → purge key → delete bucket. Runs in CI automatically (the `test` job loops over every `integration_test/*_test.dart` file); no separate fixture server needed since KV buckets are backed by the same JetStream-enabled server used for the JetStream milestone.
 
 ---
 
@@ -289,3 +300,69 @@ Two related list-UX gaps affect both the Live Messages tab (`lib/main.dart`) and
 ## Also This Session: Connect via Ctrl+Enter
 
 Small, standalone UX addition unrelated to the message list work above: Ctrl+Enter (Cmd+Enter on Mac) now fires Connect while focus is in the Host, Port, or Subjects field and the client is currently disconnected — no more reaching for the mouse after typing connection details. Implemented as a `Shortcuts`/`Actions` pair (`_ConnectIntent` + `_withConnectShortcut()` in `lib/main.dart`) wrapping each of those three fields individually, mirroring the same pattern `SendMessageDialog` already uses for its own Ctrl+Enter-to-send shortcut; the action no-ops if already connected/connecting, matching the existing Connect button's `enabled` condition. Verified against a real server via `integration_test/connect_shortcut_test.dart` (one case per field, starting the app disconnected and confirming the status reaches "Connected" via the shortcut alone).
+
+---
+
+## Milestone 7: Message Direction Indicator (Incoming vs. Outgoing) (Low/Medium Priority)
+
+### Objective
+On the Live Messages tab, a sent (published) message currently doesn't appear in the message list at all unless the client also happens to be subscribed back to that exact subject (loopback) — `sendMessage()` (`lib/main.dart` around line 1399) calls `natsClient.pubString()` / `JetStreamManager.publish()` directly and never adds an entry to `items` itself. That makes "did I send this or receive this" hard to track even on subjects where both directions are visible today. This milestone adds: (1) tracking locally-sent messages as first-class list entries regardless of loopback subscription, and (2) a small visual indicator on each row distinguishing outgoing from incoming.
+
+**JetStream note**: `lib/jetstream_message_view.dart`'s Browse Messages / Tail views have no send affordance of their own (verified — no `SendMessageDialog`/publish call anywhere in that file). Publishing into a stream only happens through the Live Messages tab's Send dialog via its "get delivery ack" (JetStream) toggle. So there is currently nothing to mark "outgoing" inside Browse Messages itself — this indicator applies to the Live Messages tab. Adding a dedicated publish affordance directly to the Browse view is out of scope here (see open question below); until/unless that exists, "can JetStream send?" is really "can you publish into a stream from the Send dialog," which it already can.
+
+### Open Questions
+- Should JetStream Browse Messages/Tail eventually get its own publish affordance (as opposed to only the shared Live Messages Send dialog)? Not currently planned; revisit only if this milestone's design surfaces a real need for it.
+- Visual treatment: directional icon (↑/↓), color-coded row accent, or a text badge.
+
+### Implementation Checklist
+- [ ] Track locally-published messages from `sendMessage()` as list entries tagged outgoing, inserted through the same scroll-stability path (`_insertMessages`, Milestone 6) used for incoming arrivals — not dependent on loopback subscription.
+- [ ] Add a direction indicator to each Live Messages row (visual TBD per the open question above).
+- [ ] Confirm Filter/Find (Milestone 6) and the direction indicator compose cleanly.
+- [ ] Unit/widget tests for direction tagging + rendering; live-server `integration_test` verification (send from the app, receive via a second publisher/subscriber, assert the indicator lands on the correct rows).
+
+---
+
+## Milestone 8: Request/Reply Correlation Improvements (Medium Priority)
+
+### Objective
+User feedback asked whether request/reply correlation could be improved. Today, "Reply To" (`lib/main.dart` around lines 1525-1532) only pre-fills the Send dialog's subject field with the original message's `replyTo` subject — it's an ordinary publish with no automatic pairing. True NATS request/reply (a private per-request inbox subject, awaited for a single correlated response) isn't used anywhere in the app today, so a real request/reply round trip wouldn't even show up in the message list (the app isn't subscribed to the inbox subject it would use).
+
+### What `dart_nats` actually offers (verified against the vendored 1.1.1 source)
+`Client.request<T>(subject, data, {timeout = 2s, jsonDecoder, header})` / `requestString<T>(...)`: lazily creates one shared wildcard subscription to `_INBOX.<clientNuid>.>`, generates a unique per-call reply subject, publishes with `replyTo` set to it, and awaits the first message seen on that inbox (default 2s timeout, throws `TimeoutException` on expiry). Correlation is a subject-string match inside the shared subscription's stream, not a keyed dispatch map. Calls are serialized via an internal `Mutex` — concurrent `request()` calls queue rather than run in parallel. The generated inbox subject isn't returned separately; the response `Message.subject` *is* the correlation key.
+
+### Possible Directions (not yet decided)
+- Add a "Request" mode to the Send dialog (alongside the existing JetStream-ack toggle) that calls `request()`/`requestString()` instead of a plain publish, then inserts both the outgoing request and its correlated incoming reply into the list as a linked pair — depends on Milestone 7's outgoing-message tracking.
+- Alternatively/additionally, improve correlation for the plain-pub/sub style of request/reply many NATS users actually use (subscribe to a reply subject, publish with `replyTo` set, no `client.request()` involved) — likely worth supporting both patterns rather than assuming everyone uses the built-in `request()`.
+- Visually link paired rows (shared correlation id, "jump to reply"/"jump to request", or adjacent grouping) instead of leaving the user to scan for a matching subject.
+- A clear timeout/no-reply failure state in the UI, since `request()` throws `TimeoutException` rather than hanging silently.
+- Design note: because `request()` is mutex-serialized inside `dart_nats`, rapid-fire requests from the UI would queue, not run in parallel — worth being deliberate about if the UI ever allows firing several at once.
+
+### Implementation Checklist
+- [ ] Decide UX: dedicated "Request" send mode using `client.request()`, enhanced correlation for the existing plain pub/sub "Reply To" flow, or both.
+- [ ] Implement the chosen mechanism, building on Milestone 7's outgoing-message tracking so both halves of a pair are visible in the list.
+- [ ] Visual/interaction linking between paired rows.
+- [ ] Timeout/failure UX.
+- [ ] Unit tests + live-server `integration_test` coverage.
+
+---
+
+## Milestone 9: Code Signing for Windows & macOS Builds (Low Priority, cost-gated)
+
+### Objective
+Windows and macOS builds are currently unsigned: users hit "Unknown Publisher"/SmartScreen warnings on Windows and Gatekeeper "unidentified developer" blocks on macOS when running a downloaded build. Researched July 2026 — both are technically straightforward to wire into the existing [.github/workflows/build.yml](.github/workflows/build.yml); the real blocker is cost/eligibility, not feasibility.
+
+### Findings
+- **Windows — free option worth trying first**: [SignPath Foundation](https://signpath.org/) offers free OV-level code signing (via a managed CI pipeline) for qualifying open-source projects. Since this repo is public/open source, worth applying before paying for anything.
+- **Windows — paid fallback**: Azure Trusted Signing (renamed **Artifact Signing** as of January 2026) is Microsoft's cloud-HSM signing service, ~$9.99/mo (5,000 signatures, 1 certificate profile) ≈ $120/yr, and integrates into GH Actions via the `Azure/trusted-signing-action` (or the newer `Azure/artifact-signing-action`). As of an April 2026 update it's GA and open to self-employed individuals (no more 3-year business-history requirement), but eligibility is geographically gated — sources vary between "US/Canada/EU/UK businesses" and "individuals limited to US/Canada" — so this needs a direct eligibility check against wherever the signing account would be held before committing money. Also worth knowing: as of a 2024 SmartScreen policy change, EV certificates no longer skip the reputation-building process — OV/Artifact-Signing and EV now behave the same way, so there's no reason to pay EV prices for instant trust anymore.
+- **macOS**: requires an Apple Developer Program membership ($99/yr), a "Developer ID Application" certificate, and notarization (`xcrun notarytool submit` + `stapler`) — a standard, well-documented GH Actions pattern (import a `.p12` into a temporary keychain from a repo secret, `codesign` the `.app`/`.dmg`, notarize, staple). No free path here; the $99/yr is unavoidable for a legitimately signed/notarized macOS build.
+- Both paths need secret management in GH Actions (a certificate/PFX or Azure credentials as encrypted repo secrets) and are additive to the existing `build-windows`/`build-macos` jobs, not a rework.
+
+### Decision Needed Before Implementation
+Whether to pursue SignPath Foundation's free-for-OSS route for Windows first; whether Azure Artifact Signing is worth ~$120/yr if SignPath doesn't pan out or doesn't fit; and whether the $99/yr Apple Developer Program cost is worth it for macOS given Milestone 3 already flagged macOS as never having been functionally verified at all (no Mac available) — signing a platform that isn't otherwise being tested may not be the best use of the budget until that gap closes.
+
+### Implementation Checklist
+- [ ] Apply to SignPath Foundation for free OSS code-signing eligibility (Windows).
+- [ ] If not eligible/practical, evaluate Azure Artifact Signing cost/eligibility for this project's account.
+- [ ] Decide whether to pursue macOS signing given the existing macOS-verification gap (Milestone 3).
+- [ ] Wire the chosen signing step(s) into `.github/workflows/build.yml` as an additive post-build step, gated behind repo secrets so forks/PRs without those secrets still build (just unsigned).
+- [ ] Document the signing setup (which secrets are needed, how to rotate/renew certs) in `AGENTS.md` or a new doc.

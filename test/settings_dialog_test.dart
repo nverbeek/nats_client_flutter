@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nats_client_flutter/settings_dialog.dart';
 
 void main() {
-  Widget buildDialog(void Function(double, bool, int, bool, bool) onSave) {
+  Widget buildDialog(void Function(double, bool, int, bool, bool, bool) onSave) {
     return MaterialApp(
       home: Scaffold(
         body: SettingsDialog(
@@ -11,6 +11,7 @@ void main() {
           initialSingleLine: false,
           initialRetryInterval: 5,
           initialJetStreamEnabled: true,
+          initialKvEnabled: true,
           initialUpdateCheckEnabled: true,
           onSave: onSave,
         ),
@@ -19,7 +20,7 @@ void main() {
   }
 
   testWidgets('shows the initial values', (tester) async {
-    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____) {}));
+    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____, ______) {}));
 
     expect(find.text('14'), findsOneWidget);
     expect(find.text('5 seconds'), findsOneWidget);
@@ -27,14 +28,16 @@ void main() {
     final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
     final singleLineSwitch = switches[0];
     final jetStreamSwitch = switches[1];
-    final updateCheckSwitch = switches[2];
+    final kvSwitch = switches[2];
+    final updateCheckSwitch = switches[3];
     expect(singleLineSwitch.value, isFalse);
     expect(jetStreamSwitch.value, isTrue);
+    expect(kvSwitch.value, isTrue);
     expect(updateCheckSwitch.value, isTrue);
   });
 
   testWidgets('toggling Single Line Messages flips its switch', (tester) async {
-    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____) {}));
+    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____, ______) {}));
 
     await tester.tap(find.byType(Switch).first);
     await tester.pump();
@@ -45,7 +48,7 @@ void main() {
   });
 
   testWidgets('toggling Enable JetStream flips its switch', (tester) async {
-    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____) {}));
+    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____, ______) {}));
 
     final jetStreamSwitchFinder = find.byType(Switch).at(1);
     await tester.tap(jetStreamSwitchFinder);
@@ -55,8 +58,20 @@ void main() {
     expect(jetStreamSwitch.value, isFalse);
   });
 
+  testWidgets('toggling Enable Key-Value Stores flips its switch',
+      (tester) async {
+    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____, ______) {}));
+
+    final kvSwitchFinder = find.byType(Switch).at(2);
+    await tester.tap(kvSwitchFinder);
+    await tester.pump();
+
+    final kvSwitch = tester.widget<Switch>(kvSwitchFinder);
+    expect(kvSwitch.value, isFalse);
+  });
+
   testWidgets('toggling Check for Updates flips its switch', (tester) async {
-    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____) {}));
+    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____, ______) {}));
 
     await tester.tap(find.byType(Switch).last);
     await tester.pump();
@@ -67,7 +82,7 @@ void main() {
 
   testWidgets('changing the Reconnect Interval dropdown updates the value',
       (tester) async {
-    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____) {}));
+    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____, ______) {}));
 
     await tester.tap(find.text('5 seconds'));
     await tester.pumpAndSettle();
@@ -79,7 +94,7 @@ void main() {
 
   testWidgets('dragging the font size slider updates the displayed value',
       (tester) async {
-    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____) {}));
+    await tester.pumpWidget(buildDialog((_, __, ___, ____, _____, ______) {}));
 
     expect(find.text('14'), findsOneWidget);
     await tester.drag(find.byType(Slider), const Offset(200, 0));
@@ -102,8 +117,10 @@ void main() {
                   initialSingleLine: false,
                   initialRetryInterval: 5,
                   initialJetStreamEnabled: true,
+                  initialKvEnabled: true,
                   initialUpdateCheckEnabled: true,
-                  onSave: (_, __, ___, ____, _____) => saveCalled = true,
+                  onSave: (_, __, ___, ____, _____, ______) =>
+                      saveCalled = true,
                 ),
               ),
               child: const Text('Open'),
@@ -128,6 +145,7 @@ void main() {
     bool? savedSingleLine;
     int? savedRetryInterval;
     bool? savedJetStreamEnabled;
+    bool? savedKvEnabled;
     bool? savedUpdateCheckEnabled;
 
     await tester.pumpWidget(MaterialApp(
@@ -142,13 +160,15 @@ void main() {
                   initialSingleLine: false,
                   initialRetryInterval: 5,
                   initialJetStreamEnabled: true,
+                  initialKvEnabled: true,
                   initialUpdateCheckEnabled: true,
                   onSave: (fontSize, singleLine, retryInterval, jetStream,
-                      updateCheck) {
+                      kv, updateCheck) {
                     savedFontSize = fontSize;
                     savedSingleLine = singleLine;
                     savedRetryInterval = retryInterval;
                     savedJetStreamEnabled = jetStream;
+                    savedKvEnabled = kv;
                     savedUpdateCheckEnabled = updateCheck;
                   },
                 ),
@@ -172,6 +192,7 @@ void main() {
     expect(savedSingleLine, isTrue);
     expect(savedRetryInterval, 5);
     expect(savedJetStreamEnabled, isTrue);
+    expect(savedKvEnabled, isTrue);
     expect(savedUpdateCheckEnabled, isTrue);
     expect(find.byType(SettingsDialog), findsNothing);
   });

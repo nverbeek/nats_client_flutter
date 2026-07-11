@@ -5,8 +5,9 @@ class SettingsDialog extends StatefulWidget {
   final bool initialSingleLine;
   final int initialRetryInterval;
   final bool initialJetStreamEnabled;
+  final bool initialKvEnabled;
   final bool initialUpdateCheckEnabled;
-  final void Function(double, bool, int, bool, bool) onSave;
+  final void Function(double, bool, int, bool, bool, bool) onSave;
 
   const SettingsDialog({
     super.key,
@@ -14,6 +15,7 @@ class SettingsDialog extends StatefulWidget {
     required this.initialSingleLine,
     required this.initialRetryInterval,
     required this.initialJetStreamEnabled,
+    required this.initialKvEnabled,
     required this.initialUpdateCheckEnabled,
     required this.onSave,
   });
@@ -27,6 +29,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late bool tempSingleLine;
   late int tempRetryInterval;
   late bool tempJetStreamEnabled;
+  late bool tempKvEnabled;
   late bool tempUpdateCheckEnabled;
 
   @override
@@ -36,6 +39,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     tempSingleLine = widget.initialSingleLine;
     tempRetryInterval = widget.initialRetryInterval;
     tempJetStreamEnabled = widget.initialJetStreamEnabled;
+    tempKvEnabled = widget.initialKvEnabled;
     tempUpdateCheckEnabled = widget.initialUpdateCheckEnabled;
   }
 
@@ -143,6 +147,21 @@ class _SettingsDialogState extends State<SettingsDialog> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              const Text('Enable Key-Value Stores'),
+              Switch(
+                value: tempKvEnabled,
+                onChanged: (v) {
+                  setState(() {
+                    tempKvEnabled = v;
+                  });
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
               const Text('Check for Updates'),
               Switch(
                 value: tempUpdateCheckEnabled,
@@ -167,7 +186,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
           child: const Text('Save'),
           onPressed: () {
             widget.onSave(tempFontSize, tempSingleLine, tempRetryInterval,
-                tempJetStreamEnabled, tempUpdateCheckEnabled);
+                tempJetStreamEnabled, tempKvEnabled, tempUpdateCheckEnabled);
             Navigator.of(context).pop();
           },
         ),

@@ -247,10 +247,19 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
 
   void _showSnack(String message, {bool isError = false}) {
     if (!mounted) return;
+    final colorScheme = Theme.of(context).colorScheme;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
+        content: Text(
+          message,
+          // The theme's default SnackBar text color (`onSurface`) is only
+          // guaranteed to contrast against the default background — once
+          // an error swaps the background to `error`, the text must switch
+          // to `onError` too, or it's unreadable (especially in dark mode,
+          // where `error` is a light salmon and `onSurface` is near-white).
+          style: isError ? TextStyle(color: colorScheme.onError) : null,
+        ),
+        backgroundColor: isError ? colorScheme.error : null,
       ),
     );
   }

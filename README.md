@@ -25,6 +25,12 @@ This application currently supports Windows, Linux, macOS and Web platforms.
   - Create, purge, and delete streams; create and delete consumers (push or pull, any ack policy)
   - Browse a stream's messages live (with its own Filter/Find and Pause/Resume), or tail a specific consumer and Ack / Nak / Term individual messages
   - Publish messages with JetStream delivery acknowledgement straight from the regular Send Message dialog
+- **Key-Value Stores support** (optional, on by default — toggle it off in Settings if you don't need it):
+  - Browse KV buckets and their keys, with live search
+  - Create and delete buckets (name, history depth, TTL, replicas)
+  - Put, edit, delete, and purge keys, with optimistic-concurrency protection so a stale edit is rejected instead of silently overwriting someone else's change
+  - View a key's full revision history
+  - Key list updates live as changes happen — including changes made by other clients
 - **Update notifications** (optional, on by default): checks this repo's GitHub Releases on startup and shows a small dismissible popover with a link if a newer version is available. This app only distributes through GitHub, so nothing downloads or installs automatically — it just tells you a new build exists.
 
 # Screenshots
@@ -43,6 +49,10 @@ This application currently supports Windows, Linux, macOS and Web platforms.
 <br/>
 
 ![JetStream Dashboard](./images/JetStream.png)
+
+<br/>
+
+![Key-Value Stores](./images/Key-Value%20Stores.png)
 
 These are generated automatically — see `scripts/capture_screenshots.ps1` if you're regenerating them after a UI change.
 
@@ -66,7 +76,7 @@ This project has two test suites:
   ```
   flutter test test/
   ```
-- **`integration_test/`** — end-to-end tests that drive the real app against a real, locally-running `nats-server`, covering the core message round trip, the full JetStream stream/consumer lifecycle, the Live Messages tab's filter/find/row-menu/keyboard-shortcut controls, and a successful connection for each of the four authentication methods (username/password, token, NKey seed, `.creds`) against purpose-built fixture servers. See [AGENTS.md](./AGENTS.md)'s "Recipe E: Local JetStream Testing" (or "Recipe H: Local Authentication Testing" for the auth fixtures) for how to stand up a local server, then run each file individually against it, e.g.:
+- **`integration_test/`** — end-to-end tests that drive the real app against a real, locally-running `nats-server`, covering the core message round trip, the full JetStream stream/consumer lifecycle, the full Key-Value bucket/key lifecycle (including live updates from other clients and the optimistic-concurrency conflict path), the Live Messages tab's filter/find/row-menu/keyboard-shortcut controls, and a successful connection for each of the four authentication methods (username/password, token, NKey seed, `.creds`) against purpose-built fixture servers. See [AGENTS.md](./AGENTS.md)'s "Recipe E: Local JetStream Testing" (KV buckets are backed by JetStream, so this same server covers both) or "Recipe H: Local Authentication Testing" for the auth fixtures, then run each file individually against it, e.g.:
   ```
   flutter test integration_test/live_messages_test.dart -d windows
   ```

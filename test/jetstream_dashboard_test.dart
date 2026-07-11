@@ -276,6 +276,32 @@ void main() {
     expect(find.text('Select a stream to see details.'), findsOneWidget);
   });
 
+  testWidgets(
+      'a mutation failure shows an error SnackBar with contrast-safe (onError) text',
+      (tester) async {
+    final manager = FakeJetStreamManager();
+    manager.listStreamsImpl = () async => [_stream('orders', messages: 5)];
+    manager.purgeStreamImpl = (_) async => throw Exception('purge boom');
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('orders'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Purge'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Purge'));
+    await tester.pumpAndSettle();
+
+    final snackBar = tester.widget<SnackBar>(find.byType(SnackBar));
+    final colorScheme = Theme.of(tester.element(find.byType(SnackBar))).colorScheme;
+    expect(snackBar.backgroundColor, colorScheme.error);
+    final content = snackBar.content as Text;
+    expect(content.style?.color, colorScheme.onError);
+  });
+
   testWidgets('Create Consumer dialog creates a consumer via the manager',
       (tester) async {
     final manager = FakeJetStreamManager();
