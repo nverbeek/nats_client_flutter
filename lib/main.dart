@@ -284,6 +284,10 @@ class _MyHomePageState extends State<MyHomePage>
   // Add a ScrollController for the ListView
   final ScrollController _listScrollController = ScrollController();
 
+  // Whether the "jump to top" button should be shown — true once the user
+  // has scrolled away from the top of the (newest-at-top) list.
+  bool _showJumpToTop = false;
+
   // Variables for handling single/double tap detection
   Timer? _tapTimer;
   int? _lastTappedIndex;
@@ -329,6 +333,7 @@ class _MyHomePageState extends State<MyHomePage>
     subject = widget.subject;
     updateFullUri();
     _tabController = TabController(length: 2, vsync: this);
+    _listScrollController.addListener(_updateJumpToTopVisibility);
     super.initState();
 
     // add a listener for window events, such as size/position changes (desktop only)
@@ -343,6 +348,7 @@ class _MyHomePageState extends State<MyHomePage>
     if (!kIsWeb) {
       windowManager.removeListener(this);
     }
+    _listScrollController.removeListener(_updateJumpToTopVisibility);
     _listScrollController.dispose(); // Dispose the controller
     _tapTimer?.cancel(); // Cancel any pending timer
     _incomingFlushTimer?.cancel();
@@ -578,7 +584,7 @@ class _MyHomePageState extends State<MyHomePage>
     } else {
       // filter the items based on the message payload against the search term
       results = items
-          .where((message) => message.string
+          .where((message) => decodeMessageText(message.byte)
               .toLowerCase()
               // we use the toLowerCase() method to make it case-insensitive
               .contains(currentFilter.toLowerCase()))
@@ -891,6 +897,23 @@ class _MyHomePageState extends State<MyHomePage>
     }
   }
 
+  /// Tracks whether the list has scrolled away from the top so the "jump to
+  /// top" button can be shown/hidden. No-op instant jump — nothing to
+  /// animate since it's a single frame either way.
+  void _updateJumpToTopVisibility() {
+    if (!_listScrollController.hasClients) return;
+    final show = _listScrollController.offset > 1.0;
+    if (show != _showJumpToTop) {
+      setState(() => _showJumpToTop = show);
+    }
+  }
+
+  void _jumpToTop() {
+    if (_listScrollController.hasClients) {
+      _listScrollController.jumpTo(0);
+    }
+  }
+
   void _pauseMessageList() {
     setState(() => messagesPaused = true);
   }
@@ -989,14 +1012,15 @@ class _MyHomePageState extends State<MyHomePage>
       headers = message.header?.headers ?? <String, String>{};
     }
 
+    final text = decodeMessageText(message.byte);
     String formattedJson = '';
     try {
-      var json = jsonDecode(message.string);
+      var json = jsonDecode(text);
       var encoder = const JsonEncoder.withIndent("    ");
 
       formattedJson = encoder.convert(json);
     } on FormatException {
-      formattedJson = message.string;
+      formattedJson = text;
     }
 
     // Add mounted check before using context after async gap
@@ -1475,8 +1499,8 @@ class _MyHomePageState extends State<MyHomePage>
         try {
           switch (value) {
             case 'copy':
-              await Clipboard.setData(
-                  ClipboardData(text: filteredItems[index].string));
+              await Clipboard.setData(ClipboardData(
+                  text: decodeMessageText(filteredItems[index].byte)));
               if (mounted) {
                 showSnackBar('Copied to clipboard!');
               }
@@ -1488,14 +1512,14 @@ class _MyHomePageState extends State<MyHomePage>
               break;
             case 'replay':
               if (mounted && currentStatus == Status.connected) {
-                natsClient.pubString(
-                    filteredItems[index].subject!, filteredItems[index].string);
+                natsClient.pubString(filteredItems[index].subject!,
+                    decodeMessageText(filteredItems[index].byte));
               }
               break;
             case 'edit_and_send':
               if (mounted && currentStatus == Status.connected) {
                 showSendMessageDialog(filteredItems[index].subject!, null,
-                    filteredItems[index].string);
+                    decodeMessageText(filteredItems[index].byte));
               }
               break;
             case 'reply_to':
@@ -1592,7 +1616,7 @@ class _MyHomePageState extends State<MyHomePage>
             } else if (event.logicalKey == LogicalKeyboardKey.keyR) {
               if (currentStatus == Status.connected) {
                 natsClient.pubString(filteredItems[selectedIndex].subject!,
-                    filteredItems[selectedIndex].string);
+                    decodeMessageText(filteredItems[selectedIndex].byte));
               } else {
                 showSnackBar('Not connected, cannot replay message');
               }
@@ -1600,7 +1624,7 @@ class _MyHomePageState extends State<MyHomePage>
             } else if (event.logicalKey == LogicalKeyboardKey.keyE) {
               if (currentStatus == Status.connected) {
                 showSendMessageDialog(filteredItems[selectedIndex].subject!,
-                    null, filteredItems[selectedIndex].string);
+                    null, decodeMessageText(filteredItems[selectedIndex].byte));
               } else {
                 showSnackBar('Not connected, cannot send message');
               }
@@ -1610,8 +1634,8 @@ class _MyHomePageState extends State<MyHomePage>
             else if (event.logicalKey == LogicalKeyboardKey.keyC &&
                 (HardwareKeyboard.instance.isControlPressed ||
                     HardwareKeyboard.instance.isMetaPressed)) {
-              Clipboard.setData(
-                  ClipboardData(text: filteredItems[selectedIndex].string));
+              Clipboard.setData(ClipboardData(
+                  text: decodeMessageText(filteredItems[selectedIndex].byte)));
               showSnackBar('Copied to clipboard!');
               return KeyEventResult.handled;
             }
@@ -1880,79 +1904,96 @@ class _MyHomePageState extends State<MyHomePage>
     return Column(
       children: <Widget>[
         Expanded(
-          child: Scrollbar(
-            controller: _listScrollController,
-            thumbVisibility: true, // Always show the scrollbar when scrollable
-            child: ListView.builder(
-              controller: _listScrollController,
-              // Newest-at-top, top-anchored (a plain, non-reversed list):
-              // messages fill from the top down, the latest arrives at the
-              // top, and a short list sits at the top with empty space
-              // below rather than clinging to the bottom. Stable scrolling
-              // when new messages are prepended above a scrolled-away
-              // viewport is handled in `_insertMessages` by shifting the
-              // offset, which is exact only because every row is a fixed
-              // `_messageRowExtent` tall (see that getter's doc comment).
-              itemExtent: _messageRowExtent,
-              itemCount: filteredItems.length,
-              itemBuilder: (context, index) {
-                final message = filteredItems[index];
-                return Material(
-                  key: ObjectKey(message),
-                  child: ListTile(
-                    title: RegexTextHighlight(
-                      text: message.string,
-                      searchTerm: currentFind,
-                      fontSize: messageFontSize,
-                      highlightStyle: TextStyle(
-                        background: Paint()
-                          ..color =
-                              Theme.of(context).colorScheme.inversePrimary,
-                        fontSize: messageFontSize,
-                      ),
-                      maxLines: messageSingleLine ? 1 : 5,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    // Band by distance from the oldest message (always at
-                    // the bottom), not the raw index: prepending new
-                    // messages shifts every existing row's index, so
-                    // banding on the index would flip every stripe as
-                    // messages arrive. Distance-from-oldest is fixed per
-                    // message, so stripes stay put.
-                    tileColor: selectedIndex == index
-                        ? Theme.of(context).colorScheme.inversePrimary
-                        : (filteredItems.length - 1 - index) % 2 == 0
-                            ? evenRowColor
-                            : oddRowColor,
-                    onTap: () => _handleMessageTap(index),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 450),
-                          child: Tooltip(
-                            message: message.subject!,
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(0, 0, 5, 0),
-                              child: Chip(
-                                  label: Text(message.subject!,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: messageFontSize,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurface,
-                                      ))),
-                            ),
+          child: Stack(
+            children: [
+              Scrollbar(
+                controller: _listScrollController,
+                thumbVisibility:
+                    true, // Always show the scrollbar when scrollable
+                child: ListView.builder(
+                  controller: _listScrollController,
+                  // Newest-at-top, top-anchored (a plain, non-reversed list):
+                  // messages fill from the top down, the latest arrives at the
+                  // top, and a short list sits at the top with empty space
+                  // below rather than clinging to the bottom. Stable scrolling
+                  // when new messages are prepended above a scrolled-away
+                  // viewport is handled in `_insertMessages` by shifting the
+                  // offset, which is exact only because every row is a fixed
+                  // `_messageRowExtent` tall (see that getter's doc comment).
+                  itemExtent: _messageRowExtent,
+                  itemCount: filteredItems.length,
+                  itemBuilder: (context, index) {
+                    final message = filteredItems[index];
+                    return Material(
+                      key: ObjectKey(message),
+                      child: ListTile(
+                        title: RegexTextHighlight(
+                          text: decodeMessageText(message.byte),
+                          searchTerm: currentFind,
+                          fontSize: messageFontSize,
+                          highlightStyle: TextStyle(
+                            background: Paint()
+                              ..color =
+                                  Theme.of(context).colorScheme.inversePrimary,
+                            fontSize: messageFontSize,
                           ),
+                          maxLines: messageSingleLine ? 1 : 5,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        _buildSafePopupMenuButton(index),
-                      ],
-                    ),
+                        // Band by distance from the oldest message (always at
+                        // the bottom), not the raw index: prepending new
+                        // messages shifts every existing row's index, so
+                        // banding on the index would flip every stripe as
+                        // messages arrive. Distance-from-oldest is fixed per
+                        // message, so stripes stay put.
+                        tileColor: selectedIndex == index
+                            ? Theme.of(context).colorScheme.inversePrimary
+                            : (filteredItems.length - 1 - index) % 2 == 0
+                                ? evenRowColor
+                                : oddRowColor,
+                        onTap: () => _handleMessageTap(index),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 450),
+                              child: Tooltip(
+                                message: message.subject!,
+                                child: Padding(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(0, 0, 5, 0),
+                                  child: Chip(
+                                      label: Text(message.subject!,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: messageFontSize,
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurface,
+                                          ))),
+                                ),
+                              ),
+                            ),
+                            _buildSafePopupMenuButton(index),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              if (_showJumpToTop)
+                Positioned(
+                  right: 16,
+                  bottom: 16,
+                  child: FloatingActionButton(
+                    mini: true,
+                    tooltip: 'Jump to top',
+                    onPressed: _jumpToTop,
+                    child: const Icon(Icons.vertical_align_top),
                   ),
-                );
-              },
-            ),
+                ),
+            ],
           ),
         ),
         const Divider(height: 1), // Divider above the bottom toolbar

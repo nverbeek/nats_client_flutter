@@ -478,18 +478,27 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
               itemBuilder: (context, index) {
                 final stream = _streams[index];
                 final selected = stream.config.name == _selectedStreamName;
-                return ListTile(
-                  selected: selected,
-                  selectedTileColor: Theme.of(context)
-                      .colorScheme
-                      .inversePrimary
-                      .withAlpha(80),
-                  title: Text(stream.config.name),
-                  subtitle: Text(
-                    '${stream.state.messages} msgs · ${formatBytes(stream.state.bytes)}',
+                // `ListTile.selectedTileColor` is painted by the nearest
+                // ancestor `Material` (here, the Scaffold's), not the tile
+                // itself — on a long, fast-scrolling list that let the
+                // highlight's ink decoration drift from the row it belonged
+                // to and render over unrelated UI above the list. Giving
+                // each row its own `Material` scopes that paint to the row.
+                return Material(
+                  key: ValueKey(stream.config.name),
+                  child: ListTile(
+                    selected: selected,
+                    selectedTileColor: Theme.of(context)
+                        .colorScheme
+                        .inversePrimary
+                        .withAlpha(80),
+                    title: Text(stream.config.name),
+                    subtitle: Text(
+                      '${stream.state.messages} msgs · ${formatBytes(stream.state.bytes)}',
+                    ),
+                    trailing: Chip(label: Text(stream.config.storage)),
+                    onTap: () => _selectStream(stream.config.name),
                   ),
-                  trailing: Chip(label: Text(stream.config.storage)),
-                  onTap: () => _selectStream(stream.config.name),
                 );
               },
             ),

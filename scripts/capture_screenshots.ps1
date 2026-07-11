@@ -273,6 +273,29 @@ public class ScreenshotWin32 {
         if ((Test-Path $seedRequestFile) -and -not (Test-Path $seedDoneFile)) {
             Write-Host "Seeding Live Messages sample payloads..." -ForegroundColor Cyan
             pwsh -File (Join-Path $PSScriptRoot "message_pub.ps1") | Out-Null
+            # Padding rows so the list overflows the screenshot window —
+            # needed for the Messages capture to show a genuinely
+            # scrolled-away state with the Jump-to-top button visible, not
+            # just a handful of rows that already fit on screen. Styled as
+            # plausible telemetry/system traffic (own subjects, never
+            # matched by the 'animal'/'family' filter-and-find demo below)
+            # rather than obviously-fake "padding message N" text, so the
+            # screenshot still looks like a real message stream.
+            $fillerTemplates = @(
+                { "{`"sensor`":`"lobby-01`",`"celsius`":$(Get-Random -Minimum 18 -Maximum 24)}" },
+                { "{`"sensor`":`"lobby-01`",`"humidity_pct`":$(Get-Random -Minimum 30 -Maximum 55)}" },
+                { "{`"service`":`"api-gateway`",`"status`":`"ok`",`"uptime_s`":$(Get-Random -Minimum 1000 -Maximum 99999)}" },
+                { "{`"route`":`"/v1/orders`",`"count`":$(Get-Random -Minimum 1 -Maximum 500),`"avg_ms`":$(Get-Random -Minimum 5 -Maximum 120)}" },
+                { "{`"key`":`"session:$(Get-Random -Minimum 1000 -Maximum 9999)`",`"reason`":`"ttl_expired`"}" }
+            )
+            $fillerSubjects = @(
+                'telemetry.temperature', 'telemetry.humidity', 'system.heartbeat',
+                'metrics.requests', 'system.cache.evict'
+            )
+            1..15 | ForEach-Object {
+                $i = $_ % $fillerTemplates.Count
+                nats pub $fillerSubjects[$i] (& $fillerTemplates[$i]) | Out-Null
+            }
             New-Item -ItemType File -Path $seedDoneFile -Force | Out-Null
         }
 

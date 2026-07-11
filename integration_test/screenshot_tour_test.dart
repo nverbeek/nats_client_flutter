@@ -41,12 +41,31 @@ void main() {
         of: find.byIcon(icon), matching: find.byType(TextFormField));
 
     // 1. Messages: the orchestrator publishes the sample car/animal
-    // payloads (`scripts/message_pub.ps1`) now that the app is connected
-    // and subscribed, then this waits for all 5 to arrive before capturing.
+    // payloads plus 15 filler rows (`scripts/capture_screenshots.ps1`'s
+    // seed handler) now that the app is connected and subscribed, then
+    // this waits for all 20 to arrive before capturing. The filler rows
+    // exist so the list overflows the window, letting this screenshot show
+    // a realistic scrolled-away-and-paused state — scroll down first (so
+    // the Jump-to-top button appears), then pause (so the Pause button
+    // shows its active/"paused" icon) before capturing.
     await signaler.requestSeedMessages();
     await pumpUntil(tester,
-        () => find.textContaining('Total Messages: 5,').evaluate().isNotEmpty);
+        () => find.textContaining('Total Messages: 20,').evaluate().isNotEmpty);
+    await tester.drag(find.byType(ListView).first, const Offset(0, -800));
+    await tester.pumpAndSettle();
+    await tester.tap(find.ancestor(
+        of: find.byIcon(Icons.pause), matching: find.byType(ElevatedButton)));
+    await tester.pumpAndSettle();
     await signaler.capture(tester, 'Messages');
+
+    // Reset back to a clean, unpaused, scrolled-to-top state before the
+    // remaining screenshots, which assume that baseline.
+    await tester.tap(find.byTooltip('Jump to top'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.ancestor(
+        of: find.byIcon(Icons.play_arrow),
+        matching: find.byType(ElevatedButton)));
+    await tester.pumpAndSettle();
 
     // 2. Filter and Sort: narrow to the animal.* messages and highlight
     // "family" within them.
@@ -55,11 +74,13 @@ void main() {
     await tester.pump();
     await signaler.capture(tester, 'Filter and Sort');
 
-    // 3. Message Detail: clear the filter/find, then open the Bengal Tiger
-    // (`animal.tiger`) row's Detail dialog.
-    await tester.tap(find.descendant(
-        of: fieldWithPrefixIcon(Icons.filter_list),
-        matching: find.byIcon(Icons.clear)));
+    // 3. Message Detail: clear the find highlight, then open the Bengal
+    // Tiger (`animal.tiger`) row's Detail dialog. Deliberately leaves the
+    // `animal` filter in place (unlike before the 15 filler rows were
+    // added) — clearing it would drop back to the full, newest-at-top
+    // unfiltered list, and `animal.tiger` (among the oldest of the 20
+    // messages) would scroll off the top of the window and never get
+    // built by the list's virtualization, so `find.text` couldn't see it.
     await tester.tap(find.descendant(
         of: fieldWithPrefixIcon(Icons.search),
         matching: find.byIcon(Icons.clear)));

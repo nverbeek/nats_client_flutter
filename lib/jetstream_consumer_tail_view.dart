@@ -5,6 +5,7 @@ import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'format_utils.dart';
 import 'jetstream_manager.dart';
 import 'message_detail_dialog.dart';
 import 'regex_text_highlight.dart';
@@ -104,13 +105,14 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
       headers = message.header?.headers ?? <String, String>{};
     }
 
+    final text = decodeMessageText(message.byte);
     String formattedJson;
     try {
-      final json = jsonDecode(message.string);
+      final json = jsonDecode(text);
       final encoder = const JsonEncoder.withIndent('    ');
       formattedJson = encoder.convert(json);
     } on FormatException {
-      formattedJson = message.string;
+      formattedJson = text;
     }
 
     if (!mounted) return;
@@ -190,7 +192,7 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
                 return ListTile(
                   key: ValueKey(message.hashCode),
                   title: RegexTextHighlight(
-                    text: message.string,
+                    text: decodeMessageText(message.byte),
                     searchTerm: '',
                     fontSize: 14,
                     highlightStyle: TextStyle(
@@ -233,8 +235,8 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
                       IconButton(
                         icon: const Icon(Icons.copy),
                         tooltip: 'Copy',
-                        onPressed: () => Clipboard.setData(
-                            ClipboardData(text: message.string)),
+                        onPressed: () => Clipboard.setData(ClipboardData(
+                            text: decodeMessageText(message.byte))),
                       ),
                     ],
                   ),

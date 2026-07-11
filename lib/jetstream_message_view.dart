@@ -48,6 +48,10 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
   final _findFocusNode = FocusNode();
   final _scrollController = ScrollController();
 
+  // Whether the "jump to top" button should be shown — true once the user
+  // has scrolled away from the top of the (newest-at-top) list.
+  bool _showJumpToTop = false;
+
   // The fixed height of every message row. A fixed extent is what lets
   // `_insertMessages` compensate the scroll offset exactly when messages
   // are prepended above a scrolled-away viewport, and lets the
@@ -79,6 +83,7 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_updateJumpToTopVisibility);
     _startBrowsing();
   }
 
@@ -106,8 +111,25 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
     _findController.dispose();
     _filterFocusNode.dispose();
     _findFocusNode.dispose();
+    _scrollController.removeListener(_updateJumpToTopVisibility);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  /// Tracks whether the list has scrolled away from the top so the "jump to
+  /// top" button can be shown/hidden. Instant jump — nothing to animate.
+  void _updateJumpToTopVisibility() {
+    if (!_scrollController.hasClients) return;
+    final show = _scrollController.offset > 1.0;
+    if (show != _showJumpToTop) {
+      setState(() => _showJumpToTop = show);
+    }
+  }
+
+  void _jumpToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
   }
 
   void _startBrowsing() {
@@ -228,7 +250,7 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
       _filteredMessages = _messages;
     } else {
       _filteredMessages = _messages
-          .where((message) => message.string
+          .where((message) => decodeMessageText(message.byte)
               .toLowerCase()
               .contains(_currentFilter.toLowerCase()))
           .toList();
@@ -243,13 +265,14 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
       headers = message.header?.headers ?? <String, String>{};
     }
 
+    final text = decodeMessageText(message.byte);
     String formattedJson;
     try {
-      final json = jsonDecode(message.string);
+      final json = jsonDecode(text);
       final encoder = const JsonEncoder.withIndent('    ');
       formattedJson = encoder.convert(json);
     } on FormatException {
-      formattedJson = message.string;
+      formattedJson = text;
     }
 
     if (!mounted) return;
@@ -430,90 +453,111 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
           )
         else
           Expanded(
-            child: Scrollbar(
-              controller: _scrollController,
-              thumbVisibility: true,
-              child: ListView.builder(
-                controller: _scrollController,
-                // Newest-at-top, top-anchored — see the matching comment in
-                // `main.dart`'s `_buildLiveMessagesTab`. Stable scrolling on
-                // prepend is handled in `_insertMessages` via an exact
-                // offset shift, which relies on this fixed `itemExtent`.
-                itemExtent: _messageRowExtent,
-                itemCount: _filteredMessages.length,
-                itemBuilder: (context, index) {
-                  final message = _filteredMessages[index];
-                  final seq = message.streamSequence;
-                  return Material(
-                    key: ObjectKey(message),
-                    child: ListTile(
-                      // Band by distance from the oldest message (always at
-                      // the bottom), not the raw index, so stripes don't
-                      // flip every time a message is prepended at the top.
-                      tileColor: (_filteredMessages.length - 1 - index) % 2 == 0
-                          ? rowEvenColor
-                          : rowOddColor,
-                      title: RegexTextHighlight(
-                        text: message.string,
-                        searchTerm: _currentFind,
-                        fontSize: 14,
-                        highlightStyle: TextStyle(
-                          background: Paint()
-                            ..color = theme.colorScheme.inversePrimary,
-                          fontSize: 14,
-                        ),
-                        maxLines: 5,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      onTap: () => _showDetailDialog(message),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (seq != null)
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(0, 0, 5, 0),
-                              child: Chip(label: Text('#$seq')),
+            child: Stack(
+              children: [
+                Scrollbar(
+                  controller: _scrollController,
+                  thumbVisibility: true,
+                  child: ListView.builder(
+                    controller: _scrollController,
+                    // Newest-at-top, top-anchored — see the matching comment in
+                    // `main.dart`'s `_buildLiveMessagesTab`. Stable scrolling on
+                    // prepend is handled in `_insertMessages` via an exact
+                    // offset shift, which relies on this fixed `itemExtent`.
+                    itemExtent: _messageRowExtent,
+                    itemCount: _filteredMessages.length,
+                    itemBuilder: (context, index) {
+                      final message = _filteredMessages[index];
+                      final seq = message.streamSequence;
+                      return Material(
+                        key: ObjectKey(message),
+                        child: ListTile(
+                          // Band by distance from the oldest message (always at
+                          // the bottom), not the raw index, so stripes don't
+                          // flip every time a message is prepended at the top.
+                          tileColor:
+                              (_filteredMessages.length - 1 - index) % 2 == 0
+                                  ? rowEvenColor
+                                  : rowOddColor,
+                          title: RegexTextHighlight(
+                            text: decodeMessageText(message.byte),
+                            searchTerm: _currentFind,
+                            fontSize: 14,
+                            highlightStyle: TextStyle(
+                              background: Paint()
+                                ..color = theme.colorScheme.inversePrimary,
+                              fontSize: 14,
                             ),
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 300),
-                            child: Tooltip(
-                              message: message.subject ?? '',
-                              child: Padding(
-                                padding: const EdgeInsets.fromLTRB(0, 0, 5, 0),
-                                child: Chip(
-                                  label: Text(
-                                    message.subject ?? '',
-                                    overflow: TextOverflow.ellipsis,
+                            maxLines: 5,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          onTap: () => _showDetailDialog(message),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (seq != null)
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(0, 0, 5, 0),
+                                  child: Chip(label: Text('#$seq')),
+                                ),
+                              ConstrainedBox(
+                                constraints:
+                                    const BoxConstraints(maxWidth: 300),
+                                child: Tooltip(
+                                  message: message.subject ?? '',
+                                  child: Padding(
+                                    padding:
+                                        const EdgeInsets.fromLTRB(0, 0, 5, 0),
+                                    child: Chip(
+                                      label: Text(
+                                        message.subject ?? '',
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          ),
-                          PopupMenuButton<String>(
-                            padding: EdgeInsets.zero,
-                            itemBuilder: (context) => const [
-                              PopupMenuItem(value: 'copy', child: Text('Copy')),
-                              PopupMenuItem(
-                                  value: 'detail', child: Text('Detail')),
+                              PopupMenuButton<String>(
+                                padding: EdgeInsets.zero,
+                                itemBuilder: (context) => const [
+                                  PopupMenuItem(
+                                      value: 'copy', child: Text('Copy')),
+                                  PopupMenuItem(
+                                      value: 'detail', child: Text('Detail')),
+                                ],
+                                onSelected: (value) {
+                                  switch (value) {
+                                    case 'copy':
+                                      Clipboard.setData(ClipboardData(
+                                          text:
+                                              decodeMessageText(message.byte)));
+                                      break;
+                                    case 'detail':
+                                      _showDetailDialog(message);
+                                      break;
+                                  }
+                                },
+                              ),
                             ],
-                            onSelected: (value) {
-                              switch (value) {
-                                case 'copy':
-                                  Clipboard.setData(
-                                      ClipboardData(text: message.string));
-                                  break;
-                                case 'detail':
-                                  _showDetailDialog(message);
-                                  break;
-                              }
-                            },
                           ),
-                        ],
-                      ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                if (_showJumpToTop)
+                  Positioned(
+                    right: 16,
+                    bottom: 16,
+                    child: FloatingActionButton(
+                      mini: true,
+                      tooltip: 'Jump to top',
+                      onPressed: _jumpToTop,
+                      child: const Icon(Icons.vertical_align_top),
                     ),
-                  );
-                },
-              ),
+                  ),
+              ],
             ),
           ),
       ],
