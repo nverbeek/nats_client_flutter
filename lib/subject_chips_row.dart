@@ -116,7 +116,20 @@ class _SubjectChipsRowState extends State<SubjectChipsRow> {
     });
   }
 
-  Widget _buildChip(SubscriptionInfo info) {
+  // The visible copy gets an explicit, specific tooltip -- "Remove
+  // subscription", matching SubscriptionManagerDialog's identical action --
+  // rather than leaving InputChip.onDeleted's delete icon on its default
+  // localized message, which is just "Delete". That default is generic
+  // enough to collide with unrelated "Delete" buttons elsewhere in the app
+  // (e.g. Object Store's per-object Delete button) since this row's chips
+  // live in the persistent top toolbar, mounted across every tab.
+  //
+  // includeDeleteTooltip: false for the offstage measurement copy (see the
+  // key/includeTooltip comment on _buildAddButton below for why offstage
+  // copies need their tooltips suppressed) -- an empty string (not null)
+  // is required to actually suppress it: null would fall back to the
+  // generic localized default instead of no tooltip.
+  Widget _buildChip(SubscriptionInfo info, {bool includeDeleteTooltip = true}) {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(right: _chipGap),
@@ -136,6 +149,8 @@ class _SubjectChipsRowState extends State<SubjectChipsRow> {
           onPressed: () => widget.onTapChip(info),
           onDeleted: () => widget.onRemoveChip(info),
           deleteIconColor: theme.colorScheme.onSecondaryContainer,
+          deleteButtonTooltipMessage:
+              includeDeleteTooltip ? 'Remove subscription' : '',
         ),
       ),
     );
@@ -328,7 +343,8 @@ class _SubjectChipsRowState extends State<SubjectChipsRow> {
                                   _MeasureSize(
                                     onChange: (size) =>
                                         _recordChipWidth(info, size.width),
-                                    child: _buildChip(info),
+                                    child: _buildChip(info,
+                                        includeDeleteTooltip: false),
                                   ),
                                 _MeasureSize(
                                   onChange: (size) =>
