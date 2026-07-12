@@ -25,11 +25,38 @@ var connectedLight = Colors.green[700];
 var disconnectedDark = Colors.grey[400];
 var disconnectedLight = Colors.grey[800];
 
+// per-subscription color indicator palette (Milestone 9/11). Colors are
+// assigned to a SubscriptionInfo by cycling through this list and resolved
+// at render time (never baked into state) so a dark/light toggle mid-session
+// stays correct. Chosen to stay legible against the subtle Live Messages row
+// stripe tints (see messageRowEvenColor/messageRowOddColor in main.dart).
+final List<Color> subscriptionPaletteDark = [
+  Colors.blue[400]!,
+  Colors.orange[400]!,
+  Colors.purple[300]!,
+  Colors.teal[300]!,
+  Colors.pink[300]!,
+  Colors.indigo[300]!,
+  Colors.amber[600]!,
+  Colors.cyan[300]!,
+];
+final List<Color> subscriptionPaletteLight = [
+  Colors.blue[700]!,
+  Colors.orange[800]!,
+  Colors.purple[700]!,
+  Colors.teal[700]!,
+  Colors.pink[700]!,
+  Colors.indigo[700]!,
+  Colors.brown[600]!,
+  Colors.cyan[800]!,
+];
+
 // preference keys
 const String prefScheme = "SCHEME";
 const String prefHost = "HOST";
 const String prefPort = "PORT";
-const String prefSubject = "SUBJECT";
+const String prefSubject = "SUBJECT"; // legacy comma-delimited subject list; kept only as a migration source, see prefSubscriptions
+const String prefSubscriptions = "SUBSCRIPTIONS"; // JSON list of {subject, queueGroup}
 const String prefTheme = "THEME";
 const String prefTrustedCertificate = "TRUSTED_CERTIFICATE";
 const String prefTrustedCertificateName = "TRUSTED_CERTIFICATE_NAME";

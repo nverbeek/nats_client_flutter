@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:dart_nats/dart_nats.dart' as nats show Consumer;
@@ -102,7 +100,7 @@ class JetStreamManager {
   Future<String?> checkAvailability(
       {Duration timeout = const Duration(seconds: 3)}) async {
     try {
-      lastAccountInfo = await fetchRawAccountInfo(client, timeout: timeout);
+      lastAccountInfo = await _js.accountInfo(timeout: timeout);
       return null;
     } catch (e) {
       return describeJetStreamError(e);
@@ -115,70 +113,10 @@ class JetStreamManager {
   /// (e.g. the Account Info dialog's manual refresh) can format it themselves.
   Future<AccountInfo> fetchAccountInfo(
       {Duration timeout = const Duration(seconds: 3)}) async {
-    final info = await fetchRawAccountInfo(client, timeout: timeout);
+    final info = await _js.accountInfo(timeout: timeout);
     lastAccountInfo = info;
     return info;
   }
-}
-
-/// Fetches JetStream account usage/limits info via a raw `$JS.API.INFO`
-/// request and parses it with [accountInfoFromJson], instead of going
-/// through `JetStream.accountInfo()`.
-///
-/// The vendored dart_nats 1.1.1 package's own parsing (`AccountInfo.fromJson`
-/// in `jetstream.dart`) reads usage/limits from a nested `json['tier']` key —
-/// but a real server's `$JS.API.INFO` response puts those fields at the top
-/// level for the common case of a single-tier (non-multi-tenant) account, with
-/// no `tier` key at all. Verified against a live `nats-server`: the package's
-/// `accountInfo()` silently returns an all-zero `Tier` for exactly the account
-/// shape most users have. Shared by `JetStreamManager` and `KvManager`, since
-/// account info isn't stream- or bucket-specific.
-Future<AccountInfo> fetchRawAccountInfo(Client client,
-    {Duration timeout = const Duration(seconds: 3)}) async {
-  final response = await client.request(
-      '\$JS.API.INFO', Uint8List.fromList([]),
-      timeout: timeout);
-  final map = jsonDecode(response.string) as Map<String, dynamic>;
-  if (map['error'] != null) {
-    throw NatsException(map['error']['description'] as String?);
-  }
-  return accountInfoFromJson(map);
-}
-
-/// Parses a `$JS.API.INFO` response into an [AccountInfo], reading the
-/// account's own usage/limits from the top level rather than a `tier` key
-/// (see [fetchRawAccountInfo] for why). Pure function, unit tested directly
-/// against a real captured response shape.
-AccountInfo accountInfoFromJson(Map<String, dynamic> json) {
-  final tiersMap = <String, Tier>{};
-  if (json['tiers'] != null) {
-    (json['tiers'] as Map<String, dynamic>).forEach((key, value) {
-      tiersMap[key] = tierFromJson(value as Map<String, dynamic>);
-    });
-  }
-  return AccountInfo(
-    domain: json['domain'] as String? ?? '',
-    api: APIStats.fromJson(json['api'] as Map<String, dynamic>? ?? {}),
-    tier: tierFromJson(json),
-    tiers: tiersMap,
-  );
-}
-
-/// Parses a tier's usage/limits fields. Fields are read as [num] rather than
-/// [int] — a "no limit" reserved value can arrive as a JSON float when it
-/// overflows a double's 53-bit integer precision (observed for
-/// `reserved_storage` against a live server: the server's uint64 sentinel for
-/// "unlimited" serializes as `18446744073709552000.0`), which a strict `as
-/// int?` cast would throw on.
-Tier tierFromJson(Map<String, dynamic> json) {
-  return Tier(
-    memory: (json['memory'] as num?)?.toInt() ?? 0,
-    storage: (json['storage'] as num?)?.toInt() ?? 0,
-    reservedMemory: (json['reserved_memory'] as num?)?.toInt() ?? 0,
-    reservedStorage: (json['reserved_storage'] as num?)?.toInt() ?? 0,
-    streams: (json['streams'] as num?)?.toInt() ?? 0,
-    consumers: (json['consumers'] as num?)?.toInt() ?? 0,
-  );
 }
 
 /// Turns an error raised by a JetStream API call into a short, user-facing

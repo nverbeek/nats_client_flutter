@@ -30,6 +30,9 @@ import 'send_message_dialog.dart';
 import 'help_dialog.dart';
 import 'settings_dialog.dart';
 import 'security_settings_dialog.dart';
+import 'subject_chips_row.dart';
+import 'subscription_info.dart';
+import 'subscription_manager_dialog.dart';
 import 'update_checker.dart';
 
 void main() async {
@@ -92,23 +95,37 @@ void main() async {
   String? tempScheme = prefs.getString(constants.prefScheme);
   String? tempHost = prefs.getString(constants.prefHost);
   String? tempPort = prefs.getString(constants.prefPort);
-  String? tempSubject = prefs.getString(constants.prefSubject);
   String? tempTheme = prefs.getString(constants.prefTheme);
 
   // if needed, default the values
   tempScheme ??= constants.defaultScheme;
   tempHost ??= constants.defaultHost;
   tempPort ??= constants.defaultPort;
-  tempSubject ??= constants.defaultSubject;
   tempTheme ??= constants.darkTheme;
+
+  // subscriptions: prefer the new JSON list; otherwise do a one-time
+  // migration of the legacy comma-delimited subject string, writing the
+  // result back so this branch is only hit once.
+  List<SubscriptionInfo> tempSubscriptions;
+  String? subscriptionsJson = prefs.getString(constants.prefSubscriptions);
+  if (subscriptionsJson != null && subscriptionsJson.isNotEmpty) {
+    tempSubscriptions = decodeSubscriptionList(subscriptionsJson);
+  } else {
+    String? legacySubject = prefs.getString(constants.prefSubject);
+    tempSubscriptions = (legacySubject != null && legacySubject.isNotEmpty)
+        ? migrateFromLegacySubject(legacySubject)
+        : [SubscriptionInfo(subject: constants.defaultSubject, colorIndex: 0)];
+    await prefs.setString(constants.prefSubscriptions,
+        encodeSubscriptionList(tempSubscriptions));
+  }
 
   // get the application's version number
   PackageInfo packageInfo = await PackageInfo.fromPlatform();
   String appVersion = packageInfo.version;
 
   // run the ui
-  runApp(MyApp(
-      appVersion, tempScheme, tempHost, tempPort, tempSubject, tempTheme));
+  runApp(MyApp(appVersion, tempScheme, tempHost, tempPort, tempSubscriptions,
+      tempTheme));
 }
 
 /// Class to handle theme changes
@@ -144,15 +161,15 @@ class ThemeModel with ChangeNotifier {
 
 /// Main application starting point
 class MyApp extends StatelessWidget {
-  const MyApp(this.appVersion, this.scheme, this.host, this.port, this.subject,
-      this.theme,
+  const MyApp(this.appVersion, this.scheme, this.host, this.port,
+      this.subscriptions, this.theme,
       {super.key});
 
   final String appVersion;
   final String scheme;
   final String host;
   final String port;
-  final String subject;
+  final List<SubscriptionInfo> subscriptions;
   final String theme;
 
   /// Root UI of the entire application
@@ -210,8 +227,8 @@ class MyApp extends StatelessWidget {
             ),
             themeMode: model.mode,
             home: LoaderOverlay(
-              child: MyHomePage(
-                  appVersion, 'NATS Client', scheme, host, port, subject),
+              child: MyHomePage(appVersion, 'NATS Client', scheme, host, port,
+                  subscriptions),
             ),
           );
         },
@@ -228,7 +245,7 @@ class _ConnectIntent extends Intent {
 
 class MyHomePage extends StatefulWidget {
   const MyHomePage(this.appVersion, this.title, this.scheme, this.host,
-      this.port, this.subject,
+      this.port, this.subscriptions,
       {super.key});
 
   // This widget is the home page of your application. It is stateful, meaning
@@ -245,7 +262,7 @@ class MyHomePage extends StatefulWidget {
   final String scheme;
   final String host;
   final String port;
-  final String subject;
+  final List<SubscriptionInfo> subscriptions;
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
@@ -255,7 +272,14 @@ class _MyHomePageState extends State<MyHomePage>
     with WindowListener, TickerProviderStateMixin {
   String host = constants.defaultHost;
   String port = constants.defaultPort;
-  String subject = constants.defaultSubject;
+  List<SubscriptionInfo> subscriptions = [];
+  // Message-row color indicator lookup: colorIndex captured per message at
+  // arrival time (see _subscribeOne). An Expando rather than a Map so
+  // entries never need manual pruning -- once a Message drops out of
+  // items/filteredItems with nothing else referencing it, its entry here
+  // becomes collectible too.
+  final Expando<int> _messageColorIndex = Expando<int>();
+  int _nextColorIndex = 0;
   var availableSchemes = <String>['ws://', 'nats://'];
   String scheme = constants.defaultScheme;
   String fullUri = '';
@@ -345,7 +369,8 @@ class _MyHomePageState extends State<MyHomePage>
     scheme = widget.scheme;
     host = widget.host;
     port = widget.port;
-    subject = widget.subject;
+    subscriptions = List<SubscriptionInfo>.from(widget.subscriptions);
+    _nextColorIndex = subscriptions.length;
     updateFullUri();
     _tabController = TabController(length: _visibleTabCount, vsync: this);
     _listScrollController.addListener(_updateJumpToTopVisibility);
@@ -684,6 +709,11 @@ class _MyHomePageState extends State<MyHomePage>
 
   void natsConnect() async {
     natsClient = Client();
+    // sids are only meaningful for the lifetime of one Client instance --
+    // null them all out now that we've discarded the old one.
+    for (final info in subscriptions) {
+      info.sid = null;
+    }
     _jetStreamManager = JetStreamManager(natsClient);
     _kvManager = KvManager(natsClient);
     _objectStoreManager = ObjectStoreManager(natsClient);
@@ -703,7 +733,8 @@ class _MyHomePageState extends State<MyHomePage>
     await prefs.setString(constants.prefScheme, scheme);
     await prefs.setString(constants.prefHost, host);
     await prefs.setString(constants.prefPort, port);
-    await prefs.setString(constants.prefSubject, subject);
+    await prefs.setString(
+        constants.prefSubscriptions, encodeSubscriptionList(subscriptions));
 
     debugPrint('About to connect to $fullUri');
     try {
@@ -751,16 +782,11 @@ class _MyHomePageState extends State<MyHomePage>
         }
       });
 
-      // process the subjects, see if there are more than one
-      if (subject.contains(',')) {
-        // there are more than one subject to listen to
-        var subjects = subject.split(',');
-
-        for (String subject in subjects) {
-          subscribeToSubject(subject.trim());
-        }
-      } else {
-        subscribeToSubject(subject.trim());
+      // subscribe to everything the user has configured; each entry already
+      // has a stable colorIndex from when it was added, _subscribeOne fills
+      // in its sid
+      for (final info in subscriptions) {
+        _subscribeOne(info);
       }
 
       // get the security context if applicable
@@ -864,13 +890,137 @@ class _MyHomePageState extends State<MyHomePage>
     return securityContext;
   }
 
-  void subscribeToSubject(String subject) {
-    debugPrint('Subscribing to $subject');
-    var sub = natsClient.sub(subject);
+  void _subscribeOne(SubscriptionInfo info) {
+    debugPrint('Subscribing to ${info.subject}'
+        '${info.queueGroup != null ? ' (queue group: ${info.queueGroup})' : ''}');
+    var sub = natsClient.sub(info.subject, queueGroup: info.queueGroup);
+    info.sid = sub.sid;
 
     sub.stream.listen((event) {
+      // Tag with this subscription's colorIndex at arrival time -- info.sid
+      // gets nulled on every disconnect (see natsDisconnect/natsConnect), so
+      // looking that up dynamically at render time would make every
+      // already-received message's color indicator disappear the moment you
+      // disconnect. colorIndex is stable for the subscription's lifetime, so
+      // capturing it once here survives disconnects/reconnects.
+      _messageColorIndex[event] = info.colorIndex;
       handleIncomingMessage(event);
     });
+  }
+
+  Future<void> _persistSubscriptions() async {
+    await prefs.setString(
+        constants.prefSubscriptions, encodeSubscriptionList(subscriptions));
+  }
+
+  /// Adds a new subscription, live-subscribing immediately if already
+  /// connected. Used by both the chip row's "+" and the manager dialog's
+  /// "Add" button.
+  void _addSubscription(String subject, String? queueGroup) {
+    final trimmedSubject = subject.trim();
+    final normalizedQueueGroup =
+        (queueGroup != null && queueGroup.trim().isNotEmpty)
+            ? queueGroup.trim()
+            : null;
+    final alreadyExists = subscriptions.any((info) =>
+        info.subject == trimmedSubject &&
+        info.queueGroup == normalizedQueueGroup);
+    if (alreadyExists) {
+      showSnackBar('Already subscribed to $trimmedSubject');
+      return;
+    }
+
+    final info = SubscriptionInfo(
+      subject: trimmedSubject,
+      queueGroup: normalizedQueueGroup,
+      colorIndex: _nextColorIndex++,
+    );
+    setState(() {
+      subscriptions.add(info);
+    });
+    _persistSubscriptions();
+    if (currentStatus == Status.connected) {
+      _subscribeOne(info);
+    }
+  }
+
+  /// Removes a subscription, live-unsubscribing immediately if connected.
+  /// This is what a chip's delete icon (x) calls directly -- no confirmation,
+  /// matching how the rest of this toolbar behaves.
+  void _removeSubscription(SubscriptionInfo info) {
+    if (currentStatus == Status.connected && info.sid != null) {
+      natsClient.unSubById(info.sid!);
+    }
+    setState(() {
+      subscriptions.remove(info);
+    });
+    _persistSubscriptions();
+  }
+
+  /// Changes an existing subscription's queue group. There's no wire op to
+  /// change a queue group in place, so this is an unsub+resub when connected
+  /// (which produces a new sid).
+  void _updateQueueGroup(SubscriptionInfo info, String? newQueueGroup) {
+    final normalized =
+        (newQueueGroup != null && newQueueGroup.trim().isNotEmpty)
+            ? newQueueGroup.trim()
+            : null;
+    if (normalized == info.queueGroup) return;
+
+    if (currentStatus == Status.connected && info.sid != null) {
+      natsClient.unSubById(info.sid!);
+    }
+    setState(() {
+      info.queueGroup = normalized;
+    });
+    _persistSubscriptions();
+    if (currentStatus == Status.connected) {
+      _subscribeOne(info);
+    }
+  }
+
+  void _showEditSubscriptionDialog(SubscriptionInfo? existing) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => SubscriptionEditDialog(
+        existing: existing,
+        onSave: (subject, queueGroup) {
+          if (existing == null) {
+            _addSubscription(subject, queueGroup);
+          } else {
+            _updateQueueGroup(existing, queueGroup);
+          }
+        },
+        onRemove:
+            existing == null ? null : () => _removeSubscription(existing),
+      ),
+    );
+  }
+
+  /// Resolves the color indicator for a Live Messages row from the
+  /// colorIndex captured at arrival time (see _subscribeOne). Returns null
+  /// (render nothing) for a message that arrived before this feature
+  /// existed, if that's even reachable. Colors stay theme-reactive (resolved
+  /// against the *current* brightness on every call) even though the
+  /// colorIndex itself was captured once.
+  Color? _colorForMessage(Message<dynamic> message, BuildContext context) {
+    final colorIndex = _messageColorIndex[message];
+    if (colorIndex == null) return null;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return resolveSubscriptionColor(colorIndex, isDark);
+  }
+
+  void _showSubscriptionManagerDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (context) => SubscriptionManagerDialog(
+        subscriptions: subscriptions,
+        isDark: Provider.of<ThemeModel>(context, listen: false).isDark(),
+        onAdd: _addSubscription,
+        onRemove: _removeSubscription,
+        onQueueGroupChanged: _updateQueueGroup,
+      ),
+    );
   }
 
   void handleIncomingMessage(Message<dynamic> event) {
@@ -996,6 +1146,10 @@ class _MyHomePageState extends State<MyHomePage>
 
   void natsDisconnect() async {
     await natsClient.forceClose();
+
+    for (final info in subscriptions) {
+      info.sid = null;
+    }
 
     if (mounted) {
       setState(() {
@@ -1860,17 +2014,20 @@ class _MyHomePageState extends State<MyHomePage>
                       flex: 3,
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
-                        child: _withConnectShortcut(TextFormField(
-                          enabled: (currentStatus == Status.disconnected),
-                          initialValue: widget.subject,
-                          onChanged: (value) {
-                            subject = value;
-                          },
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            hintText: 'Subjects',
-                            labelText: 'Subjects',
-                          ),
+                        // Unlike Host/Port/Scheme, this stays interactive
+                        // while connected: adding/removing a chip live
+                        // subscribes/unsubscribes immediately (see
+                        // _addSubscription/_removeSubscription) instead of
+                        // only taking effect on the next connect.
+                        child: _withConnectShortcut(SubjectChipsRow(
+                          subscriptions: subscriptions,
+                          isDark: Provider.of<ThemeModel>(context,
+                                  listen: false)
+                              .isDark(),
+                          onTapChip: _showEditSubscriptionDialog,
+                          onRemoveChip: _removeSubscription,
+                          onAdd: () => _showEditSubscriptionDialog(null),
+                          onOpenManager: _showSubscriptionManagerDialog,
                         )),
                       ),
                     ),
@@ -2023,59 +2180,92 @@ class _MyHomePageState extends State<MyHomePage>
                   itemCount: filteredItems.length,
                   itemBuilder: (context, index) {
                     final message = filteredItems[index];
+                    final subColor = _colorForMessage(message, context);
                     return Material(
                       key: ObjectKey(message),
-                      child: ListTile(
-                        title: RegexTextHighlight(
-                          text: decodeMessageText(message.byte),
-                          searchTerm: currentFind,
-                          fontSize: messageFontSize,
-                          highlightStyle: TextStyle(
-                            background: Paint()
-                              ..color =
-                                  Theme.of(context).colorScheme.inversePrimary,
-                            fontSize: messageFontSize,
+                      // A full-height bar (rather than a small leading dot)
+                      // reads more clearly at a glance and doesn't compete
+                      // with ListTile's own leading/minLeadingWidth slot.
+                      // CrossAxisAlignment.stretch makes the bar span the
+                      // row's full itemExtent height.
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Container(
+                            key: const ValueKey('subscriptionColorBar'),
+                            width: 4,
+                            color: subColor ?? Colors.transparent,
                           ),
-                          maxLines: messageSingleLine ? 1 : 5,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        // Band by distance from the oldest message (always at
-                        // the bottom), not the raw index: prepending new
-                        // messages shifts every existing row's index, so
-                        // banding on the index would flip every stripe as
-                        // messages arrive. Distance-from-oldest is fixed per
-                        // message, so stripes stay put.
-                        tileColor: selectedIndex == index
-                            ? Theme.of(context).colorScheme.inversePrimary
-                            : (filteredItems.length - 1 - index) % 2 == 0
-                                ? evenRowColor
-                                : oddRowColor,
-                        onTap: () => _handleMessageTap(index),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: <Widget>[
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 450),
-                              child: Tooltip(
-                                message: message.subject!,
-                                child: Padding(
-                                  padding:
-                                      const EdgeInsets.fromLTRB(0, 0, 5, 0),
-                                  child: Chip(
-                                      label: Text(message.subject!,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: messageFontSize,
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onSurface,
-                                          ))),
+                          Expanded(
+                            child: ListTile(
+                              // ListTile centers its title within its own
+                              // *computed natural* height, not whatever
+                              // height it's actually given -- itemExtent
+                              // reserves room for up to 5 lines (see
+                              // _messageRowExtent) even when a message only
+                              // needs 1, so without this, ListTile computes
+                              // titleY assuming the smaller natural height
+                              // and the leftover space silently lands
+                              // entirely below the text instead of being
+                              // split evenly. Telling it the *real* target
+                              // height makes its own centering math correct.
+                              minTileHeight: _messageRowExtent,
+                              title: RegexTextHighlight(
+                                text: decodeMessageText(message.byte),
+                                searchTerm: currentFind,
+                                fontSize: messageFontSize,
+                                highlightStyle: TextStyle(
+                                  background: Paint()
+                                    ..color = Theme.of(context)
+                                        .colorScheme
+                                        .inversePrimary,
+                                  fontSize: messageFontSize,
                                 ),
+                                maxLines: messageSingleLine ? 1 : 5,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              // Band by distance from the oldest message
+                              // (always at the bottom), not the raw index:
+                              // prepending new messages shifts every
+                              // existing row's index, so banding on the
+                              // index would flip every stripe as messages
+                              // arrive. Distance-from-oldest is fixed per
+                              // message, so stripes stay put.
+                              tileColor: selectedIndex == index
+                                  ? Theme.of(context).colorScheme.inversePrimary
+                                  : (filteredItems.length - 1 - index) % 2 == 0
+                                      ? evenRowColor
+                                      : oddRowColor,
+                              onTap: () => _handleMessageTap(index),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: <Widget>[
+                                  ConstrainedBox(
+                                    constraints:
+                                        const BoxConstraints(maxWidth: 450),
+                                    child: Tooltip(
+                                      message: message.subject!,
+                                      child: Padding(
+                                        padding: const EdgeInsets.fromLTRB(
+                                            0, 0, 5, 0),
+                                        child: Chip(
+                                            label: Text(message.subject!,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: messageFontSize,
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurface,
+                                                ))),
+                                      ),
+                                    ),
+                                  ),
+                                  _buildSafePopupMenuButton(index),
+                                ],
                               ),
                             ),
-                            _buildSafePopupMenuButton(index),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     );
                   },

@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 
-import 'jetstream_manager.dart' show describeJetStreamError, fetchRawAccountInfo;
+import 'jetstream_manager.dart' show describeJetStreamError;
 
 /// Prefix JetStream uses for the backing stream of every KV bucket. Bucket
 /// names shown in the UI have this stripped back off.
@@ -29,7 +29,7 @@ class KvManager {
   Future<String?> checkAvailability(
       {Duration timeout = const Duration(seconds: 3)}) async {
     try {
-      lastAccountInfo = await fetchRawAccountInfo(client, timeout: timeout);
+      lastAccountInfo = await _js.accountInfo(timeout: timeout);
       return null;
     } catch (e) {
       return describeJetStreamError(e);
@@ -38,11 +38,10 @@ class KvManager {
 
   /// Fetches a fresh account usage/limits snapshot from the server, updating
   /// [lastAccountInfo]. See `JetStreamManager.fetchAccountInfo` for why this
-  /// is separate from [checkAvailability], and `fetchRawAccountInfo` for why
-  /// this doesn't go through `JetStream.accountInfo()`.
+  /// is separate from [checkAvailability].
   Future<AccountInfo> fetchAccountInfo(
       {Duration timeout = const Duration(seconds: 3)}) async {
-    final info = await fetchRawAccountInfo(client, timeout: timeout);
+    final info = await _js.accountInfo(timeout: timeout);
     lastAccountInfo = info;
     return info;
   }

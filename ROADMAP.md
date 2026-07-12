@@ -16,9 +16,9 @@ These features are made possible by our successful migration to the official mai
 - [x] **Milestone 6**: Design & Implement **Phase F: Live Message List UX Improvements** (Medium Priority). Filter/Find on the JetStream Browse Messages view (plus tab-aware Ctrl+F/Ctrl+Shift+F), scroll-position-preserving inserts on both message lists (verified correct and performant at thousands-of-messages/large-burst scale), and a Pause/Resume control on both. Implementation and a live-server verification pass are done.
 - [x] **Milestone 7**: Design & Implement **Object Store Inspector** (Medium Priority). Implementation, docs, unit/widget tests, and a live-server verification pass (bucket/object lifecycle, chunked upload/download with digest verification, explicit-Refresh-since-there's-no-`watch()`) are done.
 - [x] **Milestone 8**: Design & Implement **Message Headers on Send** (Low/Medium Priority). Implementation, unit/widget tests, and a live-server verification pass (published header round-trips back through the app's own loopback subscription and appears in Message Detail) are done.
-- [ ] **Milestone 9**: Design & Implement **Queue Group Subscriptions** (Medium Priority). Not started.
+- [x] **Milestone 9**: Design & Implement **Queue Group Subscriptions** (Medium Priority). Built together with Milestone 11 (see that milestone's note). Implementation, unit/widget tests, and a live-server verification pass (two queue-group members splitting a message burst) are done.
 - [x] **Milestone 10**: Design & Implement **JetStream Account Info Panel** (Low Priority). Implementation, unit/widget tests, and a live-server verification pass are done. The pass caught a real bug in vendored `dart_nats-1.1.1`'s `JetStream.accountInfo()` (see Milestone 10's section below) — fetching account info now bypasses it entirely.
-- [ ] **Milestone 11**: Design & Implement **Subscription Manager & Per-Subscription Color Indicators** (Medium Priority). Not started.
+- [x] **Milestone 11**: Design & Implement **Subscription Manager & Per-Subscription Color Indicators** (Medium Priority). The Subjects text field is now a chip row (`lib/subject_chips_row.dart`) with a queue-group field baked into each subscription and an overflow "+N more" chip opening a full manager dialog (`lib/subscription_manager_dialog.dart`); Live Messages rows show a per-subscription color dot. Implementation, unit/widget tests, and a live-server verification pass are done.
 - [ ] **Milestone 12**: Design & Implement **Connection Host/Port History** (Low/Medium Priority). Not started.
 - [ ] **Milestone 13**: Design & Implement **Message Direction Indicator (Incoming vs. Outgoing)** (Low/Medium Priority). Not started.
 - [ ] **Milestone 14**: Design & Implement **Request/Reply Correlation Improvements** (Medium Priority). Not started.
@@ -355,18 +355,18 @@ A symmetry gap: incoming NATS message headers are already parsed and displayed i
 
 ---
 
-## Milestone 9: Queue Group Subscriptions (Medium Priority)
+## Milestone 9: Queue Group Subscriptions (Medium Priority) — Completed
 
 ### Objective
 `client.sub<T>(subject, {String? queueGroup})` (`client.dart:991-995`) supports NATS queue groups — the standard load-balancing primitive where only one member of a named group receives each message — but the app's only subscribe call site, `subscribeToSubject()` (`main.dart:850-857`), never passes one. Anyone wanting to verify queue-group behavior (e.g. "does my service correctly load-balance across replicas") currently has to reach for another tool alongside this one.
 
 ### Implementation Checklist
-- [ ] Add an optional queue-group field per subscription (naturally a field in Milestone 11's Subscription Manager dialog if that lands first; otherwise a standalone field next to today's Subjects box as an interim step).
-- [ ] Thread `queueGroup` through `subscribeToSubject()` into `natsClient.sub()`.
-- [ ] Surface the queue group (if any) somewhere per-subscription in the UI so it's clear which subscriptions are grouped together.
-- [ ] Live-server verification: two subscribers (the app + a second direct `dart_nats` client, or two app instances) in the same queue group on the same subject, confirming messages alternate/split between them rather than both receiving every message.
+- [x] Add an optional queue-group field per subscription — built together with Milestone 11's Subscription Manager, so it's a field on `SubscriptionInfo` from the start rather than bolted onto the old comma-delimited text field.
+- [x] Thread `queueGroup` through `_subscribeOne()` (renamed from `subscribeToSubject()`) into `natsClient.sub()`.
+- [x] Surface the queue group (if any) per-subscription: a badge in the chip's label, and its own field in the Subscription Manager dialog / add-edit dialog.
+- [x] Live-server verification: `integration_test/queue_group_test.dart` — the app's own subscription (given a queue group via the chip's edit dialog, live unsub+resub) plus a second bare `dart_nats` client in the same queue group, confirming a 20-message burst splits between them (every message landed on exactly one member) rather than both receiving everything.
 
-**Note**: this pairs naturally with Milestone 11 (Subscription Manager) — likely worth implementing together, since a queue group is a natural per-subscription attribute in that dialog rather than a bolt-on to today's single comma-delimited text field.
+**Note**: built together with Milestone 11 (Subscription Manager), since a queue group is a natural per-subscription attribute in that dialog rather than a bolt-on to the old single comma-delimited text field.
 
 ---
 
@@ -389,7 +389,7 @@ Test coverage: `test/jetstream_manager_test.dart` (`tierFromJson`/`accountInfoFr
 
 ---
 
-## Milestone 11: Subscription Manager & Per-Subscription Color Indicators (Medium Priority)
+## Milestone 11: Subscription Manager & Per-Subscription Color Indicators (Medium Priority) — Completed
 
 ### Objective
 Today, subscribing to more than one subject means typing a comma-delimited list into a single Subjects text field (`main.dart:738-747`), parsed once at connect time — there's no way to add or remove an individual subscription after connecting, see which subjects are currently active at a glance, or tell which subscription a given Live Messages row actually matched once more than one is active. This milestone replaces the raw text field with a compact display + management dialog, and adds a small colored indicator per message row keyed to its originating subscription.
@@ -401,13 +401,13 @@ Each `Subscription` returned by `client.sub()` has its own numeric `sid`, and ev
 Replace the free-text Subjects field in the connection bar with a compact read-only display (e.g. "3 subscriptions" or the first subject + "+2 more") plus a "Manage..." button opening a dialog: a list of active subscriptions, each showing its subject pattern, assigned color swatch, and (if Milestone 9 lands) queue group, with Add/Remove controls. Removing a row while connected calls `unSub()` immediately, not just at next reconnect. Each subscription gets a color automatically assigned from a small fixed palette (cycling if subscriptions outnumber the palette — this is a quick visual grouping aid, not a precise identity system). A small colored dot/bar per message row in the Live Messages list shows which subscription that message arrived on; a legend in the Manage dialog (or a tooltip on the dot) ties color back to subject.
 
 ### Implementation Checklist
-- [ ] Define a small themed color palette (6–8 colors, distinguishable in both light and dark mode — check contrast against both row-stripe backgrounds from Milestone 6, since dots sit inside those rows) in `lib/constants.dart` or a new small file.
-- [ ] `SubscriptionInfo` model (subject, sid, assigned color, optional queue group) + a `Map<int, SubscriptionInfo>` keyed by `sid`, replacing the current implicit list built from `subject.split(',')`.
-- [ ] `lib/subscription_manager_dialog.dart` — list + Add (subject [+ queue group] entry) + Remove (calls `natsClient.unSub()`) per row, following the existing dialog conventions (`kv_bucket_dialog.dart` is a reasonable model for a simple list-management dialog).
-- [ ] Replace the Subjects `TextFormField` in the connection bar with the compact summary + "Manage..." trigger; keep the underlying persisted preference format compatible (or migrate it) so existing saved subject lists still load.
-- [ ] Tag each `Message` with its subscription's color at arrival time (via `event.sid` lookup) and thread it through `items`/the row-builder to render a small leading color indicator; confirm it composes cleanly with the existing Filter/Find highlighting and the fixed-`itemExtent` row layout from Milestone 6 (the indicator needs to fit inside the fixed row height, not push other content).
-- [ ] Decide explicitly whether JetStream Browse Messages needs the same treatment before starting — it currently binds to one stream/consumer at a time rather than multiple ad hoc subscriptions, so it's probably out of scope.
-- [ ] Unit/widget tests for `SubscriptionManagerDialog` (add/remove, color assignment/cycling) + a live-server `integration_test` verifying: subscribing to two subjects via the dialog, publishing to both from a second client, and asserting the two resulting rows carry different indicator colors; removing one subscription then publishing again and confirming no new row appears for it.
+- [x] Define a small themed color palette (8 colors, paired light/dark variants — `subscriptionPaletteDark`/`subscriptionPaletteLight` in `lib/constants.dart`, resolved at render time via `resolveSubscriptionColor()` in `lib/subscription_info.dart` so a theme toggle mid-session stays correct).
+- [x] `SubscriptionInfo` model (subject, queue group — persisted; colorIndex, sid — runtime-only, never persisted) in `lib/subscription_info.dart`, replacing the old implicit list built from `subject.split(',')`. `sid` lifecycle is tied to `Client` object identity (nulled on reconnect/disconnect, populated on subscribe), not the noisy `Status` stream, since `dart_nats` already re-subscribes existing sids internally on reconnect.
+- [x] `lib/subscription_manager_dialog.dart` — list + Add/Remove/queue-group-edit per row (queue-group edits commit on blur/submit, not per-keystroke, since each one is a real unsub+resub over the wire), modeled on `send_message_dialog.dart`'s header-row list pattern rather than `kv_bucket_dialog.dart` (a single-entry create form despite its name).
+- [x] Replaced the Subjects `TextFormField` with `lib/subject_chips_row.dart` — one filled Material 3 chip per subscription (color-swatch avatar, queue-group badge, tap-to-edit, delete icon to unsubscribe immediately), collapsing overflow into a single "+N more" chip that opens the manager dialog. Legacy `prefSubject` (comma-delimited) migrates once into the new JSON `prefSubscriptions` key.
+- [x] Live Messages rows get a small leading color dot (`_colorForSid()` in `main.dart`, linear scan by `message.sid`; renders nothing for a message from a since-removed/reconnected subscription) — fixed-width in both branches so title text doesn't shift row-to-row, composes fine with the existing Filter/Find highlighting and Milestone 6's row striping.
+- [x] JetStream Browse Messages left out of scope, as anticipated — it binds to one stream/consumer at a time, not multiple ad hoc subscriptions.
+- [x] Unit tests (`test/subscription_info_test.dart`: encode/decode, legacy migration, color cycling), widget tests (`test/subject_chips_row_test.dart`: chip rendering, tap vs. delete, overflow collapse at a narrow width and full render once widened; `test/subscription_manager_dialog_test.dart`: add/remove/edit, read-only subject, commit-on-blur), and a live-server `integration_test/subscription_chips_test.dart` (subscribe to two subjects via the chip UI, publish to both from a second client, assert distinct dot colors per row; remove one via its chip, publish again, confirm no new row).
 
 ---
 

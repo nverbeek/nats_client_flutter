@@ -26,6 +26,20 @@ Future<void> pumpUntil(
   }
 }
 
+/// Pumps for a fixed [duration] without polling for any condition. Use this
+/// (instead of `pumpUntil`) when asserting something did *not* happen after
+/// a network action -- e.g. no message arrived for a subject that was just
+/// unsubscribed -- since there's no positive event to wait for there.
+Future<void> pumpBriefly(
+  WidgetTester tester, {
+  Duration duration = const Duration(seconds: 2),
+}) async {
+  final deadline = DateTime.now().add(duration);
+  while (DateTime.now().isBefore(deadline)) {
+    await tester.pump(const Duration(milliseconds: 200));
+  }
+}
+
 /// Seeds `SharedPreferences` with a known-good connection configuration
 /// pointing at a local, JetStream-enabled `nats-server` (see
 /// `AGENTS.md` "Recipe E: Local JetStream Testing" for how to start one),
@@ -47,6 +61,11 @@ Future<void> pumpConnectedApp(
   await prefs.setString(constants.prefHost, constants.defaultHost);
   await prefs.setString(constants.prefPort, constants.defaultPort);
   await prefs.setString(constants.prefSubject, subject);
+  // Startup prefers prefSubscriptions (JSON) over the legacy prefSubject and
+  // only migrates from prefSubject when prefSubscriptions is absent -- clear
+  // it so a prior test's migrated/edited subscription list on disk doesn't
+  // silently override the `subject` param above.
+  await prefs.remove(constants.prefSubscriptions);
   await prefs.setBool(constants.prefJetStreamEnabled, true);
   await prefs.setBool(constants.prefKvEnabled, true);
   await prefs.setBool(constants.prefObjectStoreEnabled, true);
@@ -80,6 +99,7 @@ Future<void> pumpDisconnectedApp(
   await prefs.setString(constants.prefHost, constants.defaultHost);
   await prefs.setString(constants.prefPort, constants.defaultPort);
   await prefs.setString(constants.prefSubject, subject);
+  await prefs.remove(constants.prefSubscriptions);
   await prefs.setBool(constants.prefJetStreamEnabled, true);
   await prefs.setBool(constants.prefKvEnabled, true);
   await prefs.setBool(constants.prefObjectStoreEnabled, true);

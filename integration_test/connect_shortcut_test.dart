@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nats_client_flutter/constants.dart' as constants;
 import 'package:nats_client_flutter/main.dart' as app;
+import 'package:nats_client_flutter/subject_chips_row.dart';
 
 import 'helpers/nats_test_app.dart';
 
@@ -27,6 +28,11 @@ void main() {
     await prefs.setString(constants.prefHost, constants.defaultHost);
     await prefs.setString(constants.prefPort, constants.defaultPort);
     await prefs.setString(constants.prefSubject, constants.defaultSubject);
+    // Startup prefers prefSubscriptions (JSON) over the legacy prefSubject
+    // and only migrates from prefSubject when prefSubscriptions is absent --
+    // clear it so a prior run's persisted subscription list on disk doesn't
+    // silently override defaultSubject above.
+    await prefs.remove(constants.prefSubscriptions);
     await prefs.setBool(constants.prefJetStreamEnabled, true);
     await prefs.setString(constants.prefTrustedCertificate, '');
     await prefs.setString(constants.prefTrustedCertificateName, '');
@@ -58,13 +64,18 @@ void main() {
   });
 
   testWidgets(
-      'Ctrl+Enter in the Subjects field connects while disconnected',
+      'Ctrl+Enter in the Subjects chip row connects while disconnected',
       (tester) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(constants.prefScheme, constants.defaultScheme);
     await prefs.setString(constants.prefHost, constants.defaultHost);
     await prefs.setString(constants.prefPort, constants.defaultPort);
     await prefs.setString(constants.prefSubject, constants.defaultSubject);
+    // Startup prefers prefSubscriptions (JSON) over the legacy prefSubject
+    // and only migrates from prefSubject when prefSubscriptions is absent --
+    // clear it so a prior run's persisted subscription list on disk doesn't
+    // silently override defaultSubject above.
+    await prefs.remove(constants.prefSubscriptions);
     await prefs.setBool(constants.prefJetStreamEnabled, true);
     await prefs.setString(constants.prefTrustedCertificate, '');
     await prefs.setString(constants.prefTrustedCertificateName, '');
@@ -78,8 +89,20 @@ void main() {
     await tester.pumpAndSettle();
     addTearDown(() => disconnectApp(tester));
 
-    // `.first`: same double-count as the Host field above.
-    await tester.tap(find.widgetWithText(TextFormField, 'Subjects').first);
+    // The Subjects field is now a SubjectChipsRow. Tap near its right edge
+    // rather than its geometric center or a specific chip/button: like a
+    // real TextFormField, tapping empty space within the field just focuses
+    // it (see the row's own GestureDetector) without triggering an action --
+    // tapping the "+" button instead would open the Add Subscription dialog,
+    // which sits outside the toolbar's Shortcuts/Actions ancestry and would
+    // swallow the Ctrl+Enter keystroke. The row's content (label + chips +
+    // "+") is left-aligned and only ever occupies part of its width, so the
+    // trailing edge is reliably blank regardless of how many/how long the
+    // subscriptions are -- unlike the row's center, which a single long
+    // subject's chip can end up covering.
+    final chipsRowRect = tester.getRect(find.byType(SubjectChipsRow));
+    await tester.tapAt(
+        Offset(chipsRowRect.right - 8, chipsRowRect.center.dy));
     await tester.pump();
     await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
