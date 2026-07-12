@@ -548,7 +548,7 @@ class ObjectStoreDashboardState extends State<ObjectStoreDashboard> {
                 onPressed: _loadingObjects ? null : () => _loadObjects(bucket),
               ),
               const SizedBox(width: 8),
-              ElevatedButton.icon(
+              FilledButton.icon(
                 icon: const Icon(Icons.upload_file),
                 label: const Text('Upload'),
                 onPressed: _mutating ? null : () => _uploadFile(bucket),

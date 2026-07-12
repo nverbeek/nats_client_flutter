@@ -110,7 +110,7 @@ void main() {
     await pumpUntil(tester, () => find.text(streamName).evaluate().isNotEmpty);
     await tester.tap(find.text(streamName));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ElevatedButton, 'Browse Messages'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Browse Messages'));
     await tester.pumpAndSettle();
 
     await pumpUntil(tester, () => find.text(payload2).evaluate().isNotEmpty);

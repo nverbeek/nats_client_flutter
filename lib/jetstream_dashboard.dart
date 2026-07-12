@@ -619,7 +619,7 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              ElevatedButton.icon(
+              FilledButton.icon(
                 icon: const Icon(Icons.visibility),
                 label: const Text('Browse Messages'),
                 onPressed: stream.state.messages == 0

@@ -432,8 +432,8 @@ void main() {
     await tester.tap(find.text('orders'));
     await tester.pumpAndSettle();
 
-    final browseButton = tester.widget<ElevatedButton>(
-        find.widgetWithText(ElevatedButton, 'Browse Messages'));
+    final browseButton = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Browse Messages'));
     expect(browseButton.onPressed, isNull);
   });
 

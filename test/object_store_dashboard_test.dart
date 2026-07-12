@@ -365,7 +365,7 @@ void main() {
     await tester.tap(find.text('documents'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(ElevatedButton, 'Upload'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Upload'));
     await tester.pumpAndSettle();
 
     expect(manager.lastPutName, 'photo.png');
@@ -392,7 +392,7 @@ void main() {
     await tester.tap(find.text('documents'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(ElevatedButton, 'Upload'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Upload'));
     await tester.pumpAndSettle();
 
     expect(manager.lastPutName, isNull);

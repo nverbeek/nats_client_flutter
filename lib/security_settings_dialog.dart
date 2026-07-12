@@ -120,12 +120,10 @@ class _SecuritySettingsDialogState extends State<SecuritySettingsDialog> {
                   ),
                   Container(
                     padding: const EdgeInsets.fromLTRB(10, 20, 0, 0),
-                    child: SizedBox(
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: widget.onTrustedCertificatePick,
-                        child: const Icon(Icons.folder_open),
-                      ),
+                    child: IconButton.filledTonal(
+                      tooltip: 'Browse for trusted certificate',
+                      onPressed: widget.onTrustedCertificatePick,
+                      icon: const Icon(Icons.folder_open),
                     ),
                   ),
                 ],
@@ -153,12 +151,10 @@ class _SecuritySettingsDialogState extends State<SecuritySettingsDialog> {
                   ),
                   Container(
                     padding: const EdgeInsets.fromLTRB(10, 20, 0, 0),
-                    child: SizedBox(
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: widget.onCertificateChainPick,
-                        child: const Icon(Icons.folder_open),
-                      ),
+                    child: IconButton.filledTonal(
+                      tooltip: 'Browse for certificate chain',
+                      onPressed: widget.onCertificateChainPick,
+                      icon: const Icon(Icons.folder_open),
                     ),
                   ),
                 ],
@@ -186,12 +182,10 @@ class _SecuritySettingsDialogState extends State<SecuritySettingsDialog> {
                   ),
                   Container(
                     padding: const EdgeInsets.fromLTRB(10, 20, 0, 0),
-                    child: SizedBox(
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: widget.onPrivateKeyPick,
-                        child: const Icon(Icons.folder_open),
-                      ),
+                    child: IconButton.filledTonal(
+                      tooltip: 'Browse for private key',
+                      onPressed: widget.onPrivateKeyPick,
+                      icon: const Icon(Icons.folder_open),
                     ),
                   ),
                 ],
@@ -308,12 +302,10 @@ class _SecuritySettingsDialogState extends State<SecuritySettingsDialog> {
                     ),
                     Container(
                       padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
-                      child: SizedBox(
-                        height: 50,
-                        child: ElevatedButton(
-                          onPressed: widget.onCredsFilePick,
-                          child: const Icon(Icons.folder_open),
-                        ),
+                      child: IconButton.filledTonal(
+                        tooltip: 'Browse for credentials file',
+                        onPressed: widget.onCredsFilePick,
+                        icon: const Icon(Icons.folder_open),
                       ),
                     ),
                   ],

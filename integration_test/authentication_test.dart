@@ -49,7 +49,7 @@ void main() {
     app.main();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithIcon(ElevatedButton, Icons.check));
+    await tester.tap(find.widgetWithIcon(IconButton, Icons.check));
     await pumpUntil(
       tester,
       () => find.text('Status: ${constants.connected}').evaluate().isNotEmpty,

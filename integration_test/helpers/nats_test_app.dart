@@ -80,7 +80,7 @@ Future<void> pumpConnectedApp(
   app.main();
   await tester.pumpAndSettle();
 
-  await tester.tap(find.widgetWithIcon(ElevatedButton, Icons.check));
+  await tester.tap(find.widgetWithIcon(IconButton, Icons.check));
   await pumpUntil(
     tester,
     () => find.text('Status: ${constants.connected}').evaluate().isNotEmpty,
@@ -141,7 +141,7 @@ Future<void> waitForSnackBarGone(
 /// called from a `tearDown` so a failing assertion mid-test doesn't leak a
 /// live connection into the next test.
 Future<void> disconnectApp(WidgetTester tester) async {
-  final disconnectButton = find.widgetWithIcon(ElevatedButton, Icons.close);
+  final disconnectButton = find.widgetWithIcon(IconButton, Icons.close);
   if (disconnectButton.evaluate().isEmpty) return;
 
   await tester.tap(disconnectButton);

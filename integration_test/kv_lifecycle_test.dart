@@ -95,7 +95,7 @@ void main() {
     // 3. Select the bucket and put a value.
     await tester.tap(find.text(bucketName));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ElevatedButton, 'Put Value'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Put Value'));
     await tester.pumpAndSettle();
     await tester.enterText(putDialogField(0), 'db.port');
     await tester.enterText(putDialogField(1), '5432');

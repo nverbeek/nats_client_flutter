@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/services.dart';
 import 'package:loader_overlay/loader_overlay.dart';
 import 'package:nats_client_flutter/regex_text_highlight.dart';
@@ -179,59 +180,51 @@ class MyApp extends StatelessWidget {
       create: (_) => ThemeModel(theme),
       child: Consumer<ThemeModel>(
         builder: (_, model, __) {
-          return MaterialApp(
-            title: 'NATS Client',
-            debugShowCheckedModeBanner: false,
-            theme: ThemeData(
-              useMaterial3: true,
-              colorScheme:
-                  ColorScheme.fromSeed(seedColor: Colors.lightBlue.shade900),
-              snackBarTheme: SnackBarThemeData(
-                backgroundColor:
-                    ColorScheme.fromSeed(seedColor: Colors.lightBlue.shade900)
-                        .surfaceContainerHighest,
-                contentTextStyle: TextStyle(
-                  color:
-                      ColorScheme.fromSeed(seedColor: Colors.lightBlue.shade900)
-                          .onSurface,
+          // DynamicColorBuilder surfaces the platform's Material You palette
+          // (Android 12+, and any other embedder that implements the dynamic
+          // color platform channel) when available; lightDynamic/darkDynamic
+          // are both null everywhere else (Windows/Linux/macOS/Web today),
+          // in which case the existing seeded scheme is used unchanged.
+          return DynamicColorBuilder(
+            builder: (lightDynamic, darkDynamic) {
+              return MaterialApp(
+                title: 'NATS Client',
+                debugShowCheckedModeBanner: false,
+                theme: _buildThemeData(lightDynamic),
+                darkTheme:
+                    _buildThemeData(darkDynamic, brightness: Brightness.dark),
+                themeMode: model.mode,
+                home: LoaderOverlay(
+                  child: MyHomePage(appVersion, 'NATS Client', scheme, host,
+                      port, subscriptions),
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                behavior: SnackBarBehavior.floating,
-                elevation: 4,
-              ),
-            ),
-            darkTheme: ThemeData(
-              useMaterial3: true,
-              colorScheme: ColorScheme.fromSeed(
-                  brightness: Brightness.dark,
-                  seedColor: Colors.lightBlue.shade900),
-              snackBarTheme: SnackBarThemeData(
-                backgroundColor: ColorScheme.fromSeed(
-                        brightness: Brightness.dark,
-                        seedColor: Colors.lightBlue.shade900)
-                    .surfaceContainerHighest,
-                contentTextStyle: TextStyle(
-                  color: ColorScheme.fromSeed(
-                          brightness: Brightness.dark,
-                          seedColor: Colors.lightBlue.shade900)
-                      .onSurface,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                behavior: SnackBarBehavior.floating,
-                elevation: 4,
-              ),
-            ),
-            themeMode: model.mode,
-            home: LoaderOverlay(
-              child: MyHomePage(appVersion, 'NATS Client', scheme, host, port,
-                  subscriptions),
-            ),
+              );
+            },
           );
         },
+      ),
+    );
+  }
+
+  /// Builds a Material 3 [ThemeData], preferring the platform's dynamic
+  /// [ColorScheme] (Material You) when the embedder provides one and
+  /// falling back to a scheme seeded from the app's own brand color.
+  static ThemeData _buildThemeData(ColorScheme? dynamicScheme,
+      {Brightness brightness = Brightness.light}) {
+    final colorScheme = dynamicScheme ??
+        ColorScheme.fromSeed(
+            brightness: brightness, seedColor: Colors.lightBlue.shade900);
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: colorScheme,
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: colorScheme.surfaceContainerHighest,
+        contentTextStyle: TextStyle(color: colorScheme.onSurface),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        behavior: SnackBarBehavior.floating,
+        elevation: 4,
       ),
     );
   }
@@ -1967,13 +1960,14 @@ class _MyHomePageState extends State<MyHomePage>
                     ),
                     Container(
                       padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
-                      child: SizedBox(
-                          height: 50,
-                          child: ElevatedButton(
-                              onPressed: (currentStatus == Status.disconnected)
-                                  ? showSecuritySettingsDialog
-                                  : null,
-                              child: const Icon(Icons.lock))),
+                      child: IconButton.filledTonal(
+                          tooltip: 'Security Settings',
+                          style: IconButton.styleFrom(
+                              minimumSize: const Size(50, 50)),
+                          onPressed: (currentStatus == Status.disconnected)
+                              ? showSecuritySettingsDialog
+                              : null,
+                          icon: const Icon(Icons.lock)),
                     ),
                     Flexible(
                       flex: 2,
@@ -2033,23 +2027,25 @@ class _MyHomePageState extends State<MyHomePage>
                     ),
                     Container(
                       padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
-                      child: SizedBox(
-                          height: 50,
-                          child: ElevatedButton(
-                              onPressed: (currentStatus == Status.disconnected)
-                                  ? natsConnect
-                                  : null,
-                              child: const Icon(Icons.check))),
+                      child: IconButton.filled(
+                          tooltip: 'Connect',
+                          style: IconButton.styleFrom(
+                              minimumSize: const Size(50, 50)),
+                          onPressed: (currentStatus == Status.disconnected)
+                              ? natsConnect
+                              : null,
+                          icon: const Icon(Icons.check)),
                     ),
                     Container(
                       padding: const EdgeInsets.fromLTRB(10, 0, 0, 0),
-                      child: SizedBox(
-                          height: 50,
-                          child: ElevatedButton(
-                              onPressed: (currentStatus != Status.disconnected)
-                                  ? natsDisconnect
-                                  : null,
-                              child: const Icon(Icons.close))),
+                      child: IconButton.filledTonal(
+                          tooltip: 'Disconnect',
+                          style: IconButton.styleFrom(
+                              minimumSize: const Size(50, 50)),
+                          onPressed: (currentStatus != Status.disconnected)
+                              ? natsDisconnect
+                              : null,
+                          icon: const Icon(Icons.close)),
                     ),
                   ],
                 ),
@@ -2290,14 +2286,15 @@ class _MyHomePageState extends State<MyHomePage>
           children: <Widget>[
             Container(
               padding: const EdgeInsets.fromLTRB(10, 10, 5, 10),
-              child: SizedBox(
-                  height: 50,
-                  child: ElevatedButton(
-                      onPressed: clearMessageList,
-                      child: const Icon(
-                        Icons.delete,
-                        size: 18,
-                      ))),
+              child: IconButton.outlined(
+                  tooltip: 'Clear messages',
+                  style: IconButton.styleFrom(
+                      minimumSize: const Size(50, 50)),
+                  onPressed: clearMessageList,
+                  icon: const Icon(
+                    Icons.delete,
+                    size: 18,
+                  )),
             ),
             Container(
               padding: const EdgeInsets.fromLTRB(0, 10, 5, 10),
@@ -2306,7 +2303,7 @@ class _MyHomePageState extends State<MyHomePage>
               // as the count grows (e.g. "1" -> "1.2k"), and without a
               // fixed slot that shifted every control to its right on each
               // flush. Wide enough for icon + a realistic wide count
-              // ("1.2k") plus this `ElevatedButton`'s own padding, verified
+              // ("1.2k") plus this `FilledButton`'s own padding, verified
               // against a real overflow this size was previously too
               // narrow to catch (a single-digit count never exposed it).
               child: SizedBox(
@@ -2316,8 +2313,8 @@ class _MyHomePageState extends State<MyHomePage>
                     message: messagesPaused
                         ? 'Resume (${pendingMessages.length} buffered)'
                         : 'Pause incoming messages',
-                    child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
+                    child: FilledButton.tonal(
+                        style: FilledButton.styleFrom(
                             padding: const EdgeInsets.symmetric(horizontal: 8)),
                         onPressed: messagesPaused
                             ? _resumeMessageList
@@ -2350,18 +2347,19 @@ class _MyHomePageState extends State<MyHomePage>
             ),
             Container(
               padding: const EdgeInsets.fromLTRB(0, 10, 5, 10),
-              child: SizedBox(
-                  height: 50,
-                  child: ElevatedButton(
-                      onPressed: currentStatus == Status.connected
-                          ? () {
-                              showSendMessageDialog(null, null, null);
-                            }
-                          : null,
-                      child: const Icon(
-                        Icons.send,
-                        size: 18,
-                      ))),
+              child: IconButton.filled(
+                  tooltip: 'Send message',
+                  style: IconButton.styleFrom(
+                      minimumSize: const Size(50, 50)),
+                  onPressed: currentStatus == Status.connected
+                      ? () {
+                          showSendMessageDialog(null, null, null);
+                        }
+                      : null,
+                  icon: const Icon(
+                    Icons.send,
+                    size: 18,
+                  )),
             ),
             Expanded(
               child: Padding(

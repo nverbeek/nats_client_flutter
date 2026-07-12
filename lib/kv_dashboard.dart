@@ -616,7 +616,7 @@ class KvDashboardState extends State<KvDashboard> {
               Expanded(
                 child: Text(bucket, style: Theme.of(context).textTheme.titleLarge),
               ),
-              ElevatedButton.icon(
+              FilledButton.icon(
                 icon: const Icon(Icons.add),
                 label: const Text('Put Value'),
                 onPressed: _mutating ? null : () => _showPutDialog(bucket),

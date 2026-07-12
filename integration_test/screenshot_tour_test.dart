@@ -54,7 +54,7 @@ void main() {
     await tester.drag(find.byType(ListView).first, const Offset(0, -800));
     await tester.pumpAndSettle();
     await tester.tap(find.ancestor(
-        of: find.byIcon(Icons.pause), matching: find.byType(ElevatedButton)));
+        of: find.byIcon(Icons.pause), matching: find.byType(FilledButton)));
     await tester.pumpAndSettle();
     await signaler.capture(tester, 'Messages');
 
@@ -64,7 +64,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.ancestor(
         of: find.byIcon(Icons.play_arrow),
-        matching: find.byType(ElevatedButton)));
+        matching: find.byType(FilledButton)));
     await tester.pumpAndSettle();
 
     // 2. Filter and Sort: narrow to the animal.* messages and highlight
