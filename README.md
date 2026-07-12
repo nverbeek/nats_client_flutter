@@ -130,3 +130,6 @@ You may directly contribute your own code by submitting a pull request.
 
 # License
 This project is licensed under the [MIT License](./LICENSE).
+
+# Acknowledgements
+This app is powered by [dart_nats](https://github.com/chartchuo/dart-nats), the NATS client library for Dart maintained by [chartchuo](https://github.com/chartchuo).
