@@ -42,9 +42,10 @@ void main() {
     // new infrastructure, not an existing pattern to copy.
     final second = Client();
     await second.connect(Uri.parse('nats://127.0.0.1:4222'));
-    var secondReceivedCount = 0;
-    second.sub(uniqueSubject, queueGroup: queueGroup).stream.listen((_) {
-      secondReceivedCount++;
+    final secondReceivedIndices = <int>{};
+    second.sub(uniqueSubject, queueGroup: queueGroup).stream.listen((msg) {
+      final match = RegExp(r'^queue-group-test-(\d+)$').firstMatch(msg.string);
+      if (match != null) secondReceivedIndices.add(int.parse(match.group(1)!));
     });
     addTearDown(() => second.forceClose());
     // `sub()` only writes the SUB command to the socket -- it doesn't wait
@@ -55,43 +56,78 @@ void main() {
     // dropped entirely rather than delivered to either queue member. `flush`
     // performs a ping/pong round trip, and NATS processes each connection's
     // commands in order, so its return guarantees the SUB already landed.
+    //
+    // This only covers `second`'s own SUB, though -- the app's live
+    // unsub+resub a few lines up (via the chip edit above) has no equivalent
+    // ack this test can wait on, since that connection is private to the
+    // app's State and NATS itself doesn't ack SUB. So a message published
+    // immediately after this point could still race the app's resubscribe
+    // and land on the server before the app's new queue membership does,
+    // getting silently dropped (delivered to neither member) rather than
+    // just skewing the split. The retry loop below absorbs that: any index
+    // dropped this way simply gets republished next round, once real time
+    // has passed and both members are unquestionably registered.
     await second.flush();
 
-    // A third, independent bare client publishes a burst of uniquely-named
-    // messages. 20 messages keeps the odds of every message randomly
-    // landing on the same queue member (a false failure, not a real one)
+    // A third, independent bare client publishes the burst of uniquely-named
+    // messages. 20 messages keeps the odds of every message randomly landing
+    // on the same queue member (a false failure, not a real one)
     // astronomically small (2 * 0.5^20) while still finishing fast.
     final publisher = Client();
     await publisher.connect(Uri.parse('nats://127.0.0.1:4222'));
     addTearDown(() => publisher.forceClose());
     const messageCount = 20;
-    for (var i = 0; i < messageCount; i++) {
-      publisher.pub(uniqueSubject, utf8.encode('queue-group-test-$i'));
-    }
-    await publisher.flush();
-
-    // No single positive UI condition to poll for here -- we're asserting a
-    // *count* split across two processes, not a single row's presence --
-    // so pump for a bounded window instead of pumpUntil.
-    await pumpBriefly(tester, duration: const Duration(seconds: 3));
 
     Finder messageRowText(String payload) => find.byWidgetPredicate(
         (widget) => widget is RegexTextHighlight && widget.text == payload);
 
-    var appReceivedCount = 0;
-    for (var i = 0; i < messageCount; i++) {
-      if (messageRowText('queue-group-test-$i').evaluate().isNotEmpty) {
-        appReceivedCount++;
+    final appReceivedIndices = <int>{};
+    var missing = {for (var i = 0; i < messageCount; i++) i};
+    const maxAttempts = 5;
+    for (var attempt = 1; attempt <= maxAttempts && missing.isNotEmpty; attempt++) {
+      for (final i in missing) {
+        publisher.pub(uniqueSubject, utf8.encode('queue-group-test-$i'));
       }
+      await publisher.flush();
+
+      // No single positive UI condition to poll for here -- we're asserting
+      // a *count* split across two processes, not a single row's presence --
+      // so pump for a bounded window instead of pumpUntil.
+      await pumpBriefly(tester, duration: const Duration(seconds: 3));
+
+      for (final i in missing.toList()) {
+        if (messageRowText('queue-group-test-$i').evaluate().isNotEmpty) {
+          appReceivedIndices.add(i);
+        }
+      }
+      missing = missing.difference(appReceivedIndices).difference(secondReceivedIndices);
     }
 
+    // Give up loudly rather than silently passing/hanging: if messages are
+    // still missing after several rounds each separated by real elapsed
+    // time, that's a genuine delivery bug, not the startup race this retry
+    // loop exists to absorb.
+    expect(missing, isEmpty,
+        reason: 'these indices were never delivered to either queue member '
+            'after $maxAttempts attempts: $missing');
+
     // The definitive queue-group assertion: every message was delivered to
-    // exactly one member, never both and never neither.
-    expect(appReceivedCount + secondReceivedCount, messageCount);
-    expect(appReceivedCount, lessThan(messageCount),
+    // exactly one member, never both and never neither. "Neither" is
+    // already ruled out by the `missing` check above; a plain sum-equality
+    // check for "never both" would be fragile here, since a retried index
+    // whose original delivery only *looked* lost (arrived just after that
+    // round's window closed) can legitimately land on both members once
+    // retried -- checking the intersection directly still catches a true
+    // fan-out bug without being tripped up by that.
+    final deliveredToBoth = appReceivedIndices.intersection(secondReceivedIndices);
+    expect(deliveredToBoth, isEmpty,
+        reason: 'these indices were delivered to both queue members, which '
+            'means the subscription is fanning out rather than '
+            'load-balancing: $deliveredToBoth');
+    expect(appReceivedIndices.length, lessThan(messageCount),
         reason: 'the app should not have received every message -- that '
             'would mean it was still fanning out rather than load-balancing');
-    expect(secondReceivedCount, greaterThan(0),
+    expect(secondReceivedIndices.length, greaterThan(0),
         reason: 'the second queue member should have received some share '
             'of the burst');
   });
