@@ -47,6 +47,15 @@ void main() {
       secondReceivedCount++;
     });
     addTearDown(() => second.forceClose());
+    // `sub()` only writes the SUB command to the socket -- it doesn't wait
+    // for the server to actually process it. Without this, there's no
+    // enforced ordering between that write and the publisher's burst below
+    // (they're on separate connections), so on a loaded runner the burst can
+    // reach the server before this SUB does and those early messages are
+    // dropped entirely rather than delivered to either queue member. `flush`
+    // performs a ping/pong round trip, and NATS processes each connection's
+    // commands in order, so its return guarantees the SUB already landed.
+    await second.flush();
 
     // A third, independent bare client publishes a burst of uniquely-named
     // messages. 20 messages keeps the odds of every message randomly
