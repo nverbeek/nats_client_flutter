@@ -340,7 +340,6 @@ class _MyHomePageState extends State<MyHomePage>
   // user preferences
   late SharedPreferences prefs;
   double messageFontSize = 14.0;
-  bool messageSingleLine = false;
   int retryInterval = constants.defaultRetryInterval;
   bool updateCheckEnabled = constants.defaultUpdateCheckEnabled;
   OverlayEntry? _updateOverlayEntry;
@@ -421,7 +420,6 @@ class _MyHomePageState extends State<MyHomePage>
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       messageFontSize = prefs.getDouble('messageFontSize') ?? 14.0;
-      messageSingleLine = prefs.getBool('messageSingleLine') ?? false;
       retryInterval = prefs.getInt(constants.prefRetryInterval) ??
           constants.defaultRetryInterval;
       jetStreamEnabled = prefs.getBool(constants.prefJetStreamEnabled) ??
@@ -580,7 +578,6 @@ class _MyHomePageState extends State<MyHomePage>
   void saveMessageSettings() async {
     final prefs = await SharedPreferences.getInstance();
     prefs.setDouble('messageFontSize', messageFontSize);
-    prefs.setBool('messageSingleLine', messageSingleLine);
     prefs.setInt(constants.prefRetryInterval, retryInterval);
     prefs.setBool(constants.prefJetStreamEnabled, jetStreamEnabled);
     prefs.setBool(constants.prefKvEnabled, kvEnabled);
@@ -1290,7 +1287,6 @@ class _MyHomePageState extends State<MyHomePage>
       builder: (BuildContext context) {
         return SettingsDialog(
           initialFontSize: messageFontSize,
-          initialSingleLine: messageSingleLine,
           initialRetryInterval: retryInterval,
           initialJetStreamEnabled: jetStreamEnabled,
           initialKvEnabled: kvEnabled,
@@ -1298,7 +1294,6 @@ class _MyHomePageState extends State<MyHomePage>
           initialUpdateCheckEnabled: updateCheckEnabled,
           onSave: (
             fontSize,
-            singleLine,
             retryIntervalValue,
             jetStreamEnabledValue,
             kvEnabledValue,
@@ -1309,7 +1304,6 @@ class _MyHomePageState extends State<MyHomePage>
                 updateCheckEnabledValue && !updateCheckEnabled;
             setState(() {
               messageFontSize = fontSize;
-              messageSingleLine = singleLine;
               retryInterval = retryIntervalValue;
               jetStreamEnabled = jetStreamEnabledValue;
               kvEnabled = kvEnabledValue;
@@ -2130,20 +2124,19 @@ class _MyHomePageState extends State<MyHomePage>
 
   /// The fixed height of every message row.
   ///
-  /// A fixed extent (rather than letting each row size itself to its 1–5
-  /// lines of text) is what lets the list compensate the scroll offset
-  /// *exactly* when new messages are prepended above a scrolled-away
-  /// viewport (see `_insertMessages`), and also lets the scrollbar/fling
-  /// locate any row analytically instead of building off-screen rows to
-  /// measure them — the difference between smooth and janky on a list of
-  /// thousands. Derived from the current font size and single-line setting
-  /// so rows are always tall enough for their text at whatever size the
-  /// user picks; longer text is still clipped with an ellipsis exactly as
-  /// before. The 56px floor keeps a single short line from producing a row
-  /// shorter than the trailing controls' tap target.
+  /// A fixed extent (rather than letting each row size itself to its text)
+  /// is what lets the list compensate the scroll offset *exactly* when new
+  /// messages are prepended above a scrolled-away viewport (see
+  /// `_insertMessages`), and also lets the scrollbar/fling locate any row
+  /// analytically instead of building off-screen rows to measure them —
+  /// the difference between smooth and janky on a list of thousands.
+  /// Derived from the current font size so rows are always tall enough for
+  /// their single line of text at whatever size the user picks; longer
+  /// text is still clipped with an ellipsis exactly as before. The 56px
+  /// floor keeps a short line from producing a row shorter than the
+  /// trailing controls' tap target.
   double get _messageRowExtent {
-    final lines = messageSingleLine ? 1 : 5;
-    final textBlockHeight = lines * messageFontSize * 1.3;
+    final textBlockHeight = messageFontSize * 1.3;
     final withPadding = textBlockHeight + 24;
     return withPadding > 56.0 ? withPadding : 56.0;
   }
@@ -2196,12 +2189,11 @@ class _MyHomePageState extends State<MyHomePage>
                             child: ListTile(
                               // ListTile centers its title within its own
                               // *computed natural* height, not whatever
-                              // height it's actually given -- itemExtent
-                              // reserves room for up to 5 lines (see
-                              // _messageRowExtent) even when a message only
-                              // needs 1, so without this, ListTile computes
-                              // titleY assuming the smaller natural height
-                              // and the leftover space silently lands
+                              // height it's actually given -- when the 56px
+                              // floor in _messageRowExtent kicks in (small
+                              // font sizes), that natural height is smaller
+                              // than the row's real itemExtent, and without
+                              // this the leftover space silently lands
                               // entirely below the text instead of being
                               // split evenly. Telling it the *real* target
                               // height makes its own centering math correct.
@@ -2217,7 +2209,7 @@ class _MyHomePageState extends State<MyHomePage>
                                         .inversePrimary,
                                   fontSize: messageFontSize,
                                 ),
-                                maxLines: messageSingleLine ? 1 : 5,
+                                maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
                               // Band by distance from the oldest message

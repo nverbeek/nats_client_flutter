@@ -13,9 +13,8 @@ import 'helpers/nats_test_app.dart';
 /// fixed height rather than sizing itself to its content, a row extent that
 /// were too short for the row's own text + trailing controls would produce a
 /// render overflow. This exercises the worst case — the maximum font size
-/// (30, the Settings slider's `max`) with a long, multi-line message — at
-/// both the single-line and 5-line settings, asserting no exception is
-/// thrown during layout.
+/// (30, the Settings slider's `max`) with a long message, asserting no
+/// exception is thrown during layout.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -31,19 +30,19 @@ void main() {
     return client;
   }
 
-  // A long payload with several natural wrap points, so it fills the full
-  // 5-line cap at a large font rather than staying short.
+  // A long payload with several natural wrap points, so it exercises the
+  // tallest a message row can get before it is clipped with an ellipsis.
   const longPayload =
       'this-is-a-deliberately-long-message-payload that should wrap across '
       'several lines at a large font size, exercising the tallest a message '
       'row can get before it is clipped with an ellipsis at the row extent';
 
-  Future<void> runNoOverflowCase(WidgetTester tester,
-      {required bool singleLine}) async {
+  testWidgets(
+      'a long message does not overflow the row extent at max font size',
+      (tester) async {
     final prefs = await SharedPreferences.getInstance();
     // Read in `initState` when `app.main()` runs inside `pumpConnectedApp`.
     await prefs.setDouble('messageFontSize', 30.0);
-    await prefs.setBool('messageSingleLine', singleLine);
 
     await pumpConnectedApp(tester);
     addTearDown(() => disconnectApp(tester));
@@ -60,19 +59,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull,
-        reason: 'a long message at the max font size (singleLine=$singleLine) '
-            'must not overflow the fixed row extent');
-  }
-
-  testWidgets(
-      'a long message does not overflow the row extent at max font size '
-      '(5-line mode)', (tester) async {
-    await runNoOverflowCase(tester, singleLine: false);
-  });
-
-  testWidgets(
-      'a long message does not overflow the row extent at max font size '
-      '(single-line mode)', (tester) async {
-    await runNoOverflowCase(tester, singleLine: true);
+        reason:
+            'a long message at the max font size must not overflow the fixed row extent');
   });
 }

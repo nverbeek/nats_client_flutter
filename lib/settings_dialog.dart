@@ -2,18 +2,16 @@ import 'package:flutter/material.dart';
 
 class SettingsDialog extends StatefulWidget {
   final double initialFontSize;
-  final bool initialSingleLine;
   final int initialRetryInterval;
   final bool initialJetStreamEnabled;
   final bool initialKvEnabled;
   final bool initialObjectStoreEnabled;
   final bool initialUpdateCheckEnabled;
-  final void Function(double, bool, int, bool, bool, bool, bool) onSave;
+  final void Function(double, int, bool, bool, bool, bool) onSave;
 
   const SettingsDialog({
     super.key,
     required this.initialFontSize,
-    required this.initialSingleLine,
     required this.initialRetryInterval,
     required this.initialJetStreamEnabled,
     required this.initialKvEnabled,
@@ -28,7 +26,6 @@ class SettingsDialog extends StatefulWidget {
 
 class _SettingsDialogState extends State<SettingsDialog> {
   late double tempFontSize;
-  late bool tempSingleLine;
   late int tempRetryInterval;
   late bool tempJetStreamEnabled;
   late bool tempKvEnabled;
@@ -39,7 +36,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
   void initState() {
     super.initState();
     tempFontSize = widget.initialFontSize;
-    tempSingleLine = widget.initialSingleLine;
     tempRetryInterval = widget.initialRetryInterval;
     tempJetStreamEnabled = widget.initialJetStreamEnabled;
     tempKvEnabled = widget.initialKvEnabled;
@@ -87,21 +83,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 SizedBox(
                   width: 40,
                   child: Text(tempFontSize.round().toString()),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Single Line Messages'),
-                Switch(
-                  value: tempSingleLine,
-                  onChanged: (v) {
-                    setState(() {
-                      tempSingleLine = v;
-                    });
-                  },
                 ),
               ],
             ),
@@ -208,7 +189,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
           onPressed: () {
             widget.onSave(
                 tempFontSize,
-                tempSingleLine,
                 tempRetryInterval,
                 tempJetStreamEnabled,
                 tempKvEnabled,
