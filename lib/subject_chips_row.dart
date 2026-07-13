@@ -21,6 +21,7 @@ import 'subscription_info.dart';
 class SubjectChipsRow extends StatefulWidget {
   final List<SubscriptionInfo> subscriptions;
   final bool isDark;
+  final bool showSubscriptionColors;
   final ValueChanged<SubscriptionInfo> onTapChip;
   final ValueChanged<SubscriptionInfo> onRemoveChip;
   final VoidCallback onAdd;
@@ -30,6 +31,7 @@ class SubjectChipsRow extends StatefulWidget {
     super.key,
     required this.subscriptions,
     required this.isDark,
+    required this.showSubscriptionColors,
     required this.onTapChip,
     required this.onRemoveChip,
     required this.onAdd,
@@ -134,7 +136,9 @@ class _SubjectChipsRowState extends State<SubjectChipsRow> {
     return Padding(
       padding: const EdgeInsets.only(right: _chipGap),
       child: ColorTabChip(
-        color: resolveSubscriptionColor(info.colorIndex, widget.isDark),
+        color: widget.showSubscriptionColors
+            ? resolveSubscriptionColor(info.colorIndex, widget.isDark)
+            : null,
         // labelStyle (not a Text.style override) so the chip's own layout
         // math -- which sizes padding around its *assumed* label style --
         // knows about our smaller font and can still center it correctly;

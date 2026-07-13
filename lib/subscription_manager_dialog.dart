@@ -173,6 +173,7 @@ class _SubscriptionEditDialogState extends State<SubscriptionEditDialog> {
 class SubscriptionManagerDialog extends StatefulWidget {
   final List<SubscriptionInfo> subscriptions;
   final bool isDark;
+  final bool showSubscriptionColors;
   final void Function(String subject, String? queueGroup) onAdd;
   final void Function(SubscriptionInfo info) onRemove;
   final void Function(SubscriptionInfo info, String? newQueueGroup)
@@ -182,6 +183,7 @@ class SubscriptionManagerDialog extends StatefulWidget {
     super.key,
     required this.subscriptions,
     required this.isDark,
+    required this.showSubscriptionColors,
     required this.onAdd,
     required this.onRemove,
     required this.onQueueGroupChanged,
@@ -337,8 +339,10 @@ class _SubscriptionManagerDialogState
                                 child: Tooltip(
                                   message: info.subject,
                                   child: ColorTabChip(
-                                    color: resolveSubscriptionColor(
-                                        info.colorIndex, widget.isDark),
+                                    color: widget.showSubscriptionColors
+                                        ? resolveSubscriptionColor(
+                                            info.colorIndex, widget.isDark)
+                                        : null,
                                     chip: Chip(
                                       label: Text(info.subject,
                                           overflow: TextOverflow.ellipsis),

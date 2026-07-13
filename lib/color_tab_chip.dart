@@ -18,13 +18,19 @@ class ColorTabChip extends StatelessWidget {
   // the tab beneath it).
   static const double _tabWidth = tabProtrusion + cornerRadius;
 
-  final Color color;
+  final Color? color;
   final Widget chip;
 
   const ColorTabChip({super.key, required this.color, required this.chip});
 
   @override
   Widget build(BuildContext context) {
+    // No color means the tab is turned off entirely (see the "Show
+    // Subscription Colors" setting) -- return the chip as-is rather than
+    // painting a transparent tab, so no space is reserved for it.
+    final color = this.color;
+    if (color == null) return chip;
+
     return Padding(
       // Reserves room for the tab to protrude into -- without this, painting
       // outside the chip's own bounds (via Clip.none below) would get

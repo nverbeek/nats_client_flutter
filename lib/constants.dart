@@ -73,6 +73,7 @@ const String prefJetStreamEnabled = "JETSTREAM_ENABLED";
 const String prefKvEnabled = "KV_ENABLED";
 const String prefObjectStoreEnabled = "OBJECT_STORE_ENABLED";
 const String prefUpdateCheckEnabled = "UPDATE_CHECK_ENABLED";
+const String prefShowSubscriptionColors = "SHOW_SUBSCRIPTION_COLORS";
 
 // retry interval options (in seconds)
 const int defaultRetryInterval = 10;
@@ -88,6 +89,9 @@ const bool defaultObjectStoreEnabled = true;
 
 // update check defaults
 const bool defaultUpdateCheckEnabled = true;
+
+// subscription color display default
+const bool defaultShowSubscriptionColors = true;
 
 // authentication preference keys
 const String prefAuthMethod = "AUTH_METHOD";

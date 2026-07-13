@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nats_client_flutter/color_tab_chip.dart';
 import 'package:nats_client_flutter/subject_chips_row.dart';
 import 'package:nats_client_flutter/subscription_info.dart';
 
@@ -11,6 +12,7 @@ void main() {
     VoidCallback? onAdd,
     VoidCallback? onOpenManager,
     double width = 700,
+    bool showSubscriptionColors = true,
   }) {
     return MaterialApp(
       home: Scaffold(
@@ -28,6 +30,7 @@ void main() {
             child: SubjectChipsRow(
               subscriptions: subscriptions,
               isDark: false,
+              showSubscriptionColors: showSubscriptionColors,
               onTapChip: onTapChip ?? (_) {},
               onRemoveChip: onRemoveChip ?? (_) {},
               onAdd: onAdd ?? () {},
@@ -135,5 +138,18 @@ void main() {
 
     expect(find.byType(InputChip).evaluate().length, subscriptions.length);
     expect(find.textContaining('more'), findsNothing);
+  });
+
+  testWidgets(
+      'showSubscriptionColors: false renders chips without a color tab',
+      (tester) async {
+    await tester.pumpWidget(buildRow(
+      subscriptions: [SubscriptionInfo(subject: 'orders.*', colorIndex: 0)],
+      showSubscriptionColors: false,
+    ));
+
+    expect(find.byType(InputChip), findsOneWidget);
+    final tabChip = tester.widget<ColorTabChip>(find.byType(ColorTabChip));
+    expect(tabChip.color, isNull);
   });
 }

@@ -10,6 +10,7 @@ The application has two themes, **light** and **dark**. The theme may be changed
 The application provides a settings dialog (⚙️ button in the toolbar) with the following options:
 
 - **Message Font Size**: Adjusts the font size of messages in the message list.
+- **Show Subscription Colors**: Shows or hides the per-subscription color indicator on subject chips and Live Messages rows. On by default; turning it off doesn't lose the assigned colors, it just stops displaying them — turn it back on and each subscription shows its original color again.
 - **Reconnect Interval**: Controls the amount of time between reconnection attempts.
 - **Enable JetStream**: Shows or hides the JetStream tab (see below). On by default; turning it off doesn't affect your connection or the Live Messages tab, it just hides the JetStream UI for users who don't need it.
 - **Enable Key-Value Stores**: Shows or hides the Key-Value Stores tab (see below). On by default; same "just hides the UI" behavior as the JetStream toggle.

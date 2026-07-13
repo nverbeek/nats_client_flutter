@@ -342,6 +342,7 @@ class _MyHomePageState extends State<MyHomePage>
   double messageFontSize = 14.0;
   int retryInterval = constants.defaultRetryInterval;
   bool updateCheckEnabled = constants.defaultUpdateCheckEnabled;
+  bool showSubscriptionColors = constants.defaultShowSubscriptionColors;
   OverlayEntry? _updateOverlayEntry;
 
   // authentication
@@ -430,6 +431,9 @@ class _MyHomePageState extends State<MyHomePage>
           constants.defaultObjectStoreEnabled;
       updateCheckEnabled = prefs.getBool(constants.prefUpdateCheckEnabled) ??
           constants.defaultUpdateCheckEnabled;
+      showSubscriptionColors =
+          prefs.getBool(constants.prefShowSubscriptionColors) ??
+              constants.defaultShowSubscriptionColors;
       loadAuthSettings(prefs);
       _ensureTabController();
     });
@@ -583,6 +587,8 @@ class _MyHomePageState extends State<MyHomePage>
     prefs.setBool(constants.prefKvEnabled, kvEnabled);
     prefs.setBool(constants.prefObjectStoreEnabled, objectStoreEnabled);
     prefs.setBool(constants.prefUpdateCheckEnabled, updateCheckEnabled);
+    prefs.setBool(
+        constants.prefShowSubscriptionColors, showSubscriptionColors);
   }
 
   /// Handles tap logic to distinguish between single and double taps
@@ -1006,6 +1012,7 @@ class _MyHomePageState extends State<MyHomePage>
       builder: (context) => SubscriptionManagerDialog(
         subscriptions: subscriptions,
         isDark: Provider.of<ThemeModel>(context, listen: false).isDark(),
+        showSubscriptionColors: showSubscriptionColors,
         onAdd: _addSubscription,
         onRemove: _removeSubscription,
         onQueueGroupChanged: _updateQueueGroup,
@@ -1292,6 +1299,7 @@ class _MyHomePageState extends State<MyHomePage>
           initialKvEnabled: kvEnabled,
           initialObjectStoreEnabled: objectStoreEnabled,
           initialUpdateCheckEnabled: updateCheckEnabled,
+          initialShowSubscriptionColors: showSubscriptionColors,
           onSave: (
             fontSize,
             retryIntervalValue,
@@ -1299,6 +1307,7 @@ class _MyHomePageState extends State<MyHomePage>
             kvEnabledValue,
             objectStoreEnabledValue,
             updateCheckEnabledValue,
+            showSubscriptionColorsValue,
           ) {
             final updateCheckJustEnabled =
                 updateCheckEnabledValue && !updateCheckEnabled;
@@ -1309,6 +1318,7 @@ class _MyHomePageState extends State<MyHomePage>
               kvEnabled = kvEnabledValue;
               objectStoreEnabled = objectStoreEnabledValue;
               updateCheckEnabled = updateCheckEnabledValue;
+              showSubscriptionColors = showSubscriptionColorsValue;
               _ensureTabController();
             });
             saveMessageSettings();
@@ -2012,6 +2022,7 @@ class _MyHomePageState extends State<MyHomePage>
                           isDark: Provider.of<ThemeModel>(context,
                                   listen: false)
                               .isDark(),
+                          showSubscriptionColors: showSubscriptionColors,
                           onTapChip: _showEditSubscriptionDialog,
                           onRemoveChip: _removeSubscription,
                           onAdd: () => _showEditSubscriptionDialog(null),
@@ -2180,11 +2191,12 @@ class _MyHomePageState extends State<MyHomePage>
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Container(
-                            key: const ValueKey('subscriptionColorBar'),
-                            width: 4,
-                            color: subColor ?? Colors.transparent,
-                          ),
+                          if (showSubscriptionColors)
+                            Container(
+                              key: const ValueKey('subscriptionColorBar'),
+                              width: 4,
+                              color: subColor ?? Colors.transparent,
+                            ),
                           Expanded(
                             child: ListTile(
                               // ListTile centers its title within its own

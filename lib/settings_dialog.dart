@@ -7,7 +7,8 @@ class SettingsDialog extends StatefulWidget {
   final bool initialKvEnabled;
   final bool initialObjectStoreEnabled;
   final bool initialUpdateCheckEnabled;
-  final void Function(double, int, bool, bool, bool, bool) onSave;
+  final bool initialShowSubscriptionColors;
+  final void Function(double, int, bool, bool, bool, bool, bool) onSave;
 
   const SettingsDialog({
     super.key,
@@ -17,6 +18,7 @@ class SettingsDialog extends StatefulWidget {
     required this.initialKvEnabled,
     required this.initialObjectStoreEnabled,
     required this.initialUpdateCheckEnabled,
+    required this.initialShowSubscriptionColors,
     required this.onSave,
   });
 
@@ -31,6 +33,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late bool tempKvEnabled;
   late bool tempObjectStoreEnabled;
   late bool tempUpdateCheckEnabled;
+  late bool tempShowSubscriptionColors;
 
   @override
   void initState() {
@@ -41,6 +44,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     tempKvEnabled = widget.initialKvEnabled;
     tempObjectStoreEnabled = widget.initialObjectStoreEnabled;
     tempUpdateCheckEnabled = widget.initialUpdateCheckEnabled;
+    tempShowSubscriptionColors = widget.initialShowSubscriptionColors;
   }
 
   @override
@@ -83,6 +87,21 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 SizedBox(
                   width: 40,
                   child: Text(tempFontSize.round().toString()),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Show Subscription Colors'),
+                Switch(
+                  value: tempShowSubscriptionColors,
+                  onChanged: (v) {
+                    setState(() {
+                      tempShowSubscriptionColors = v;
+                    });
+                  },
                 ),
               ],
             ),
@@ -193,7 +212,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 tempJetStreamEnabled,
                 tempKvEnabled,
                 tempObjectStoreEnabled,
-                tempUpdateCheckEnabled);
+                tempUpdateCheckEnabled,
+                tempShowSubscriptionColors);
             Navigator.of(context).pop();
           },
         ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nats_client_flutter/color_tab_chip.dart';
 import 'package:nats_client_flutter/subscription_info.dart';
 import 'package:nats_client_flutter/subscription_manager_dialog.dart';
 
@@ -165,12 +166,14 @@ void main() {
       void Function(String, String?)? onAdd,
       void Function(SubscriptionInfo)? onRemove,
       void Function(SubscriptionInfo, String?)? onQueueGroupChanged,
+      bool showSubscriptionColors = true,
     }) {
       return MaterialApp(
         home: Scaffold(
           body: SubscriptionManagerDialog(
             subscriptions: subscriptions,
             isDark: false,
+            showSubscriptionColors: showSubscriptionColors,
             onAdd: onAdd ?? (_, __) {},
             onRemove: onRemove ?? (_) {},
             onQueueGroupChanged: onQueueGroupChanged ?? (_, __) {},
@@ -274,6 +277,18 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(addedSubject, 'metrics.*');
+    });
+
+    testWidgets(
+        'showSubscriptionColors: false renders rows without a color tab',
+        (tester) async {
+      await tester.pumpWidget(buildManager(
+        subscriptions: [SubscriptionInfo(subject: 'orders.*', colorIndex: 0)],
+        showSubscriptionColors: false,
+      ));
+
+      final tabChip = tester.widget<ColorTabChip>(find.byType(ColorTabChip));
+      expect(tabChip.color, isNull);
     });
   });
 }

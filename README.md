@@ -10,7 +10,7 @@ This application currently supports Windows, Linux, macOS and Web platforms.
 - Connect to a single NATS server using either plain (`nats://`) or WebSocket (`ws://`) schemes
 - TLS connection support with optional custom certificates
 - **Authentication support**: username/password, bearer token, NKey seed, or decentralized JWT+NKey (`.creds` file) — configured in the same Security Settings dialog as TLS, with credentials remembered only if you opt in
-- Subscribe to multiple subjects
+- Subscribe to multiple subjects, each with its own auto-assigned color shown on its chip and matching Live Messages rows, so it's easy to tell at a glance which subscription a message came from — toggle it off in Settings ("Show Subscription Colors", on by default) if you'd rather not see them
 - Automatic re-connect upon lost connection
 - Filter received messages
 - Find text in received messages
