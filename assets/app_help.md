@@ -31,7 +31,7 @@ Additionally, the `nats://` scheme is unavailable when this client is running in
 ## Other Connection Info
 The rest of the connection information is straightforward:
 
-- **Host**: IP or DNS address of the NATS server host
+- **Host**: IP or DNS address of the NATS server host. This field remembers up to 10 previously-successful connection targets — start typing, or click into the field, to see a dropdown of `scheme://host:port` entries filtered to match; selecting one fills in the scheme, host, and port together. Use the arrow keys and Enter to navigate the dropdown, or the mouse. Each entry has its own remove (✕) button, and a **Clear history** option removes them all. Only successful connections are added — a failed attempt never pollutes the list.
 - **Port**: Associated NATS port
 - **Subjects**: The desired subjects you'd like to subscribe to. This allows a comma-separated list of subjects to be defined, ie `test.*, test.*.*`.
 

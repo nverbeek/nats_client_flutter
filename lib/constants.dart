@@ -57,6 +57,7 @@ const String prefHost = "HOST";
 const String prefPort = "PORT";
 const String prefSubject = "SUBJECT"; // legacy comma-delimited subject list; kept only as a migration source, see prefSubscriptions
 const String prefSubscriptions = "SUBSCRIPTIONS"; // JSON list of {subject, queueGroup}
+const String prefConnectionHistory = "CONNECTION_HISTORY"; // JSON list of {scheme, host, port}
 const String prefTheme = "THEME";
 const String prefTrustedCertificate = "TRUSTED_CERTIFICATE";
 const String prefTrustedCertificateName = "TRUSTED_CERTIFICATE_NAME";

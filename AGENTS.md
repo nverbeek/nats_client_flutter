@@ -15,6 +15,7 @@ Welcome! This document is a living, context-bootstrapping architectural and oper
   - The Web client (running in browsers/Docker) **only** supports the `ws://` scheme due to browser-level TCP socket restrictions.
 - **TLS & Mutual TLS**: Custom TLS authentication support using PEM-formatted trusted CA certificates, client certificate chains, and private keys.
 - **Real-Time Stream**: Subscribe to multiple comma-separated subjects (supporting wildcards like `*` and `>`), filter incoming payloads in real-time, search and highlight text with regex, and send/publish custom messages.
+- **Connection History**: the Host field (`lib/main.dart`) is an editable `Autocomplete` backed by `lib/connection_history.dart` — its dropdown offers up to 10 previously-*successfully*-connected `scheme://host:port` targets (most-recent-first, deduplicated by target), filtering as you type; selecting one fills scheme, host, and port together. Per-entry delete and a "Clear history" action live in the same dropdown. Recorded only on `Status.connected`, not on every connect attempt, so failed/typo'd attempts never pollute the list.
 - **Per-Subscription Color Indicators**: each subscription is auto-assigned a color, shown as a chip accent (toolbar chip row + Subscription Manager dialog) and a Live Messages row accent bar, toggleable via the "Show Subscription Colors" setting (on by default). The toggle only gates rendering — `SubscriptionInfo.colorIndex` assignment is untouched — so turning it off and back on restores each subscription's original color. When off, no layout space is reserved for the hidden color (`ColorTabChip.color` is nullable and skips its tab entirely; the message row's accent bar is conditionally omitted, not just painted transparent).
 - **JetStream Dashboard** (`lib/jetstream_*.dart`, toggleable via the "Enable JetStream" setting): monitor streams and consumers, create/purge/delete streams, create/delete consumers (push or pull, any ack policy), browse a stream's messages live, tail a specific consumer with Ack/Nak/Term actions, and publish with JetStream delivery acknowledgement from the regular Send Message dialog.
 - **Key-Value Stores Dashboard** (`lib/kv_*.dart`, toggleable via the "Enable Key-Value Stores" setting): monitor and manage KV buckets (backed by JetStream) — create/delete buckets, put/edit/delete/purge keys with optimistic-concurrency conflict detection on edit, per-key revision history, live search, and real-time updates via `KeyValue.watch()` (including changes made by other clients).
@@ -40,6 +41,7 @@ nats_client_flutter/
 ├── images/                     # App screenshots used in the main README.md
 ├── lib/                        # Core application source code
 │   ├── color_tab_chip.dart     # Shared colored "bookmark tab" wrapper for a chip; `color` is nullable — null skips the tab/padding entirely (used when subscription colors are toggled off)
+│   ├── connection_history.dart # `ConnectionHistoryEntry` model + encode/decode + `recordConnection()` (dedupe/cap at 10), backing the Host field's history dropdown
 │   ├── constants.dart          # Connection state text, defaults, colors, and SharedPreferences keys
 │   ├── format_utils.dart       # formatCompactCount() — "1.1k"-style compact numbers for the Pause buffered-count pill
 │   ├── help_dialog.dart        # Stateless widget dialog that parses and displays assets/app_help.md
@@ -62,7 +64,7 @@ nats_client_flutter/
 │   ├── regex_text_highlight.dart  # Custom inline text highlighting engine using regex substring matching
 │   ├── security_settings_dialog.dart # TLS config file selector (Trusted Cert, Cert Chain, Private Key paths)
 │   ├── send_message_dialog.dart # Form dialog for publishing/sending standard, edit-replay, or JetStream payloads
-│   ├── settings_dialog.dart    # App options dialog (font sizes, line wrapping, retry intervals, JetStream toggle, Key-Value toggle, Object Store toggle, update-check toggle, subscription-colors toggle)
+│   ├── settings_dialog.dart    # App options dialog (font size, retry interval, JetStream toggle, Key-Value toggle, Object Store toggle, update-check toggle, subscription-colors toggle)
 │   ├── subject_chips_row.dart  # Toolbar chip row replacing the old Subjects text field (one chip per subscription, color swatch, overflow "+N more")
 │   ├── subscription_info.dart  # `SubscriptionInfo` model (subject/queueGroup persisted, colorIndex/sid runtime-only) + `resolveSubscriptionColor()`
 │   ├── subscription_manager_dialog.dart # Full subscription list dialog (add/remove/queue-group-edit per row, live unsub/resub)
@@ -82,7 +84,8 @@ nats_client_flutter/
 │   ├── jetstream_dashboard_test.dart, jetstream_manager_test.dart, jetstream_*_dialog_test.dart, ...
 │   ├── kv_dashboard_test.dart, kv_manager_test.dart, kv_bucket_dialog_test.dart, kv_put_dialog_test.dart
 │   ├── object_store_dashboard_test.dart, object_store_manager_test.dart, object_store_bucket_dialog_test.dart
-│   └── message_detail_dialog_test.dart, settings_dialog_test.dart, security_settings_dialog_test.dart, update_checker_test.dart, ...
+│   ├── message_detail_dialog_test.dart, settings_dialog_test.dart, security_settings_dialog_test.dart, update_checker_test.dart, ...
+│   └── connection_history_test.dart # Pure logic: encode/decode round-trip, recordConnection() dedupe/cap/move-to-front
 ├── integration_test/           # Real-backend end-to-end tests against a live nats-server (see Recipe E/F)
 │   ├── helpers/nats_test_app.dart       # pumpConnectedApp/disconnectApp/pumpUntil/waitForSnackBarGone
 │   ├── helpers/screenshot_signal.dart   # File-handshake helper used only by screenshot_tour_test.dart (see Recipe G)
@@ -96,6 +99,8 @@ nats_client_flutter/
 │   ├── message_list_pause_test.dart     # Live Messages Pause/Resume, wide buffered-count, scroll-position-stable bursts + row-banding color stability
 │   ├── message_row_extent_test.dart     # Fixed-height row overflow guard (long message, max font size, both line-count settings)
 │   ├── connect_shortcut_test.dart       # Ctrl+Enter in Host/Port/Subjects fires Connect while disconnected
+│   ├── connection_history_test.dart     # Host field's history dropdown: show/filter/select (mouse + keyboard)/delete/clear (no server needed)
+│   ├── record_connection_history_test.dart # A successful connect records history; a failed (connection-refused) connect does not
 │   ├── subscription_chips_test.dart     # Two subjects added live via the chip UI get distinct message-row accent colors; removing one via its chip stops further delivery
 │   ├── settings_tab_toggle_test.dart    # Regression: toggling JetStream/KV/Object Store off+on in Settings must not break the TabController (no server needed)
 │   └── screenshot_tour_test.dart        # Drives the app through the README's screenshots — run via scripts/capture_screenshots.ps1, not directly

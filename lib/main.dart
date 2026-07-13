@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, listEquals;
 import 'package:flutter/material.dart';
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:dynamic_color/dynamic_color.dart';
@@ -18,6 +18,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import 'auth_manager.dart';
+import 'connection_history.dart';
 import 'constants.dart' as constants;
 import 'format_utils.dart';
 import 'jetstream_dashboard.dart';
@@ -120,13 +121,22 @@ void main() async {
         encodeSubscriptionList(tempSubscriptions));
   }
 
+  // connection history: JSON list of previously-used {scheme, host, port}
+  // targets, offered by the Host field's dropdown. Empty until the first
+  // successful connect.
+  List<ConnectionHistoryEntry> tempConnectionHistory = const [];
+  String? historyJson = prefs.getString(constants.prefConnectionHistory);
+  if (historyJson != null && historyJson.isNotEmpty) {
+    tempConnectionHistory = decodeConnectionHistory(historyJson);
+  }
+
   // get the application's version number
   PackageInfo packageInfo = await PackageInfo.fromPlatform();
   String appVersion = packageInfo.version;
 
   // run the ui
   runApp(MyApp(appVersion, tempScheme, tempHost, tempPort, tempSubscriptions,
-      tempTheme));
+      tempConnectionHistory, tempTheme));
 }
 
 /// Class to handle theme changes
@@ -163,7 +173,7 @@ class ThemeModel with ChangeNotifier {
 /// Main application starting point
 class MyApp extends StatelessWidget {
   const MyApp(this.appVersion, this.scheme, this.host, this.port,
-      this.subscriptions, this.theme,
+      this.subscriptions, this.connectionHistory, this.theme,
       {super.key});
 
   final String appVersion;
@@ -171,6 +181,7 @@ class MyApp extends StatelessWidget {
   final String host;
   final String port;
   final List<SubscriptionInfo> subscriptions;
+  final List<ConnectionHistoryEntry> connectionHistory;
   final String theme;
 
   /// Root UI of the entire application
@@ -196,7 +207,7 @@ class MyApp extends StatelessWidget {
                 themeMode: model.mode,
                 home: LoaderOverlay(
                   child: MyHomePage(appVersion, 'NATS Client', scheme, host,
-                      port, subscriptions),
+                      port, subscriptions, connectionHistory),
                 ),
               );
             },
@@ -238,7 +249,7 @@ class _ConnectIntent extends Intent {
 
 class MyHomePage extends StatefulWidget {
   const MyHomePage(this.appVersion, this.title, this.scheme, this.host,
-      this.port, this.subscriptions,
+      this.port, this.subscriptions, this.connectionHistory,
       {super.key});
 
   // This widget is the home page of your application. It is stateful, meaning
@@ -256,6 +267,7 @@ class MyHomePage extends StatefulWidget {
   final String host;
   final String port;
   final List<SubscriptionInfo> subscriptions;
+  final List<ConnectionHistoryEntry> connectionHistory;
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
@@ -266,6 +278,11 @@ class _MyHomePageState extends State<MyHomePage>
   String host = constants.defaultHost;
   String port = constants.defaultPort;
   List<SubscriptionInfo> subscriptions = [];
+  // Previously-used connection targets, offered by the Host field's dropdown.
+  List<ConnectionHistoryEntry> connectionHistory = [];
+  // Controller (rather than initialValue) so a history selection can push a
+  // new value into the Port field visibly -- see _selectHistoryEntry.
+  late TextEditingController portController;
   // Message-row color indicator lookup: colorIndex captured per message at
   // arrival time (see _subscribeOne). An Expando rather than a Map so
   // entries never need manual pruning -- once a Message drops out of
@@ -363,6 +380,9 @@ class _MyHomePageState extends State<MyHomePage>
     host = widget.host;
     port = widget.port;
     subscriptions = List<SubscriptionInfo>.from(widget.subscriptions);
+    connectionHistory =
+        List<ConnectionHistoryEntry>.from(widget.connectionHistory);
+    portController = TextEditingController(text: widget.port);
     _nextColorIndex = subscriptions.length;
     updateFullUri();
     _tabController = TabController(length: _visibleTabCount, vsync: this);
@@ -388,6 +408,7 @@ class _MyHomePageState extends State<MyHomePage>
     _filterFocusNode.dispose(); // Dispose focus nodes
     _findFocusNode.dispose();
     _tabController.dispose();
+    portController.dispose();
     super.dispose();
   }
 
@@ -725,7 +746,10 @@ class _MyHomePageState extends State<MyHomePage>
     };
 
     // save the user's connection properties to preferences.
-    // we can read these out at startup.
+    // we can read these out at startup. these are the single "last used"
+    // values that prefill the fields next launch -- distinct from the
+    // connection history list (prefConnectionHistory), which is a deduped set
+    // recorded only on a *successful* connect (see _recordConnectionHistory).
     await prefs.setString(constants.prefScheme, scheme);
     await prefs.setString(constants.prefHost, host);
     await prefs.setString(constants.prefPort, port);
@@ -743,6 +767,7 @@ class _MyHomePageState extends State<MyHomePage>
         switch (event) {
           case Status.connected:
             setStateConnected();
+            _recordConnectionHistory(scheme, host, port);
             stateString = constants.connected;
             if (natsClient.info?.tlsRequired == true) {
               tlsConnection = true;
@@ -907,6 +932,103 @@ class _MyHomePageState extends State<MyHomePage>
   Future<void> _persistSubscriptions() async {
     await prefs.setString(
         constants.prefSubscriptions, encodeSubscriptionList(subscriptions));
+  }
+
+  Future<void> _persistConnectionHistory() async {
+    await prefs.setString(constants.prefConnectionHistory,
+        encodeConnectionHistory(connectionHistory));
+  }
+
+  /// Records a successfully-used target at the front of the history (deduped,
+  /// capped). Fires from the Status.connected handler, including on reconnects
+  /// -- recordConnection just moves an existing entry back to the front.
+  void _recordConnectionHistory(String scheme, String host, String port) {
+    setState(() {
+      connectionHistory =
+          recordConnection(connectionHistory, scheme, host, port);
+    });
+    _persistConnectionHistory();
+  }
+
+  void _deleteHistoryEntry(ConnectionHistoryEntry entry) {
+    setState(() {
+      connectionHistory =
+          connectionHistory.where((e) => !e.sameTarget(entry)).toList();
+    });
+    _persistConnectionHistory();
+  }
+
+  void _clearConnectionHistory() {
+    setState(() => connectionHistory = []);
+    _persistConnectionHistory();
+  }
+
+  /// Fills scheme + host + port from a chosen history entry. The Autocomplete
+  /// writes the host into its own field; the scheme dropdown picks up the new
+  /// value via its ValueKey(scheme), and the Port field via portController.
+  void _selectHistoryEntry(ConnectionHistoryEntry entry) {
+    setState(() {
+      scheme = entry.scheme;
+      host = entry.host;
+      port = entry.port;
+    });
+    portController.text = entry.port;
+    updateFullUri();
+  }
+
+  /// The Host input: an editable [Autocomplete] whose field shows/edits only
+  /// the host while its dropdown offers full 'scheme+host:port' history
+  /// entries. Selecting one fills scheme + host + port (see
+  /// [_selectHistoryEntry]). The overlay stays keyboard-navigable by rendering
+  /// the options iterable Autocomplete passes in, in lock-step with its
+  /// built-in highlight (see [_ConnectionHistoryOptions]).
+  Widget _buildHostField() {
+    return Autocomplete<ConnectionHistoryEntry>(
+      displayStringForOption: (entry) => entry.host,
+      initialValue: TextEditingValue(text: widget.host),
+      optionsBuilder: (TextEditingValue value) {
+        // No history while connected -- the field is disabled too.
+        if (currentStatus != Status.disconnected) {
+          return const Iterable<ConnectionHistoryEntry>.empty();
+        }
+        final query = value.text.trim().toLowerCase();
+        // Show the whole list on focus / while the box still shows the
+        // committed host; otherwise substring-filter on host or full URI.
+        if (query.isEmpty || query == host.toLowerCase()) {
+          return connectionHistory;
+        }
+        return connectionHistory.where((e) =>
+            e.host.toLowerCase().contains(query) ||
+            e.fullUri.toLowerCase().contains(query));
+      },
+      onSelected: _selectHistoryEntry,
+      fieldViewBuilder: (context, textController, focusNode, onFieldSubmitted) {
+        return TextFormField(
+          controller: textController,
+          focusNode: focusNode,
+          enabled: (currentStatus == Status.disconnected),
+          onChanged: (value) {
+            host = value;
+            updateFullUri();
+          },
+          // Plain Enter selects the highlighted history row.
+          onFieldSubmitted: (_) => onFieldSubmitted(),
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            hintText: 'Host',
+            labelText: 'Host',
+          ),
+        );
+      },
+      optionsViewBuilder: (context, onSelected, options) {
+        return _ConnectionHistoryOptions(
+          options: options.toList(),
+          onSelected: onSelected,
+          onDelete: _deleteHistoryEntry,
+          onClear: _clearConnectionHistory,
+        );
+      },
+    );
   }
 
   /// Adds a new subscription, live-subscribing immediately if already
@@ -1943,6 +2065,10 @@ class _MyHomePageState extends State<MyHomePage>
                     Flexible(
                       flex: 1,
                       child: DropdownButtonFormField<String>(
+                        // Keyed on scheme so a history selection (which sets
+                        // scheme in setState) rebuilds this field with a fresh
+                        // initialValue -- initialValue is otherwise read once.
+                        key: ValueKey(scheme),
                         isExpanded: true,
                         decoration: const InputDecoration(
                             border: OutlineInputBorder(), labelText: 'Scheme'),
@@ -1977,26 +2103,14 @@ class _MyHomePageState extends State<MyHomePage>
                       flex: 2,
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
-                        child: _withConnectShortcut(TextFormField(
-                          enabled: (currentStatus == Status.disconnected),
-                          initialValue: widget.host,
-                          onChanged: (value) {
-                            host = value;
-                            updateFullUri();
-                          },
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                            hintText: 'Host',
-                            labelText: 'Host',
-                          ),
-                        )),
+                        child: _withConnectShortcut(_buildHostField()),
                       ),
                     ),
                     Flexible(
                       flex: 1,
                       child: _withConnectShortcut(TextFormField(
                         enabled: (currentStatus == Status.disconnected),
-                        initialValue: widget.port,
+                        controller: portController,
                         onChanged: (value) {
                           port = value;
                           updateFullUri();
@@ -2426,6 +2540,164 @@ class _MyHomePageState extends State<MyHomePage>
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Dropdown overlay for the Host field's connection history. Rows are rendered
+/// from the [options] iterable Autocomplete passes in -- kept in lock-step with
+/// its built-in highlight so Up/Down/Enter work -- with the highlighted row
+/// tinted and scrolled into view. Each row carries an inline delete; a footer
+/// clears the whole list. Deletes mutate the parent's list (via [onDelete]/
+/// [onClear]); the visible rows re-sync on the next keystroke or reopen, since
+/// Autocomplete only recomputes [options] when the field text changes.
+class _ConnectionHistoryOptions extends StatefulWidget {
+  const _ConnectionHistoryOptions({
+    required this.options,
+    required this.onSelected,
+    required this.onDelete,
+    required this.onClear,
+  });
+
+  final List<ConnectionHistoryEntry> options;
+  final AutocompleteOnSelected<ConnectionHistoryEntry> onSelected;
+  final ValueChanged<ConnectionHistoryEntry> onDelete;
+  final VoidCallback onClear;
+
+  @override
+  State<_ConnectionHistoryOptions> createState() =>
+      _ConnectionHistoryOptionsState();
+}
+
+class _ConnectionHistoryOptionsState extends State<_ConnectionHistoryOptions> {
+  final ScrollController _scrollController = ScrollController();
+  // Autocomplete only calls optionsBuilder -- and so only passes this widget
+  // a fresh `options` -- when the field's text changes. A local copy lets an
+  // inline delete/clear tap remove a row immediately instead of leaving it
+  // visible until the next keystroke or reopen.
+  late List<ConnectionHistoryEntry> _visibleOptions;
+
+  @override
+  void initState() {
+    super.initState();
+    _visibleOptions = List.of(widget.options);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ConnectionHistoryOptions oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // optionsViewBuilder hands us a freshly `.toList()`'d `options` on every
+    // rebuild of this overlay, not only when Autocomplete's own filtered
+    // list actually changed -- e.g. _handleDelete's call into the parent
+    // setState triggers exactly such a rebuild. Only resync from the
+    // incoming list when its *content* actually changed (a real text-driven
+    // refilter); otherwise this would silently undo the local removal
+    // _handleDelete/_handleClear just applied, since the stale content would
+    // reappear on the very next frame.
+    if (!listEquals(oldWidget.options, widget.options)) {
+      _visibleOptions = List.of(widget.options);
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _handleDelete(ConnectionHistoryEntry entry) {
+    widget.onDelete(entry);
+    setState(() {
+      _visibleOptions.removeWhere((e) => identical(e, entry));
+    });
+  }
+
+  void _handleClear() {
+    widget.onClear();
+    setState(() => _visibleOptions = []);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    // Indexes into Autocomplete's own (unfiltered-by-us) options list, so it
+    // can point past the end of _visibleOptions right after a local delete --
+    // harmless, the loop below just won't match it until the next sync.
+    final highlightedIndex = AutocompleteHighlightedOption.of(context);
+    return Align(
+      alignment: Alignment.topLeft,
+      child: Material(
+        elevation: 4,
+        color: colorScheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(8),
+        clipBehavior: Clip.antiAlias,
+        child: ConstrainedBox(
+          // The overlay is anchored to the field but sized against the
+          // screen, so bound the width to keep the menu readable but sane.
+          constraints:
+              const BoxConstraints(maxHeight: 280, minWidth: 280, maxWidth: 460),
+          // Autocomplete tears this whole overlay down the instant the Host
+          // field loses keyboard focus, and IconButton/ListTile normally grab
+          // focus as part of handling a tap -- which would steal focus from
+          // the field and destroy the overlay mid-gesture, silently
+          // swallowing the tap before onTap/onPressed fires. Blocking focus
+          // acquisition for every descendant keeps the field focused (and
+          // this overlay alive) through the whole gesture, so taps land.
+          child: Focus(
+            descendantsAreFocusable: false,
+            child: ListView(
+              controller: _scrollController,
+              shrinkWrap: true,
+              padding: EdgeInsets.zero,
+              children: [
+                for (final (index, entry) in _visibleOptions.indexed)
+                  Builder(builder: (context) {
+                    final highlight = index == highlightedIndex;
+                    if (highlight) {
+                      // Mirror Flutter's own _AutocompleteOptions: scroll the
+                      // keyboard-highlighted row into view after layout.
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!mounted) return;
+                        Scrollable.ensureVisible(context, alignment: 0.5);
+                      });
+                    }
+                    return ListTile(
+                      dense: true,
+                      // selectedTileColor (not a ColoredBox wrapper) paints
+                      // the highlight -- wrapping ListTile in an opaque-ish
+                      // ancestor between it and the overlay's own Material
+                      // trips Flutter's "ink splashes may be invisible"
+                      // debug check, since InkWell paints splashes on the
+                      // nearest Material ancestor and a paint layer in
+                      // between can occlude them.
+                      selected: highlight,
+                      selectedTileColor:
+                          colorScheme.onSurface.withValues(alpha: 0.08),
+                      title: Text(entry.fullUri,
+                          overflow: TextOverflow.ellipsis),
+                      onTap: () => widget.onSelected(entry),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        tooltip: 'Remove',
+                        onPressed: () => _handleDelete(entry),
+                      ),
+                    );
+                  }),
+                if (_visibleOptions.isNotEmpty) const Divider(height: 1),
+                if (_visibleOptions.isNotEmpty)
+                  ListTile(
+                    dense: true,
+                    leading:
+                        Icon(Icons.delete_sweep, color: colorScheme.error),
+                    title: Text('Clear history',
+                        style: TextStyle(color: colorScheme.error)),
+                    onTap: _handleClear,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

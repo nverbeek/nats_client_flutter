@@ -55,11 +55,11 @@ void main() {
 
     // Turn all three off and save.
     await openSettings(tester);
-    // Switches, in order: Enable JetStream, Enable Key-Value Stores, Enable
-    // Object Store, Check for Updates.
-    await tester.tap(find.byType(Switch).at(0));
+    // Switches, in order: Show Subscription Colors, Enable JetStream, Enable
+    // Key-Value Stores, Enable Object Store, Check for Updates.
     await tester.tap(find.byType(Switch).at(1));
     await tester.tap(find.byType(Switch).at(2));
+    await tester.tap(find.byType(Switch).at(3));
     await saveSettings(tester);
     expect(tester.takeException(), isNull);
 
@@ -74,9 +74,9 @@ void main() {
 
     // Turn all three back on and save — this is the step that used to crash.
     await openSettings(tester);
-    await tester.tap(find.byType(Switch).at(0));
     await tester.tap(find.byType(Switch).at(1));
     await tester.tap(find.byType(Switch).at(2));
+    await tester.tap(find.byType(Switch).at(3));
     await saveSettings(tester);
     expect(tester.takeException(), isNull);
 
@@ -105,7 +105,7 @@ void main() {
     await pumpDisconnectedApp(tester);
 
     await openSettings(tester);
-    await tester.tap(find.byType(Switch).at(0)); // JetStream off
+    await tester.tap(find.byType(Switch).at(1)); // JetStream off
     await saveSettings(tester);
     expect(tester.takeException(), isNull);
     expect(find.text('JetStream'), findsNothing);
@@ -113,7 +113,7 @@ void main() {
     expect(find.text('Object Store'), findsOneWidget);
 
     await openSettings(tester);
-    await tester.tap(find.byType(Switch).at(0)); // JetStream back on
+    await tester.tap(find.byType(Switch).at(1)); // JetStream back on
     await saveSettings(tester);
     expect(tester.takeException(), isNull);
     expect(find.text('JetStream'), findsOneWidget);
@@ -121,7 +121,7 @@ void main() {
     expect(find.text('Object Store'), findsOneWidget);
 
     await openSettings(tester);
-    await tester.tap(find.byType(Switch).at(2)); // Object Store off
+    await tester.tap(find.byType(Switch).at(3)); // Object Store off
     await saveSettings(tester);
     expect(tester.takeException(), isNull);
     expect(find.text('JetStream'), findsOneWidget);
@@ -129,7 +129,7 @@ void main() {
     expect(find.text('Object Store'), findsNothing);
 
     await openSettings(tester);
-    await tester.tap(find.byType(Switch).at(2)); // Object Store back on
+    await tester.tap(find.byType(Switch).at(3)); // Object Store back on
     await saveSettings(tester);
     expect(tester.takeException(), isNull);
     expect(find.text('JetStream'), findsOneWidget);

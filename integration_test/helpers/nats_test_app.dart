@@ -69,6 +69,15 @@ Future<void> pumpConnectedApp(
   await prefs.setBool(constants.prefJetStreamEnabled, true);
   await prefs.setBool(constants.prefKvEnabled, true);
   await prefs.setBool(constants.prefObjectStoreEnabled, true);
+  // Must be one of the Settings dialog's fixed dropdown options (3/5/10/30)
+  // -- an out-of-set value crashes DropdownButtonFormField's "exactly one
+  // matching item" assertion the moment Settings is opened. Reset here for
+  // the same reason every other key in this function is: shared_preferences
+  // persists to a real file on this desktop target, so a stray value left
+  // by an earlier test run (e.g. one seeding a short interval for a
+  // fast-failing-connect scenario) would otherwise silently leak into and
+  // crash a later, unrelated test that opens Settings.
+  await prefs.setInt(constants.prefRetryInterval, constants.defaultRetryInterval);
   await prefs.setString(constants.prefTrustedCertificate, '');
   await prefs.setString(constants.prefTrustedCertificateName, '');
   await prefs.setString(constants.prefCertificateChain, '');
@@ -103,6 +112,15 @@ Future<void> pumpDisconnectedApp(
   await prefs.setBool(constants.prefJetStreamEnabled, true);
   await prefs.setBool(constants.prefKvEnabled, true);
   await prefs.setBool(constants.prefObjectStoreEnabled, true);
+  // Must be one of the Settings dialog's fixed dropdown options (3/5/10/30)
+  // -- an out-of-set value crashes DropdownButtonFormField's "exactly one
+  // matching item" assertion the moment Settings is opened. Reset here for
+  // the same reason every other key in this function is: shared_preferences
+  // persists to a real file on this desktop target, so a stray value left
+  // by an earlier test run (e.g. one seeding a short interval for a
+  // fast-failing-connect scenario) would otherwise silently leak into and
+  // crash a later, unrelated test that opens Settings.
+  await prefs.setInt(constants.prefRetryInterval, constants.defaultRetryInterval);
   await prefs.setString(constants.prefTrustedCertificate, '');
   await prefs.setString(constants.prefTrustedCertificateName, '');
   await prefs.setString(constants.prefCertificateChain, '');

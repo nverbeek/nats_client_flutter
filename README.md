@@ -12,6 +12,7 @@ This application currently supports Windows, Linux, macOS and Web platforms.
 - **Authentication support**: username/password, bearer token, NKey seed, or decentralized JWT+NKey (`.creds` file) — configured in the same Security Settings dialog as TLS, with credentials remembered only if you opt in
 - Subscribe to multiple subjects, each with its own auto-assigned color shown on its chip and matching Live Messages rows, so it's easy to tell at a glance which subscription a message came from — toggle it off in Settings ("Show Subscription Colors", on by default) if you'd rather not see them
 - Automatic re-connect upon lost connection
+- **Connection history**: the Host field remembers up to 10 previously-used `scheme://host:port` targets, offered in a searchable dropdown as you type — pick one to fill in the scheme, host, and port at once, or delete individual entries / clear the whole history from the same dropdown. Only successful connections are remembered, so typos and unreachable hosts don't clutter the list.
 - Filter received messages
 - Find text in received messages
 - Pause the message list to freeze it while you work, without stopping arrivals in the background
