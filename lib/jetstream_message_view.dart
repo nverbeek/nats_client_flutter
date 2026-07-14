@@ -53,13 +53,14 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
   // has scrolled away from the top of the (newest-at-top) list.
   bool _showJumpToTop = false;
 
-  // The fixed height of every message row. A fixed extent is what lets
-  // `_insertMessages` compensate the scroll offset exactly when messages
-  // are prepended above a scrolled-away viewport, and lets the
-  // scrollbar/fling locate rows analytically — see the matching
-  // `_messageRowExtent` in `main.dart`. Constant here (rather than derived
-  // from a setting) since this view's rows always use font 14 / 5 lines.
-  static const _messageRowExtent = 5 * 14 * 1.3 + 24;
+  // The fixed height of every message row, one line tall — see the matching
+  // `_messageRowExtent` in `main.dart` for the full reasoning (fixed extent
+  // lets `_insertMessages` compensate the scroll offset exactly, and lets
+  // the scrollbar/fling locate rows analytically). Constant here (rather
+  // than derived from a setting) since this view's rows always use font 14;
+  // 56px is the same floor `main.dart` applies so the row stays tall enough
+  // for the trailing controls' tap target (14 * 1.3 + 24 = 42.2 < 56).
+  static const _messageRowExtent = 56.0;
 
   // Pause: while true, incoming messages are buffered here instead of
   // touching `_messages`/the rendered list at all.
@@ -478,6 +479,11 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
                       return Material(
                         key: ObjectKey(message),
                         child: ListTile(
+                          // Tells ListTile the row's real fixed height, not
+                          // just its own natural content height — see the
+                          // matching `minTileHeight` in `main.dart` for why
+                          // this matters for centering.
+                          minTileHeight: _messageRowExtent,
                           // Band by distance from the oldest message (always at
                           // the bottom), not the raw index, so stripes don't
                           // flip every time a message is prepended at the top.
@@ -494,7 +500,7 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
                                 ..color = theme.colorScheme.inversePrimary,
                               fontSize: 14,
                             ),
-                            maxLines: 5,
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                           onTap: () => _showDetailDialog(message),
