@@ -28,6 +28,7 @@ import 'kv_manager.dart';
 import 'message_detail_dialog.dart';
 import 'object_store_dashboard.dart';
 import 'object_store_manager.dart';
+import 'paused_banner.dart';
 import 'send_message_dialog.dart';
 import 'help_dialog.dart';
 import 'settings_dialog.dart';
@@ -2273,6 +2274,11 @@ class _MyHomePageState extends State<MyHomePage>
   Widget _buildLiveMessagesTab(Color evenRowColor, Color oddRowColor) {
     return Column(
       children: <Widget>[
+        if (messagesPaused)
+          PausedBanner(
+            pendingCount: pendingMessages.length,
+            onResume: _resumeMessageList,
+          ),
         Expanded(
           child: Stack(
             children: [

@@ -24,6 +24,10 @@ These features are made possible by our successful migration to the official mai
 - [ ] **Milestone 14**: Design & Implement **Request/Reply Correlation Improvements** (Medium Priority). Not started.
 - [ ] **Milestone 15**: Investigate & Implement **Code Signing for Windows & macOS Builds** (Low Priority, cost-gated). Not started — research done, decision on which paid/free path pending.
 - [x] **Milestone 16**: Apply the Latest Material 3 Standards (Low/Medium Priority). Done ahead of Milestones 12-15, same as Milestones 9-11 before it. OS dynamic color (Material You) via `DynamicColorBuilder`, plus `FilledButton`/`IconButton.filled`/`.filledTonal`/`.outlined` adopted for primary/icon-only actions across the connection bar, bottom toolbar, dashboards, and Security Settings' file pickers.
+- [ ] **Milestone 17**: Design & Implement **NATS Server Monitoring Dashboard** (Medium Priority). Not started.
+- [ ] **Milestone 18**: Design & Implement **NATS Micro-services (Services API) Discovery** (Medium Priority). Not started.
+- [ ] **Milestone 19**: Design & Implement **Export / Import Captured Messages** (Medium Priority). Not started.
+- [ ] **Milestone 20**: Design & Implement **Per-Subscription Message Rate Sparkline** (Low Priority, tentative). Not started — user flagged this one as a "maybe," lowest-confidence of the batch.
 
 ---
 
@@ -528,3 +532,89 @@ A user audit of the app's Material usage (already `useMaterial3: true`, seeded `
 - [x] Updated the finders in `test/jetstream_dashboard_test.dart`, `test/object_store_dashboard_test.dart`, and `test/kv_dashboard_test.dart` (all three: `ElevatedButton` → `FilledButton`) plus `integration_test/helpers/nats_test_app.dart`, `integration_test/authentication_test.dart`, `integration_test/jetstream_browse_test.dart`, `integration_test/kv_lifecycle_test.dart`, and `integration_test/screenshot_tour_test.dart` (Connect/Disconnect: `ElevatedButton` → `IconButton`, since `IconButton.filled`/`.filledTonal` are still the `IconButton` type; Browse Messages/Put Value/Pause/Resume: `ElevatedButton` → `FilledButton`). No test assumed a specific icon-button emphasis variant (`.filled` vs `.filledTonal` vs `.outlined`), only the base widget type, so none of those distinctions needed test-level assertions.
 - [x] **Verification**: `flutter analyze` clean; all 213 widget/unit tests in `test/` pass. Live-server verification against a disposable Docker `nats:latest -js` container covered every changed button through its integration test: `connect_shortcut_test.dart` (Connect via `IconButton.filled`), `message_list_pause_test.dart` (Pause/Resume via `FilledButton.tonal`, including its wide-count-overflow regression case), `jetstream_browse_test.dart` and `jetstream_lifecycle_test.dart` (Browse Messages via `FilledButton.icon`, Send via `IconButton.filled`), `kv_lifecycle_test.dart` (Put Value via `FilledButton.icon`), `object_store_lifecycle_test.dart` (Upload via `FilledButton.icon`), and `live_messages_test.dart`/`live_messages_interactions_test.dart` (Send, Filter/Find, row actions) — all passed (a couple hit a known, pre-existing Windows `flutter test -d windows` flake — "the log reader stopped unexpectedly" when launching a new test binary immediately after a prior one exits — unrelated to this change, and each passed cleanly on an isolated re-run).
 - [x] **Screenshots re-captured** (follow-up, done in a later session): ran `scripts/capture_screenshots.ps1` end-to-end against a fresh JetStream-enabled `nats-server` — all six `images/*.png` now show the M3 `FilledButton`/`IconButton.filled`/`.filledTonal` styling (e.g. JetStream's "Browse Messages" as a solid-filled button, the connection bar's filled Connect/tonal Disconnect/tonal lock icons, the tonal jump-to-top FAB).
+
+---
+
+## Milestone 17: NATS Server Monitoring Dashboard (Medium Priority)
+
+### Objective
+Every other tab in this app monitors things *through* the NATS protocol (streams, buckets, subscriptions) — nothing surfaces information *about* the server process itself. A real `nats-server` exposes a separate read-only HTTP monitoring API (default port `8222`, distinct from the NATS protocol port) with connection counts, memory/CPU, slow-consumer warnings, and cluster route health. Right now diagnosing "is the server under load" or "am I about to get disconnected as a slow consumer" means leaving this app for a browser tab or `nats-server`'s own `nats-top`.
+
+### What's actually available (server-side HTTP API, not `dart_nats`)
+This isn't a `dart_nats` API at all — it's a plain HTTP JSON endpoint on the server itself, so it goes through the `http` package already added for Milestone 5 (Update Notifications), not the NATS client connection. Endpoints (all `GET`, unauthenticated by default unless the operator locked them down):
+- `/varz` — general server stats: uptime, version, config, in/out msgs & bytes, CPU, memory, slow consumer count.
+- `/connz` — per-connection detail: client IP, subscriptions, in/out msgs & bytes, pending bytes, idle time; supports `?subs=1` for per-connection subject lists and pagination via `?offset=`/`?limit=`.
+- `/subz` — subscription interest graph (subject, queue group, subscriber count).
+- `/routez` / `/gatewayz` / `/leafz` — cluster/supercluster topology, only meaningful when the server is clustered.
+- `/healthz` — simple up/down + JetStream health.
+- Monitoring must be explicitly enabled server-side (`http_port`/`monitor_port` in the server config, or `-m 8222` on the CLI) — **not every server has it on**, so this needs a clear "monitoring unavailable" state rather than assuming it's always reachable, and a way to test the requests actually only kick in when the toggle in Settings (default off, since it's a second, non-NATS network endpoint) is enabled.
+
+### UI Architecture & Concept
+New tab (`[📊 Server Monitor]`) or a panel reachable from a toolbar icon, gated behind an opt-in "Enable Server Monitoring" setting (default **off**, unlike JetStream/KV/Object Store's default-on — this hits a different host:port than the NATS connection itself, so it shouldn't silently probe an endpoint the user didn't ask about) with its own configurable monitoring port field (defaulting to `8222`, prefilled from the connection's host). Dashboard shows: server identity/uptime/version card, live-refreshing connection count & in/out throughput, a slow-consumer warning banner if `varz.slow_consumers > 0`, and (if the JetStream tab is enabled) cross-links to the existing JetStream Account Info dialog rather than duplicating that data.
+
+### Implementation Checklist
+- [ ] `lib/server_monitor.dart` (new) — pure HTTP client wrapper (`fetchVarz()`, `fetchConnz()`, injectable `http.Client` for tests, matching `lib/update_checker.dart`'s pattern) parsing `/varz` and `/connz` JSON into typed models.
+- [ ] New opt-in setting (`prefServerMonitoringEnabled`/default `false`) plus a monitoring-port field, in `lib/settings_dialog.dart` or a new small dialog.
+- [ ] `lib/server_monitor_dashboard.dart` — new tab/panel: identity card, live-polled (not push — this is plain HTTP, no `watch()` equivalent) connection/throughput stats, slow-consumer warning, graceful "monitoring not reachable" state distinct from "monitoring disabled".
+- [ ] Decide polling interval (balance freshness vs. hammering the server's monitoring endpoint) and whether `/connz` (potentially large on a busy server) is paginated in the UI.
+- [ ] Unit tests for JSON parsing (mocked `http.Client`, mirroring `test/update_checker_test.dart`) + widget tests against a fake monitor client; live-server verification against a real `nats-server -m 8222`, including the "monitoring not enabled on this server" (connection refused / 404) path.
+- [ ] Document in `assets/app_help.md`: what monitoring is, how to enable it server-side, and that it's a separate, unauthenticated-by-default HTTP endpoint (a real security consideration worth calling out, not just a feature note).
+
+---
+
+## Milestone 18: NATS Micro-services (Services API) Discovery (Medium Priority)
+
+### Objective
+The NATS ecosystem has a standardized [Services framework](https://docs.nats.io/using-nats/developer/services) (used by `nats.go`'s `micro` package, and others) where services self-register and respond to well-known discovery subjects. Right now this app has no way to answer "what services are currently running against this server" short of knowing their subjects in advance — a live "Services" panel would show what's actually listening.
+
+### What `dart_nats` actually supports (verified against vendored `dart_nats-1.1.2/lib/src/`)
+**Nothing** — there is no `service.dart`/`Service`/`Micro` class anywhere in the vendored source (checked every file under `lib/src/`). This is a gap in the client library, not something this app is failing to call. The Services API is just a documented request/reply *convention* over ordinary subjects, though, so it doesn't need a new library dependency — it can be built directly on `dart_nats`'s existing `client.request()`/`requestString()` (already understood from Milestone 14's research) and plain subscribe:
+- Discovery is a request with **no payload** to `$SRV.PING` (all services reply), `$SRV.PING.<name>` (all instances of one service), or `$SRV.PING.<name>.<id>` (one instance) — since multiple services/instances can reply to the same discovery request, this isn't a single-reply `request()` call but a timed collection window: publish with a `replyTo` the app subscribes to itself, gather whatever responses arrive within e.g. 500ms–1s, then unsubscribe. `$SRV.INFO.*`/`$SRV.STATS.*` follow the same reply-fan-in shape for endpoint/subject and request-count/error-count/latency stats respectively.
+- Response payloads are plain JSON (`{"name", "id", "version", "endpoints": [...]}` for INFO; request/error counts + average processing time per endpoint for STATS) — straightforward to parse with `dart:convert`, no new dependency needed.
+
+### UI Architecture & Concept
+New tab or panel (`[🔧 Services]`), gated behind its own opt-in setting (default off, same reasoning as Milestone 17 — this actively publishes discovery requests onto the account rather than just reading passively). A "Discover" button fires the fan-in `$SRV.PING` request and populates a list of services/instances as replies trickle in over the collection window; selecting one fetches its `$SRV.INFO`/`$SRV.STATS` for an endpoint/subject and stats detail view.
+
+### Implementation Checklist
+- [ ] `lib/service_discovery.dart` (new) — a small fan-in request helper (publish + ephemeral inbox subscription + timed collection window, distinct from `client.request()`'s single-reply semantics) plus `ServiceInfo`/`ServiceStats` JSON parsing, built on `dart_nats`'s existing `pub()`/`sub()`.
+- [ ] New opt-in setting (`prefServiceDiscoveryEnabled`/default `false`).
+- [ ] `lib/service_discovery_dashboard.dart` — Discover button, live-populating list as fan-in replies arrive, detail view per service/instance (endpoints, subjects, request/error counts, average latency).
+- [ ] Handle the empty case cleanly (no services running is common and not an error) and a clearly bounded collection window so "Discover" always terminates instead of listening forever.
+- [ ] Unit tests for the fan-in collection helper (fake clock/timer) and JSON parsing; a live-server `integration_test` that stands up a minimal fake "service" (a second `dart_nats` client subscribed to `$SRV.PING`/`$SRV.INFO`/`$SRV.STATS` replying with fixed JSON, since standing up a real `nats.go` service isn't practical from Dart-only CI) and confirms discovery finds it.
+- [ ] Document the Services API convention and this app's read-only/discovery-only scope (no service *hosting* from this app) in `assets/app_help.md`.
+
+---
+
+## Milestone 19: Export / Import Captured Messages (Medium Priority)
+
+### Objective
+The Live Messages list (and JetStream Browse Messages) has **no cap on how many messages it holds in memory** (confirmed: nothing in `lib/main.dart` bounds `items.length` — the list only ever shrinks via the user's own Clear button), so a long-running capture on a busy subject can realistically reach tens of thousands of rows. Today the only way to get that data out of the app is manually copying individual messages one at a time via the row menu. This milestone adds bulk export (to a file, for offline analysis or attaching to a bug report) and import (reloading a previous capture to browse it later, without a live server).
+
+### Desired Behavior
+- **Export selected**: a multi-select mode on the Live Messages list (checkboxes or a "Select" toggle mirroring how JetStream/KV dashboards already have per-row actions) lets the user pick specific messages and export only those.
+- **Export all**: a separate action for the common "just dump everything" case — but given the list is unbounded, this needs an explicit, honest confirmation showing the real count before writing anything (e.g. "Export 42,318 messages?"), and a sensible safeguard past some threshold (a hard cap with "most recent N", or at minimum a stronger warning) rather than silently attempting to serialize an arbitrarily large in-memory list to JSON on the UI thread.
+- **Import**: load a previously exported file back into the message list (read-only browsing — imported rows are not "live," and it should be visually obvious which rows came from an import vs. a live connection) for offline review.
+- Format: NDJSON (one JSON object per line: subject, payload, headers, timestamp, direction if Milestone 13 lands) — streams naturally to/from disk without holding a second full in-memory copy during export, and is trivially diffable/greppable outside the app too.
+
+### Implementation Checklist
+- [ ] Decide the exact large-export safeguard (hard cap + "most recent N" vs. warn-and-proceed vs. chunked/streaming write) — worth a quick design pass given real capture sizes can plausibly hit the tens of thousands the objective calls out.
+- [ ] Multi-select mode for the Live Messages list: row checkboxes or a selection toggle, an "Export Selected (N)" action that only appears once something's selected, and a separate always-available "Export All" action carrying its own confirmation/count/threshold handling from the point above.
+- [ ] `lib/message_export.dart` (new) — pure serialization logic (message → NDJSON line and back), independent of the file-picker/save-dialog plumbing so it's unit-testable without touching `file_picker`, following the same "injectable file callbacks" pattern `ObjectStoreDashboard` already established for Upload/Download.
+- [ ] Export via the existing `file_picker`-backed save-file pattern (mirroring Object Store's download flow); Import via the existing open-file pattern (mirroring TLS cert / `.creds` file pickers).
+- [ ] Decide whether JetStream Browse Messages gets the same export capability or this is Live-Messages-tab-only for now (it already has a different, consumer-backed data source — mirrors the scoping question Milestone 13 had to answer for "outgoing").
+- [ ] Visually distinguish imported (non-live) rows from live ones in the list.
+- [ ] Unit tests for NDJSON round-trip (including edge cases: binary/non-UTF8 payloads, missing headers, empty list) + widget tests for multi-select and the export-all confirmation/threshold UI using injected fake file callbacks (no real OS dialog in tests, same reasoning as the Object Store/TLS Browse buttons already excluded from automated coverage) + a live-server integration test covering select-some/export/re-import and confirming round-tripped messages render identically to the originals.
+- [ ] Document the NDJSON format (so files are usable outside this app too) and the large-export safeguard in `assets/app_help.md`.
+
+---
+
+## Milestone 20: Per-Subscription Message Rate Sparkline (Low Priority, tentative)
+
+### Objective
+Milestone 11 already tags every message with its originating subscription's color via `sid`. This milestone would add a small rolling messages/sec indicator per subscription (e.g. next to its chip) so a noisy or unexpectedly quiet subject is visible at a glance instead of only inferable by watching the list scroll. **Flagged by the user as a "maybe"** — lowest-confidence item of this batch, worth a lighter design pass before committing to implementation, and it may turn out not to be worth the added chip-row complexity once mocked up.
+
+### Implementation Checklist
+- [ ] Decide visual treatment (tiny sparkline, a rate number, a pulsing dot) and where it lives (in the chip itself vs. only in the Subscription Manager dialog, given Milestone 11's own experience with chip crowding/measurement complexity).
+- [ ] Compute a rolling rate per `sid` from existing arrival timestamps — no new `dart_nats` data needed, this is purely a local aggregation over what's already tagged.
+- [ ] Confirm it doesn't reintroduce the offstage-measurement/`OverflowBox`/`Tooltip` pitfalls documented in Milestone 11's notes if implemented inside the chip row itself.
+- [ ] Unit tests for the rate computation (fake clock) + widget/live-server verification that the displayed rate roughly tracks a known publish rate from a second test client.

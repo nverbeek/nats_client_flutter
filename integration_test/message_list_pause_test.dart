@@ -56,10 +56,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.play_arrow), findsOneWidget);
 
+    // The paused banner should appear directly above the list as soon as
+    // Pause is tapped, before any message has arrived to buffer.
+    expect(find.text('Paused — no new messages yet'), findsOneWidget);
+
     // 2. A message arrives while paused: it must not appear yet, but the
-    // Pause button's buffered-count pill should reflect it once the flush
-    // timer (see `_incomingFlushInterval` in main.dart) has had a chance to
-    // run.
+    // Pause button's buffered-count pill -- and the banner above the list --
+    // should reflect it once the flush timer (see `_incomingFlushInterval`
+    // in main.dart) has had a chance to run.
     publisher.pubString(subject, payload);
     await tester.pump(const Duration(milliseconds: 300));
     expect(messageRowText(payload), findsNothing);
@@ -67,12 +71,46 @@ void main() {
         of: find.byIcon(Icons.play_arrow), matching: find.byType(Row));
     expect(find.descendant(of: pauseButtonRow, matching: find.text('1')),
         findsOneWidget);
+    expect(find.text('Paused — 1 new message buffered'), findsOneWidget);
 
     // 3. Resume reveals it.
     await tester.tap(find.byIcon(Icons.play_arrow));
     await pumpUntil(
         tester, () => messageRowText(payload).evaluate().isNotEmpty);
     expect(find.byIcon(Icons.pause), findsOneWidget);
+    expect(find.textContaining('Paused'), findsNothing,
+        reason: 'the banner must disappear once resumed');
+  });
+
+  testWidgets('the banner\'s own Resume button resumes the list',
+      (tester) async {
+    await pumpConnectedApp(tester);
+    addTearDown(() => disconnectApp(tester));
+
+    final runId = DateTime.now().microsecondsSinceEpoch;
+    final subject = 'it.pause-banner-resume.$runId';
+    final payload = 'it-pause-banner-resume-payload-$runId';
+
+    final publisher = await connectPublisher();
+    addTearDown(() => publisher.close());
+
+    await tester.tap(find.byIcon(Icons.pause));
+    await tester.pumpAndSettle();
+
+    publisher.pubString(subject, payload);
+    await pumpUntil(tester,
+        () => find.text('Paused — 1 new message buffered').evaluate().isNotEmpty);
+    expect(messageRowText(payload), findsNothing);
+
+    // Resuming via the banner's own button (rather than the toolbar's
+    // Pause/Resume control) should reveal the buffered message and put the
+    // toolbar button back into its Pause state too -- both surfaces reflect
+    // the same underlying `messagesPaused` state.
+    await tester.tap(find.widgetWithText(TextButton, 'Resume'));
+    await pumpUntil(
+        tester, () => messageRowText(payload).evaluate().isNotEmpty);
+    expect(find.byIcon(Icons.pause), findsOneWidget);
+    expect(find.textContaining('Paused'), findsNothing);
   });
 
   testWidgets(
@@ -114,6 +152,9 @@ void main() {
     expect(tester.takeException(), isNull,
         reason: 'the Pause button\'s fixed-width slot must be wide enough '
             'for a realistic wide count, not just a single digit');
+    expect(find.text('Paused — 1.2k new messages buffered'), findsOneWidget,
+        reason: 'the banner should use the same compact count formatting '
+            'as the toolbar pill');
   });
 
   testWidgets(

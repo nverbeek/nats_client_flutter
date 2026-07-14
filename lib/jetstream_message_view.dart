@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'format_utils.dart';
 import 'jetstream_manager.dart';
 import 'message_detail_dialog.dart';
+import 'paused_banner.dart';
 import 'regex_text_highlight.dart';
 
 /// Live "Browse Messages" panel for a single JetStream stream.
@@ -431,6 +432,11 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
           ),
         ),
         const Divider(height: 1),
+        if (_paused)
+          PausedBanner(
+            pendingCount: _pendingMessages.length,
+            onResume: _resume,
+          ),
         if (_errorMessage != null)
           Padding(
             padding: const EdgeInsets.all(16),

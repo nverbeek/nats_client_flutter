@@ -233,6 +233,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.pause));
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.play_arrow), findsOneWidget);
+    expect(find.text('Paused — no new messages yet'), findsOneWidget);
 
     publisher.pubString('$streamName.created', payload3);
     await tester.pump(const Duration(milliseconds: 300));
@@ -241,11 +242,17 @@ void main() {
         of: find.byIcon(Icons.play_arrow), matching: find.byType(Row));
     expect(find.descendant(of: pauseButtonRow, matching: find.text('1')),
         findsOneWidget);
+    expect(find.text('Paused — 1 new message buffered'), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.play_arrow));
+    // Resume via the banner's own button this time (rather than the header
+    // row's Pause/Resume icon), same as the equivalent Live Messages check
+    // in `message_list_pause_test.dart` -- both surfaces drive the same
+    // `_paused` state in `JetStreamMessageViewState`.
+    await tester.tap(find.widgetWithText(TextButton, 'Resume'));
     await pumpUntil(
         tester, () => messageRowText(payload3).evaluate().isNotEmpty);
     expect(find.byIcon(Icons.pause), findsOneWidget);
+    expect(find.textContaining('Paused'), findsNothing);
 
     // 10. Delete/Clear empties the view (the underlying consumer keeps
     // running — not asserted here, just that the visible list resets).
