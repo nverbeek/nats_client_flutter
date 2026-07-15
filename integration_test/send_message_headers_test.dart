@@ -77,6 +77,10 @@ void main() {
     await tester.tap(find.text('Detail'));
     await tester.pumpAndSettle();
 
-    expect(find.text('$headerKey: $headerValue'), findsOneWidget);
+    // Headers now render as a two-column table (see message_detail_dialog.dart),
+    // with the key and value as separate SelectableText widgets rather than a
+    // single combined "key: value" string.
+    expect(find.text(headerKey), findsOneWidget);
+    expect(find.text(headerValue), findsOneWidget);
   });
 }
