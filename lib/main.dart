@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, listEquals;
@@ -21,14 +22,18 @@ import 'auth_manager.dart';
 import 'connection_history.dart';
 import 'constants.dart' as constants;
 import 'format_utils.dart';
+import 'export_confirm_dialog.dart';
 import 'jetstream_dashboard.dart';
 import 'jetstream_manager.dart';
 import 'kv_dashboard.dart';
 import 'kv_manager.dart';
 import 'message_detail_dialog.dart';
+import 'message_export.dart';
 import 'object_store_dashboard.dart';
 import 'object_store_manager.dart';
 import 'paused_banner.dart';
+import 'replay_banner.dart';
+import 'replay_config_dialog.dart';
 import 'send_message_dialog.dart';
 import 'help_dialog.dart';
 import 'service_discovery_dashboard.dart';
@@ -293,6 +298,11 @@ class _MyHomePageState extends State<MyHomePage>
   // becomes collectible too.
   final Expando<int> _messageColorIndex = Expando<int>();
   int _nextColorIndex = 0;
+  // Arrival-time tagging for Export's `capturedAt` field. `Message`
+  // (dart_nats) has no timestamp field of its own; an Expando follows the
+  // exact same precedent as `_messageColorIndex` immediately above so
+  // entries never need manual pruning.
+  final Expando<DateTime> _messageCapturedAt = Expando<DateTime>();
   var availableSchemes = <String>['ws://', 'nats://'];
   String scheme = constants.defaultScheme;
   String fullUri = '';
@@ -340,6 +350,24 @@ class _MyHomePageState extends State<MyHomePage>
   final List<Message<dynamic>> _incomingBatch = [];
   Timer? _incomingFlushTimer;
   static const _incomingFlushInterval = Duration(milliseconds: 32);
+
+  // Replay: orthogonal to `messagesPaused` -- Pause governs whether the list
+  // *renders* new arrivals, Replay governs whether the app is currently
+  // *publishing* outgoing messages from a loaded file. A replayed message
+  // can loop back as an incoming arrival while the list is paused, so both
+  // can legitimately be active at once (see `ReplayBanner`'s doc comment).
+  bool _isReplaying = false;
+  int _replaySentCount = 0;
+  int _replayTotalCount = 0;
+  int _replayCurrentPass = 1;
+  int _replayTotalPasses = 1;
+  Completer<void>? _replayStopSignal;
+  // Anchors the Export menu to its trigger button -- opened via `showMenu`
+  // rather than `PopupMenuButton`'s own `icon` param so the trigger can be a
+  // real `IconButton.outlined` and match the Clear/Send/Replay buttons
+  // beside it exactly (`PopupMenuButton.icon` renders a plain, un-outlined
+  // IconButton with no way to apply that style).
+  final GlobalKey _exportMenuButtonKey = GlobalKey();
 
   // JetStream tab
   bool jetStreamEnabled = constants.defaultJetStreamEnabled;
@@ -1119,6 +1147,7 @@ class _MyHomePageState extends State<MyHomePage>
       // disconnect. colorIndex is stable for the subscription's lifetime, so
       // capturing it once here survives disconnects/reconnects.
       _messageColorIndex[event] = info.colorIndex;
+      _messageCapturedAt[event] = DateTime.now();
       handleIncomingMessage(event);
     });
   }
@@ -1321,6 +1350,13 @@ class _MyHomePageState extends State<MyHomePage>
     return resolveSubscriptionColor(colorIndex, isDark);
   }
 
+  /// Arrival time captured for `capturedAt` in an Export -- `null` for a
+  /// message that was published locally rather than received (e.g. a
+  /// replayed message that loops back is tagged normally by `_subscribeOne`
+  /// like any other arrival).
+  DateTime? _capturedAtFor(Message<dynamic> message) =>
+      _messageCapturedAt[message];
+
   void _showSubscriptionManagerDialog() {
     showDialog<void>(
       context: context,
@@ -1437,6 +1473,93 @@ class _MyHomePageState extends State<MyHomePage>
       messagesPaused = false;
     });
     _insertMessages(buffered);
+  }
+
+  void _startReplay(List<ExportedMessage> messages, Duration messageInterval,
+      int repeatCount, Duration repeatInterval) {
+    if (_isReplaying) return;
+    unawaited(
+        _runReplay(messages, messageInterval, repeatCount, repeatInterval));
+  }
+
+  /// The cancelable replay loop. Publishes every message in [messages],
+  /// [repeatCount] additional times after the first pass, waiting
+  /// [messageInterval] between messages within a pass and [repeatInterval]
+  /// between passes. Both waits are raced against [_replayStopSignal] so
+  /// Stop is responsive mid-wait, not just between sends.
+  Future<void> _runReplay(List<ExportedMessage> messages,
+      Duration messageInterval, int repeatCount, Duration repeatInterval) async {
+    final totalPasses = repeatCount + 1;
+    final totalCount = messages.length * totalPasses;
+    final stopSignal = Completer<void>();
+    _replayStopSignal = stopSignal;
+
+    setState(() {
+      _isReplaying = true;
+      _replaySentCount = 0;
+      _replayTotalCount = totalCount;
+      _replayCurrentPass = 1;
+      _replayTotalPasses = totalPasses;
+    });
+
+    outer:
+    for (var pass = 1; pass <= totalPasses; pass++) {
+      if (mounted) setState(() => _replayCurrentPass = pass);
+
+      for (var i = 0; i < messages.length; i++) {
+        if (!mounted || stopSignal.isCompleted) break outer;
+        if (currentStatus != Status.connected) {
+          showSnackBar('Replay stopped: connection lost.');
+          break outer;
+        }
+
+        final message = messages[i];
+        final header =
+            (message.headers != null && message.headers!.isNotEmpty)
+                ? Header(headers: message.headers)
+                : null;
+        await natsClient.pub(message.subject, message.payload,
+            header: header, buffer: false);
+        if (mounted) setState(() => _replaySentCount++);
+
+        final isLastMessageOfPass = i == messages.length - 1;
+        if (!isLastMessageOfPass && messageInterval > Duration.zero) {
+          await Future.any(
+              [Future.delayed(messageInterval), stopSignal.future]);
+          if (stopSignal.isCompleted) break outer;
+        }
+      }
+
+      final isLastPass = pass == totalPasses;
+      if (!isLastPass && repeatInterval > Duration.zero) {
+        await Future.any([Future.delayed(repeatInterval), stopSignal.future]);
+        if (stopSignal.isCompleted) break outer;
+      }
+    }
+
+    _replayStopSignal = null;
+    if (mounted) setState(() => _isReplaying = false);
+  }
+
+  void _stopReplay() {
+    _replayStopSignal?.complete();
+  }
+
+  /// Injectable so tests can supply a chosen file's bytes without automating
+  /// a real OS file dialog -- `null` (the default) leaves `ReplayConfigDialog`
+  /// to fall back to its own real `file_picker`-backed default.
+  Future<(Uint8List, String)?> Function()? replayPickFileOverride;
+
+  Future<void> showReplayConfigDialog() async {
+    if (!mounted) return;
+    return showDialog<void>(
+      context: context,
+      builder: (context) => ReplayConfigDialog(
+        isConnected: currentStatus == Status.connected,
+        onReplay: _startReplay,
+        pickFile: replayPickFileOverride,
+      ),
+    );
   }
 
   void setStateConnected() {
@@ -1588,6 +1711,133 @@ class _MyHomePageState extends State<MyHomePage>
         );
       },
     );
+  }
+
+  /// Real, `file_picker`-backed implementation of saving exported message
+  /// bytes to disk -- the default used outside of tests, mirroring
+  /// `object_store_dashboard.dart`'s `_defaultSaveDownloadedFile` exactly.
+  static Future<void> _defaultSaveExportedMessages(
+      String suggestedName, Uint8List bytes) async {
+    if (kIsWeb) {
+      await FilePicker.platform
+          .saveFile(fileName: suggestedName, bytes: bytes);
+      return;
+    }
+    final path = await FilePicker.platform.saveFile(fileName: suggestedName);
+    if (path != null) {
+      await File(path).writeAsBytes(bytes);
+    }
+  }
+
+  /// Injectable so tests can capture exported bytes without automating a
+  /// real OS save dialog -- `MyHomePage` has no existing fake-injection
+  /// seam, so this lives directly on the state rather than the widget.
+  Future<void> Function(String suggestedName, Uint8List bytes)
+      saveExportedMessages = _defaultSaveExportedMessages;
+
+  /// Messages serialized per yield to `Future.delayed(Duration.zero)` while
+  /// exporting, so a large export doesn't freeze the UI thread.
+  static const _exportChunkSize = 1000;
+
+  /// Opens the Export menu ("Export Selected (N)"/"Export All (N)") anchored
+  /// under the toolbar's Export button, keyed by [_exportMenuButtonKey].
+  Future<void> _showExportMenu(int selectedCount, int totalCount) async {
+    final renderBox =
+        _exportMenuButtonKey.currentContext!.findRenderObject() as RenderBox;
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final position = RelativeRect.fromRect(
+      Rect.fromPoints(
+        renderBox.localToGlobal(Offset.zero, ancestor: overlay),
+        renderBox.localToGlobal(renderBox.size.bottomRight(Offset.zero),
+            ancestor: overlay),
+      ),
+      Offset.zero & overlay.size,
+    );
+
+    final value = await showMenu<String>(
+      context: context,
+      position: position,
+      items: [
+        PopupMenuItem(
+          value: 'export_selected',
+          enabled: selectedCount > 0,
+          child: Text('Export Selected ($selectedCount)'),
+        ),
+        PopupMenuItem(
+          value: 'export_all',
+          enabled: totalCount > 0,
+          child: Text('Export All ($totalCount)'),
+        ),
+      ],
+    );
+    if (value != null) {
+      _showExportDialog(exportAll: value == 'export_all');
+    }
+  }
+
+  /// Resolves which messages an Export action applies to and opens the
+  /// confirmation dialog. `exportAll` exports every captured message (top-
+  /// to-bottom order, independent of an active Filter -- "Export All" means
+  /// everything captured); otherwise exports the current selection,
+  /// recovering on-screen order from the unordered Set the same way
+  /// `_copyMultiSelection` does.
+  void _showExportDialog({required bool exportAll}) {
+    final List<Message<dynamic>> messages;
+    if (exportAll) {
+      messages = items;
+    } else {
+      final selection = _effectiveSelection();
+      messages = filteredItems.where(selection.contains).toList();
+    }
+    if (messages.isEmpty) return;
+
+    showDialog<void>(
+      context: context,
+      builder: (context) => ExportConfirmDialog(
+        count: messages.length,
+        sourceLabel: exportAll ? 'captured' : 'selected',
+        onConfirm: () => _exportMessages(messages),
+      ),
+    );
+  }
+
+  Future<void> _exportMessages(List<Message<dynamic>> messages) async {
+    try {
+      // The actual expensive work (JSON-encode + base64-encode each
+      // payload, then UTF-8-encode the resulting line) happens inside this
+      // chunked/yielded loop, not after it -- an earlier version bridged
+      // `Message` -> `ExportedMessage` here (cheap) but then ran the real
+      // encoding as one unbroken pass over the whole list afterward, which
+      // defeated the point of chunking for a large export.
+      final bytesBuilder = BytesBuilder(copy: false);
+      for (var i = 0; i < messages.length; i += _exportChunkSize) {
+        final end = (i + _exportChunkSize < messages.length)
+            ? i + _exportChunkSize
+            : messages.length;
+        for (var j = i; j < end; j++) {
+          final exported = exportedMessageFromNatsMessage(messages[j],
+              capturedAt: _capturedAtFor(messages[j]));
+          bytesBuilder.add(utf8.encode(encodeExportedMessageLine(exported)));
+          bytesBuilder.addByte(0x0A); // '\n'
+        }
+        if (end < messages.length) {
+          await Future.delayed(Duration.zero);
+        }
+      }
+
+      final bytes = bytesBuilder.takeBytes();
+      final suggestedName =
+          'nats-export-${DateTime.now().millisecondsSinceEpoch}.ndjson';
+      await saveExportedMessages(suggestedName, bytes);
+      if (mounted) {
+        showSnackBar('Exported ${messages.length} message(s).');
+      }
+    } catch (e) {
+      if (mounted) {
+        showSnackBar('Export failed: $e');
+      }
+    }
   }
 
   Future<void> showHelpDialog() async {
@@ -1999,6 +2249,11 @@ class _MyHomePageState extends State<MyHomePage>
                 value: 'copy_selected',
                 child: Text('Copy Selected (${selection.length})'),
               ),
+            if (selection.length > 1)
+              PopupMenuItem(
+                value: 'export_selected',
+                child: Text('Export Selected (${selection.length})'),
+              ),
             const PopupMenuItem(
               value: 'detail',
               child: Text('Detail'),
@@ -2061,6 +2316,9 @@ class _MyHomePageState extends State<MyHomePage>
               break;
             case 'copy_selected':
               await _copyMultiSelection(_effectiveSelection());
+              break;
+            case 'export_selected':
+              _showExportDialog(exportAll: false);
               break;
             case 'detail':
               if (mounted) {
@@ -2528,6 +2786,14 @@ class _MyHomePageState extends State<MyHomePage>
     final effectiveSelection = _effectiveSelection();
     return Column(
       children: <Widget>[
+        if (_isReplaying)
+          ReplayBanner(
+            sentCount: _replaySentCount,
+            totalCount: _replayTotalCount,
+            currentPass: _replayCurrentPass,
+            totalPasses: _replayTotalPasses,
+            onStop: _stopReplay,
+          ),
         if (messagesPaused)
           PausedBanner(
             pendingCount: pendingMessages.length,
@@ -2734,6 +3000,38 @@ class _MyHomePageState extends State<MyHomePage>
                       : null,
                   icon: const Icon(
                     Icons.send,
+                    size: 18,
+                  )),
+            ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(0, 10, 5, 10),
+              child: IconButton.outlined(
+                  key: _exportMenuButtonKey,
+                  tooltip: 'Export messages',
+                  style: IconButton.styleFrom(minimumSize: const Size(50, 50)),
+                  // Enabled whenever there's anything captured at all, even
+                  // with no selection -- "Export All" doesn't need one, and
+                  // disabling the whole button on selection alone would make
+                  // that option unreachable from the toolbar.
+                  onPressed: items.isNotEmpty
+                      ? () => _showExportMenu(
+                          effectiveSelection.length, items.length)
+                      : null,
+                  icon: const Icon(
+                    Icons.file_download,
+                    size: 18,
+                  )),
+            ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(0, 10, 5, 10),
+              child: IconButton.outlined(
+                  tooltip: 'Replay messages from file',
+                  style: IconButton.styleFrom(minimumSize: const Size(50, 50)),
+                  onPressed: currentStatus == Status.connected && !_isReplaying
+                      ? showReplayConfigDialog
+                      : null,
+                  icon: const Icon(
+                    Icons.upload_file,
                     size: 18,
                   )),
             ),

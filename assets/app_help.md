@@ -78,7 +78,7 @@ Each message has the following information/options:
 
     - **Copy**: Copies the message data to the clipboard
     - **Detail**: If the message is JSON based, opens a dialog and displays a formatted view. Otherwise, the dialog will just show the original content.
-    - **Replay**: Re-sends the message exactly as defined, with the same subject and data.
+    - **Replay**: Re-sends the message exactly as defined, with the same subject and data. (Not to be confused with the Tools section's file-based **Replay**, below, which re-publishes every message from a previously exported file.)
     - **Edit & Send** - Opens a dialog pre-filled with the message's subject and data, allowing you to edit prior to sending again.
     - **Reply To** - If the selected message has a replyTo subject defined, this option opens a send message box where the subject is pre-filled with the replyTo subject.
 
@@ -182,6 +182,7 @@ Select more than one row to copy them together:
 - **Ctrl + Click** (Cmd + Click on Mac) a row to add just that row to the selection without affecting any others — useful for picking out a few non-adjacent rows. Ctrl+Clicking an already-selected row removes just that row instead.
 - **`Ctrl + Shift + ↓`** / **`Ctrl + Shift + ↑`** grows or shrinks the selection by one row at a time from the currently-selected row.
 - With more than one row selected, **`Ctrl + C`**/**`Cmd + C`** or the row menu's **Copy Selected (N)** entry copies every selected row as plain text, one line per message (`subject: payload`) in the order they're shown on screen. A payload's own embedded line breaks are escaped as a literal `\n` so the copied line count always matches the number of messages selected. A plain click on any row collapses the selection back to just that one row.
+- The row menu's **Export Selected (N)** entry exports the same selection to a file instead of the clipboard — see **Export** under Tools, below.
 
 ## Send Message Dialog Shortcuts
 When the Send Message dialog is open:
@@ -196,6 +197,18 @@ At the bottom of the window are several tools:
 - **Send Message**: Opens a dialog with subject and data fields, allowing the user to send a custom message.
 - **Filter**: This field filters the message list upon each character typed in the box. The filter operation is a **case-insensitive contains** on the message data only.
 - **Find**: This field will highlight results found in the message data. Searches all items and highlights matches within the list.
+- **Export**: Writes captured messages to a file in NDJSON format (one JSON object per line: `subject`, `payload` as base64, and optional `headers`/`capturedAt`) — base64 keeps binary payloads intact, unlike the per-row Replay action above which round-trips through text. Two options:
+    - **Export Selected (N)**: Exports only the currently multi-selected rows (see Multi-Select, above).
+    - **Export All (N)**: Exports every captured message, regardless of any active Filter.
+
+  Both open a confirmation dialog showing the real message count before writing anything. Past a few tens of thousands of messages, the dialog adds a warning that the export may take a moment — it still proceeds if you confirm, rather than silently capping what gets written.
+- **Replay**: Publishes every message from a previously exported NDJSON file back onto the currently connected server, in file order. Only enabled while connected. Opens a config dialog with:
+    - **Choose File**: Picks an NDJSON file (as written by Export). Lines that fail to parse are skipped, with a count shown so you know if anything was dropped.
+    - **Message Interval**: Delay in milliseconds between each message within one pass through the file. `0` sends as fast as possible.
+    - **Repeat Count**: How many additional times to replay the whole file after the first pass — **`0` means play once, no repeat**.
+    - **Repeat Interval**: A separate delay in milliseconds, applied once per full pass, between the last message of one repeat and the first message of the next.
+
+  A live preview shows the total message count and an estimated duration as you adjust the fields (e.g. "Will send 4,210 messages over ~2m 15s"). Once started, the dialog closes and progress is shown in a banner above the message list ("Replaying 340/4,210 (repeat 2/5)") with a **Stop** button that halts before the next scheduled send. Replay and Pause are independent — a replayed message that loops back can still arrive as a normal (buffered, if paused) incoming message.
 
 # Status Bar
 The status bar displays relevant information about the application, and also the current connection status. The bar will be **green** when the connection is active, and **grey** all other times.

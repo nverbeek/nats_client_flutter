@@ -24,6 +24,8 @@ Welcome! This document is a living, context-bootstrapping architectural and oper
 - **Data Syntax Highlighting**: Automatic pretty-printing and syntax highlighting of JSON payloads inside detailed message dialogs.
 - **State & Size Persistence**: Remembers recent connection setups, theme preferences, and window size/position across runs.
 - **Update Notifications** (`lib/update_checker.dart`, toggleable via the "Check for Updates" setting): checks GitHub Releases for this repo on startup and, if newer than the running version, shows a dismissible top-right popover linking to the release. No auto-download/install — this app only distributes via GitHub Releases.
+- **Multi-Select + Clipboard Copy** (Live Messages tab): Shift+Click/Ctrl+Click/Ctrl+Shift+Up/Down select a range or disconnected set of rows; Ctrl+C or the row menu's "Copy Selected (N)" copies them as plain text, one `subject: payload` line per message.
+- **Export & Replay** (`lib/message_export.dart`, `lib/replay_config_dialog.dart`, `lib/replay_banner.dart`, `lib/export_confirm_dialog.dart`): bulk-exports captured Live Messages to an NDJSON file (Selected or All, base64 payloads for lossless binary round-tripping, warn-and-proceed past `largeExportWarningThreshold`), and replays a previously exported file by publishing every message back onto the connected server with configurable message-interval/repeat-count/repeat-interval pacing, a live "will send N messages" preview, and a cancelable `ReplayBanner` that can coexist with the Pause banner.
 
 ---
 
@@ -44,7 +46,8 @@ nats_client_flutter/
 │   ├── color_tab_chip.dart     # Shared colored "bookmark tab" wrapper for a chip; `color` is nullable — null skips the tab/padding entirely (used when subscription colors are toggled off)
 │   ├── connection_history.dart # `ConnectionHistoryEntry` model + encode/decode + `recordConnection()` (dedupe/cap at 10), backing the Host field's history dropdown
 │   ├── constants.dart          # Connection state text, defaults, colors, and SharedPreferences keys
-│   ├── format_utils.dart       # formatCompactCount() — "1.1k"-style compact numbers for the Pause buffered-count pill
+│   ├── export_confirm_dialog.dart # "Export Selected/All" confirmation dialog — real message count, warn-and-proceed past `largeExportWarningThreshold`
+│   ├── format_utils.dart       # decodeMessageText(), formatCompactCount() ("1.1k"-style, Pause's buffered-count pill), formatGroupedCount() (exact comma-grouped counts), formatEstimatedDuration() — shared text-formatting helpers
 │   ├── help_dialog.dart        # Stateless widget dialog that parses and displays assets/app_help.md
 │   ├── highlight_theme.dart    # Theme configurations for the code highlighter
 │   ├── jetstream_consumer_dialog.dart    # "Create Consumer" dialog (push/pull, ack/deliver policy)
@@ -59,10 +62,14 @@ nats_client_flutter/
 │   ├── kv_put_dialog.dart       # "Put Value"/"Edit Value" dialog (locks Key + shows revision on edit)
 │   ├── main.dart               # Main entry point, ThemeModel provider, and MyHomePage (core state machine)
 │   ├── message_detail_dialog.dart # Dialog widget for inspecting subject, headers, and pretty JSON payloads
+│   ├── message_export.dart     # Pure NDJSON serialize/parse for Export/Replay (`ExportedMessage`, encode/decode line, `parseExportedMessagesNdjson`) — no `file_picker`/`Client` I/O, so it's unit-testable standalone
 │   ├── object_store_bucket_dialog.dart # "Create Bucket" dialog (name, storage, max size, TTL, replicas)
 │   ├── object_store_dashboard.dart     # Bucket/object monitor + upload/download/delete (Object Store tab's main widget; no live watch)
 │   ├── object_store_manager.dart       # Thin, testable wrapper around client.jetStream()/ObjectStore calls
+│   ├── paused_banner.dart      # Sibling banner (never a list item) shown above the message list while Pause is active
 │   ├── regex_text_highlight.dart  # Custom inline text highlighting engine using regex substring matching
+│   ├── replay_banner.dart      # Sibling banner shown above the message list while a file-based Replay is running; can coexist with `paused_banner.dart` (orthogonal states)
+│   ├── replay_config_dialog.dart # Replay's file-pick + pacing (message interval, repeat count/interval) dialog, with a live "will send N messages over ~M" preview
 │   ├── security_settings_dialog.dart # TLS config file selector (Trusted Cert, Cert Chain, Private Key paths)
 │   ├── send_message_dialog.dart # Form dialog for publishing/sending standard, edit-replay, or JetStream payloads
 │   ├── service_discovery_dashboard.dart # Fan-out Discover + master/detail service/endpoint/stats view (Services tab's main widget; no live watch)
@@ -88,12 +95,14 @@ nats_client_flutter/
 │   ├── kv_dashboard_test.dart, kv_manager_test.dart, kv_bucket_dialog_test.dart, kv_put_dialog_test.dart
 │   ├── object_store_dashboard_test.dart, object_store_manager_test.dart, object_store_bucket_dialog_test.dart
 │   ├── message_detail_dialog_test.dart, settings_dialog_test.dart, security_settings_dialog_test.dart, update_checker_test.dart, ...
+│   ├── message_export_test.dart, replay_banner_test.dart, export_confirm_dialog_test.dart, replay_config_dialog_test.dart # Milestone 22 (Export/Replay): NDJSON round-trip + injected-fake-file widget tests
 │   └── connection_history_test.dart # Pure logic: encode/decode round-trip, recordConnection() dedupe/cap/move-to-front
 ├── integration_test/           # Real-backend end-to-end tests against a live nats-server (see Recipe E/F)
 │   ├── helpers/nats_test_app.dart       # pumpConnectedApp/disconnectApp/pumpUntil/waitForSnackBarGone
 │   ├── helpers/screenshot_signal.dart   # File-handshake helper used only by screenshot_tour_test.dart (see Recipe G)
 │   ├── live_messages_test.dart          # Core pub/sub round trip
 │   ├── live_messages_interactions_test.dart # Filter/Find/row menu/keyboard shortcuts
+│   ├── live_messages_export_replay_test.dart # Export Selected -> Replay byte-for-byte round trip, repeat-interval pacing, and Stop canceling a running replay
 │   ├── send_message_headers_test.dart   # A header attached in Send Message round-trips into the received message's Detail dialog
 │   ├── jetstream_lifecycle_test.dart    # Full stream/consumer mutation lifecycle incl. Ack/Nak/Term
 │   ├── kv_lifecycle_test.dart           # Full KV bucket/key mutation lifecycle incl. live external updates + optimistic-concurrency conflict
@@ -328,7 +337,7 @@ docker build -t nats-client-flutter .
 ## 6. AI Agent Guidelines & Coding Guardrails
 
 ### Coding & Architectural Principles
-- **Avoid Over-Bloating `main.dart`**: `lib/main.dart` is currently the core state machine but sits at ~1500 lines. If you are adding complex new business logic (e.g., historical state export, complex message parsers, database storage), extract helper classes, utilities, or managers to new, self-contained files inside `lib/` rather than adding length to `main.dart`.
+- **Avoid Over-Bloating `main.dart`**: `lib/main.dart` is the core state machine and already several thousand lines long (growing with nearly every milestone). If you are adding complex new business logic (e.g., message parsers, serialization formats, storage), extract helper classes, utilities, or managers to new, self-contained files inside `lib/` — `main.dart` should mostly hold state fields, orchestration methods, and widget wiring that call into them (see `lib/message_export.dart`/`lib/replay_config_dialog.dart` vs. Milestone 22's `_exportMessages`/`_runReplay` in `main.dart` for the split).
 - **Prefer Composition & Material 3 Primitives**: Rely on clean composition and vanilla Material 3 styling components. Check and maintain visual coherence with existing screens (see screenshots inside `images/`).
 - **Strict Lint Compliance**: Never use linter ignore statements (`// ignore: ...`) or suppress warning markers unless there is an absolute, well-documented platform-level compiler barrier. Maintain type safety, avoiding unnecessary casts (`as`) or dynamically typed constructs (`dynamic`) where explicit typing can be defined.
 

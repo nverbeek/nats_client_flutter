@@ -28,3 +28,27 @@ String formatCompactCount(int n) {
       : rounded.toStringAsFixed(1);
   return '${text}k';
 }
+
+/// Thousands-comma grouping for exact counts: `4210` -> `"4,210"`. Distinct
+/// from [formatCompactCount]'s `"4.2k"` style, which fits Pause's "roughly
+/// how much" framing but not Replay's exact-count progress/preview framing.
+String formatGroupedCount(int n) {
+  final digits = n.abs().toString();
+  final buffer = StringBuffer();
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) buffer.write(',');
+    buffer.write(digits[i]);
+  }
+  return (n < 0 ? '-' : '') + buffer.toString();
+}
+
+/// Human-readable estimate of a [Duration] for Replay's live preview:
+/// `~450ms`, `~2m 15s`, `<1s` for a duration that rounds down to nothing.
+String formatEstimatedDuration(Duration d) {
+  if (d.inMilliseconds <= 0) return '<1s';
+  if (d.inMilliseconds < 1000) return '~${d.inMilliseconds}ms';
+  final totalSeconds = d.inSeconds;
+  final minutes = totalSeconds ~/ 60;
+  final seconds = totalSeconds % 60;
+  return minutes == 0 ? '~${seconds}s' : '~${minutes}m ${seconds}s';
+}
