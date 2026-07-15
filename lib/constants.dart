@@ -73,6 +73,7 @@ const String prefRetryInterval = "RETRY_INTERVAL";
 const String prefJetStreamEnabled = "JETSTREAM_ENABLED";
 const String prefKvEnabled = "KV_ENABLED";
 const String prefObjectStoreEnabled = "OBJECT_STORE_ENABLED";
+const String prefServiceDiscoveryEnabled = "SERVICE_DISCOVERY_ENABLED";
 const String prefUpdateCheckEnabled = "UPDATE_CHECK_ENABLED";
 const String prefShowSubscriptionColors = "SHOW_SUBSCRIPTION_COLORS";
 
@@ -87,6 +88,12 @@ const bool defaultKvEnabled = true;
 
 // Object Store defaults
 const bool defaultObjectStoreEnabled = true;
+
+// Service Discovery defaults — opt-in and off by default, unlike JetStream/
+// KV/Object Store: discovery actively publishes `$SRV.PING`/etc onto the
+// account rather than just reading passively, and not every account has any
+// ADR-32 services running to find.
+const bool defaultServiceDiscoveryEnabled = false;
 
 // update check defaults
 const bool defaultUpdateCheckEnabled = true;

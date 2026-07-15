@@ -20,6 +20,7 @@ Welcome! This document is a living, context-bootstrapping architectural and oper
 - **JetStream Dashboard** (`lib/jetstream_*.dart`, toggleable via the "Enable JetStream" setting): monitor streams and consumers, create/purge/delete streams, create/delete consumers (push or pull, any ack policy), browse a stream's messages live, tail a specific consumer with Ack/Nak/Term actions, and publish with JetStream delivery acknowledgement from the regular Send Message dialog.
 - **Key-Value Stores Dashboard** (`lib/kv_*.dart`, toggleable via the "Enable Key-Value Stores" setting): monitor and manage KV buckets (backed by JetStream) — create/delete buckets, put/edit/delete/purge keys with optimistic-concurrency conflict detection on edit, per-key revision history, live search, and real-time updates via `KeyValue.watch()` (including changes made by other clients).
 - **Object Store Dashboard** (`lib/object_store_*.dart`, toggleable via the "Enable Object Store" setting): monitor and manage Object Store buckets (also backed by JetStream) — create/delete buckets, upload/download/delete objects (blobs), live search. Object Store is an `EXPERIMENTAL` API in the underlying `dart_nats` package, and has no `watch()` equivalent (unlike KV), so the object list needs an explicit Refresh rather than updating live.
+- **Services Dashboard** (`lib/service_discovery_*.dart`, toggleable via the "Enable Service Discovery" setting, **off by default** unlike the other three): discovers NATS Microservices (ADR-32 `$SRV.*` convention) currently running on the account — Discover fans a request out and collects replies for a bounded window, selecting a result shows its endpoints and per-endpoint request/error/latency stats. Read-only/discovery-only; this app doesn't host services itself. Relies on `discoverServices()`/`getServicesInfo()`/`getServicesStats()`, which don't exist in mainline `dart_nats` — see the `dart_nats` dependency note below.
 - **Data Syntax Highlighting**: Automatic pretty-printing and syntax highlighting of JSON payloads inside detailed message dialogs.
 - **State & Size Persistence**: Remembers recent connection setups, theme preferences, and window size/position across runs.
 - **Update Notifications** (`lib/update_checker.dart`, toggleable via the "Check for Updates" setting): checks GitHub Releases for this repo on startup and, if newer than the running version, shows a dismissible top-right popover linking to the release. No auto-download/install — this app only distributes via GitHub Releases.
@@ -64,7 +65,9 @@ nats_client_flutter/
 │   ├── regex_text_highlight.dart  # Custom inline text highlighting engine using regex substring matching
 │   ├── security_settings_dialog.dart # TLS config file selector (Trusted Cert, Cert Chain, Private Key paths)
 │   ├── send_message_dialog.dart # Form dialog for publishing/sending standard, edit-replay, or JetStream payloads
-│   ├── settings_dialog.dart    # App options dialog (font size, retry interval, JetStream toggle, Key-Value toggle, Object Store toggle, update-check toggle, subscription-colors toggle)
+│   ├── service_discovery_dashboard.dart # Fan-out Discover + master/detail service/endpoint/stats view (Services tab's main widget; no live watch)
+│   ├── service_discovery_manager.dart   # Thin, testable wrapper around client.discoverServices()/getServicesInfo()/getServicesStats() (fork-only API)
+│   ├── settings_dialog.dart    # App options dialog (font size, retry interval, JetStream toggle, Key-Value toggle, Object Store toggle, Service Discovery toggle, update-check toggle, subscription-colors toggle)
 │   ├── subject_chips_row.dart  # Toolbar chip row replacing the old Subjects text field (one chip per subscription, color swatch, overflow "+N more")
 │   ├── subscription_info.dart  # `SubscriptionInfo` model (subject/queueGroup persisted, colorIndex/sid runtime-only) + `resolveSubscriptionColor()`
 │   ├── subscription_manager_dialog.dart # Full subscription list dialog (add/remove/queue-group-edit per row, live unsub/resub)
@@ -114,7 +117,7 @@ nats_client_flutter/
 ## 3. Tech Stack & Architectural Design
 
 ### Core Libraries (from `pubspec.yaml`)
-- **`dart_nats`**: Low-level NATS client protocol handler.
+- **`dart_nats`**: Low-level NATS client protocol handler. **Currently a `git:` dependency** pointing at `nverbeek/dart-nats` (a fork), branch `feature/service-discovery` — not mainline pub.dev, as of Milestone 18. The fork adds `Client.discoverServices()`/`getServicesInfo()`/`getServicesStats()` on top of the hosting-side `addService()`/`MicroService` (ADR-32 Microservices) the upstream maintainer landed unreleased just before this milestone. An upstream PR is intentionally deferred until this app's usage has proven the API out — see ROADMAP.md's Milestone 18 section and the fork's own `CHANGELOG.md` `## Unreleased` entry. Revert `pubspec.yaml` to a normal `^x.y.z` pub.dev constraint once/if that (or an equivalent) lands upstream.
 - **`provider`**: Used for lightweight application state, specifically managing dark/light `ThemeModel`.
 - **`window_manager`**: Handles window resizing, positioning, and persistence on Desktop.
 - **`loader_overlay`**: Displays asynchronous loading/connecting modal states.

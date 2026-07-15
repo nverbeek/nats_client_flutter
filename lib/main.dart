@@ -31,6 +31,8 @@ import 'object_store_manager.dart';
 import 'paused_banner.dart';
 import 'send_message_dialog.dart';
 import 'help_dialog.dart';
+import 'service_discovery_dashboard.dart';
+import 'service_discovery_manager.dart';
 import 'settings_dialog.dart';
 import 'security_settings_dialog.dart';
 import 'subject_chips_row.dart';
@@ -353,6 +355,11 @@ class _MyHomePageState extends State<MyHomePage>
   final GlobalKey<ObjectStoreDashboardState> _objectStoreDashboardKey =
       GlobalKey();
 
+  // Service Discovery tab
+  bool serviceDiscoveryEnabled = constants.defaultServiceDiscoveryEnabled;
+  final GlobalKey<ServiceDiscoveryDashboardState>
+      _serviceDiscoveryDashboardKey = GlobalKey();
+
   // Add a ScrollController for the ListView
   final ScrollController _listScrollController = ScrollController();
 
@@ -369,6 +376,7 @@ class _MyHomePageState extends State<MyHomePage>
   JetStreamManager? _jetStreamManager;
   KvManager? _kvManager;
   ObjectStoreManager? _objectStoreManager;
+  ServiceDiscoveryManager? _serviceDiscoveryManager;
   bool isConnected = false;
   String connectionStateString = constants.disconnected;
 
@@ -485,6 +493,9 @@ class _MyHomePageState extends State<MyHomePage>
           prefs.getBool(constants.prefKvEnabled) ?? constants.defaultKvEnabled;
       objectStoreEnabled = prefs.getBool(constants.prefObjectStoreEnabled) ??
           constants.defaultObjectStoreEnabled;
+      serviceDiscoveryEnabled =
+          prefs.getBool(constants.prefServiceDiscoveryEnabled) ??
+              constants.defaultServiceDiscoveryEnabled;
       updateCheckEnabled = prefs.getBool(constants.prefUpdateCheckEnabled) ??
           constants.defaultUpdateCheckEnabled;
       showSubscriptionColors =
@@ -642,6 +653,8 @@ class _MyHomePageState extends State<MyHomePage>
     prefs.setBool(constants.prefJetStreamEnabled, jetStreamEnabled);
     prefs.setBool(constants.prefKvEnabled, kvEnabled);
     prefs.setBool(constants.prefObjectStoreEnabled, objectStoreEnabled);
+    prefs.setBool(
+        constants.prefServiceDiscoveryEnabled, serviceDiscoveryEnabled);
     prefs.setBool(constants.prefUpdateCheckEnabled, updateCheckEnabled);
     prefs.setBool(constants.prefShowSubscriptionColors, showSubscriptionColors);
   }
@@ -849,18 +862,19 @@ class _MyHomePageState extends State<MyHomePage>
     }
   }
 
-  /// Live Messages is always tab 0; JetStream, Key-Value, and Object Store
-  /// each add one more tab, in that order, when their respective settings
-  /// toggle is on.
+  /// Live Messages is always tab 0; JetStream, Key-Value, Object Store, and
+  /// Services each add one more tab, in that order, when their respective
+  /// settings toggle is on.
   int get _visibleTabCount =>
       1 +
       (jetStreamEnabled ? 1 : 0) +
       (kvEnabled ? 1 : 0) +
-      (objectStoreEnabled ? 1 : 0);
+      (objectStoreEnabled ? 1 : 0) +
+      (serviceDiscoveryEnabled ? 1 : 0);
 
   /// `TabController.length` is fixed at construction, but which tabs are
-  /// visible can change at runtime (the JetStream/KV/Object Store toggles in
-  /// Settings).
+  /// visible can change at runtime (the JetStream/KV/Object Store/Services
+  /// toggles in Settings).
   /// Call this any time either toggle changes so the controller always
   /// matches what's actually shown; a no-op if the count didn't change.
   void _ensureTabController() {
@@ -913,6 +927,7 @@ class _MyHomePageState extends State<MyHomePage>
     _jetStreamManager = JetStreamManager(natsClient);
     _kvManager = KvManager(natsClient);
     _objectStoreManager = ObjectStoreManager(natsClient);
+    _serviceDiscoveryManager = ServiceDiscoveryManager(natsClient);
 
     // surface authentication failures distinctly from generic connection
     // failures (a bad password/token/nkey/creds file closes the connection
@@ -1598,6 +1613,7 @@ class _MyHomePageState extends State<MyHomePage>
           initialJetStreamEnabled: jetStreamEnabled,
           initialKvEnabled: kvEnabled,
           initialObjectStoreEnabled: objectStoreEnabled,
+          initialServiceDiscoveryEnabled: serviceDiscoveryEnabled,
           initialUpdateCheckEnabled: updateCheckEnabled,
           initialShowSubscriptionColors: showSubscriptionColors,
           onSave: (
@@ -1606,6 +1622,7 @@ class _MyHomePageState extends State<MyHomePage>
             jetStreamEnabledValue,
             kvEnabledValue,
             objectStoreEnabledValue,
+            serviceDiscoveryEnabledValue,
             updateCheckEnabledValue,
             showSubscriptionColorsValue,
           ) {
@@ -1617,6 +1634,7 @@ class _MyHomePageState extends State<MyHomePage>
               jetStreamEnabled = jetStreamEnabledValue;
               kvEnabled = kvEnabledValue;
               objectStoreEnabled = objectStoreEnabledValue;
+              serviceDiscoveryEnabled = serviceDiscoveryEnabledValue;
               updateCheckEnabled = updateCheckEnabledValue;
               showSubscriptionColors = showSubscriptionColorsValue;
               _ensureTabController();
@@ -2404,6 +2422,7 @@ class _MyHomePageState extends State<MyHomePage>
                   if (jetStreamEnabled) const Tab(text: 'JetStream'),
                   if (kvEnabled) const Tab(text: 'Key-Value Stores'),
                   if (objectStoreEnabled) const Tab(text: 'Object Store'),
+                  if (serviceDiscoveryEnabled) const Tab(text: 'Services'),
                 ],
               ),
             Expanded(
@@ -2432,6 +2451,13 @@ class _MyHomePageState extends State<MyHomePage>
                             key: _objectStoreDashboardKey,
                             manager: currentStatus == Status.connected
                                 ? _objectStoreManager
+                                : null,
+                          ),
+                        if (serviceDiscoveryEnabled)
+                          ServiceDiscoveryDashboard(
+                            key: _serviceDiscoveryDashboardKey,
+                            manager: currentStatus == Status.connected
+                                ? _serviceDiscoveryManager
                                 : null,
                           ),
                       ],

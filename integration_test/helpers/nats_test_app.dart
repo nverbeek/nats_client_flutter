@@ -69,6 +69,11 @@ Future<void> pumpConnectedApp(
   await prefs.setBool(constants.prefJetStreamEnabled, true);
   await prefs.setBool(constants.prefKvEnabled, true);
   await prefs.setBool(constants.prefObjectStoreEnabled, true);
+  // Service Discovery defaults off (unlike the other three) — reset
+  // explicitly for the same "no leftover file-backed state" reason as every
+  // other key here, so tests that assume a fixed 4-tab/switch layout aren't
+  // silently broken by an earlier manual run that turned it on.
+  await prefs.setBool(constants.prefServiceDiscoveryEnabled, false);
   // Must be one of the Settings dialog's fixed dropdown options (3/5/10/30)
   // -- an out-of-set value crashes DropdownButtonFormField's "exactly one
   // matching item" assertion the moment Settings is opened. Reset here for
@@ -112,6 +117,11 @@ Future<void> pumpDisconnectedApp(
   await prefs.setBool(constants.prefJetStreamEnabled, true);
   await prefs.setBool(constants.prefKvEnabled, true);
   await prefs.setBool(constants.prefObjectStoreEnabled, true);
+  // Service Discovery defaults off (unlike the other three) — reset
+  // explicitly for the same "no leftover file-backed state" reason as every
+  // other key here, so tests that assume a fixed 4-tab/switch layout aren't
+  // silently broken by an earlier manual run that turned it on.
+  await prefs.setBool(constants.prefServiceDiscoveryEnabled, false);
   // Must be one of the Settings dialog's fixed dropdown options (3/5/10/30)
   // -- an out-of-set value crashes DropdownButtonFormField's "exactly one
   // matching item" assertion the moment Settings is opened. Reset here for

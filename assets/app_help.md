@@ -15,6 +15,7 @@ The application provides a settings dialog (⚙️ button in the toolbar) with t
 - **Enable JetStream**: Shows or hides the JetStream tab (see below). On by default; turning it off doesn't affect your connection or the Live Messages tab, it just hides the JetStream UI for users who don't need it.
 - **Enable Key-Value Stores**: Shows or hides the Key-Value Stores tab (see below). On by default; same "just hides the UI" behavior as the JetStream toggle.
 - **Enable Object Store**: Shows or hides the Object Store tab (see below). On by default; same "just hides the UI" behavior as the JetStream toggle.
+- **Enable Service Discovery**: Shows or hides the Services tab (see below). **Off by default**, unlike the other three toggles — discovery actively publishes requests onto the account rather than just reading passively, and not every account has any services to find.
 - **Check for Updates**: Controls whether the app checks GitHub for a newer release on startup (see Update Notifications below). On by default.
 
 # Connection
@@ -142,6 +143,15 @@ Once a bucket is selected, its objects are listed with their size, chunk count, 
 - Each object row offers:
     - **Download**: Opens your OS's save-file dialog and writes the downloaded bytes there, after the client verifies the object's SHA-256 digest.
     - **Delete**: Permanently deletes the object. Asks for confirmation first.
+
+# Services
+When **Enable Service Discovery** is turned on in Settings and you're connected, a **Services** tab appears. It finds [NATS Microservices](https://docs.nats.io/using-nats/developer/services) (the ADR-32 "Services API" convention used by `nats.go`'s `micro` package and equivalents in other languages) currently running and reachable on the account — this app only *discovers* services, it doesn't host any of its own.
+
+Discovery works by publishing a request to well-known `$SRV.*` subjects and collecting whatever replies arrive within a short window — it's a **snapshot, not a live view**. A service that stops after a Discover won't disappear from the list on its own; run **Discover** again to refresh.
+
+- **Discover**: Fans a request out to every running service and populates the list as replies arrive.
+- Selecting a service instance fetches its endpoints (name and subject) and, alongside them, its request/error counts and average processing time per endpoint.
+- **Refresh** (in the detail pane): Re-fetches the selected instance's detail. If it no longer responds, the app tells you it may have stopped since the last Discover, rather than silently leaving stale data on screen.
 
 # Keyboard Shortcuts
 

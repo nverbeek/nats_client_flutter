@@ -4,7 +4,8 @@ import 'package:nats_client_flutter/settings_dialog.dart';
 
 void main() {
   Widget buildDialog(
-      void Function(double, int, bool, bool, bool, bool, bool) onSave) {
+      void Function(double, int, bool, bool, bool, bool, bool, bool)
+          onSave) {
     return MaterialApp(
       home: Scaffold(
         body: SettingsDialog(
@@ -13,6 +14,7 @@ void main() {
           initialJetStreamEnabled: true,
           initialKvEnabled: true,
           initialObjectStoreEnabled: true,
+          initialServiceDiscoveryEnabled: true,
           initialUpdateCheckEnabled: true,
           initialShowSubscriptionColors: true,
           onSave: onSave,
@@ -22,8 +24,8 @@ void main() {
   }
 
   testWidgets('shows the initial values', (tester) async {
-    await tester
-        .pumpWidget(buildDialog((_, __, ___, ____, _____, ______, _______) {}));
+    await tester.pumpWidget(
+        buildDialog((_, __, ___, ____, _____, ______, _______, ________) {}));
 
     expect(find.text('14'), findsOneWidget);
     expect(find.text('5 seconds'), findsOneWidget);
@@ -33,18 +35,20 @@ void main() {
     final jetStreamSwitch = switches[1];
     final kvSwitch = switches[2];
     final objectStoreSwitch = switches[3];
-    final updateCheckSwitch = switches[4];
+    final serviceDiscoverySwitch = switches[4];
+    final updateCheckSwitch = switches[5];
     expect(showSubscriptionColorsSwitch.value, isTrue);
     expect(jetStreamSwitch.value, isTrue);
     expect(kvSwitch.value, isTrue);
     expect(objectStoreSwitch.value, isTrue);
+    expect(serviceDiscoverySwitch.value, isTrue);
     expect(updateCheckSwitch.value, isTrue);
   });
 
   testWidgets('toggling Show Subscription Colors flips its switch',
       (tester) async {
-    await tester
-        .pumpWidget(buildDialog((_, __, ___, ____, _____, ______, _______) {}));
+    await tester.pumpWidget(
+        buildDialog((_, __, ___, ____, _____, ______, _______, ________) {}));
 
     final showSubscriptionColorsSwitchFinder = find.byType(Switch).at(0);
     await tester.tap(showSubscriptionColorsSwitchFinder);
@@ -56,8 +60,8 @@ void main() {
   });
 
   testWidgets('toggling Enable JetStream flips its switch', (tester) async {
-    await tester
-        .pumpWidget(buildDialog((_, __, ___, ____, _____, ______, _______) {}));
+    await tester.pumpWidget(
+        buildDialog((_, __, ___, ____, _____, ______, _______, ________) {}));
 
     final jetStreamSwitchFinder = find.byType(Switch).at(1);
     await tester.tap(jetStreamSwitchFinder);
@@ -69,8 +73,8 @@ void main() {
 
   testWidgets('toggling Enable Key-Value Stores flips its switch',
       (tester) async {
-    await tester
-        .pumpWidget(buildDialog((_, __, ___, ____, _____, ______, _______) {}));
+    await tester.pumpWidget(
+        buildDialog((_, __, ___, ____, _____, ______, _______, ________) {}));
 
     final kvSwitchFinder = find.byType(Switch).at(2);
     await tester.tap(kvSwitchFinder);
@@ -81,8 +85,8 @@ void main() {
   });
 
   testWidgets('toggling Enable Object Store flips its switch', (tester) async {
-    await tester
-        .pumpWidget(buildDialog((_, __, ___, ____, _____, ______, _______) {}));
+    await tester.pumpWidget(
+        buildDialog((_, __, ___, ____, _____, ______, _______, ________) {}));
 
     final objectStoreSwitchFinder = find.byType(Switch).at(3);
     await tester.tap(objectStoreSwitchFinder);
@@ -92,9 +96,27 @@ void main() {
     expect(objectStoreSwitch.value, isFalse);
   });
 
+  testWidgets('toggling Enable Service Discovery flips its switch',
+      (tester) async {
+    await tester.pumpWidget(
+        buildDialog((_, __, ___, ____, _____, ______, _______, ________) {}));
+
+    // The dialog's content is scrollable once this many toggles are present
+    // — scroll the switch into view before tapping it, same reasoning as
+    // the Check for Updates test below.
+    final serviceDiscoverySwitchFinder = find.byType(Switch).at(4);
+    await tester.ensureVisible(serviceDiscoverySwitchFinder);
+    await tester.tap(serviceDiscoverySwitchFinder);
+    await tester.pump();
+
+    final serviceDiscoverySwitch =
+        tester.widget<Switch>(serviceDiscoverySwitchFinder);
+    expect(serviceDiscoverySwitch.value, isFalse);
+  });
+
   testWidgets('toggling Check for Updates flips its switch', (tester) async {
-    await tester
-        .pumpWidget(buildDialog((_, __, ___, ____, _____, ______, _______) {}));
+    await tester.pumpWidget(
+        buildDialog((_, __, ___, ____, _____, ______, _______, ________) {}));
 
     // The dialog's content became scrollable once the Object Store toggle
     // pushed it past the fixed content height — scroll the last switch into
@@ -110,8 +132,8 @@ void main() {
 
   testWidgets('changing the Reconnect Interval dropdown updates the value',
       (tester) async {
-    await tester
-        .pumpWidget(buildDialog((_, __, ___, ____, _____, ______, _______) {}));
+    await tester.pumpWidget(
+        buildDialog((_, __, ___, ____, _____, ______, _______, ________) {}));
 
     await tester.tap(find.text('5 seconds'));
     await tester.pumpAndSettle();
@@ -123,8 +145,8 @@ void main() {
 
   testWidgets('dragging the font size slider updates the displayed value',
       (tester) async {
-    await tester
-        .pumpWidget(buildDialog((_, __, ___, ____, _____, ______, _______) {}));
+    await tester.pumpWidget(
+        buildDialog((_, __, ___, ____, _____, ______, _______, ________) {}));
 
     expect(find.text('14'), findsOneWidget);
     await tester.drag(find.byType(Slider), const Offset(200, 0));
@@ -148,9 +170,11 @@ void main() {
                   initialJetStreamEnabled: true,
                   initialKvEnabled: true,
                   initialObjectStoreEnabled: true,
+                  initialServiceDiscoveryEnabled: true,
                   initialUpdateCheckEnabled: true,
                   initialShowSubscriptionColors: true,
-                  onSave: (_, __, ___, ____, _____, ______, _______) =>
+                  onSave: (_, __, ___, ____, _____, ______, _______,
+                          ________) =>
                       saveCalled = true,
                 ),
               ),
@@ -177,6 +201,7 @@ void main() {
     bool? savedJetStreamEnabled;
     bool? savedKvEnabled;
     bool? savedObjectStoreEnabled;
+    bool? savedServiceDiscoveryEnabled;
     bool? savedUpdateCheckEnabled;
     bool? savedShowSubscriptionColors;
 
@@ -193,15 +218,18 @@ void main() {
                   initialJetStreamEnabled: true,
                   initialKvEnabled: true,
                   initialObjectStoreEnabled: true,
+                  initialServiceDiscoveryEnabled: true,
                   initialUpdateCheckEnabled: true,
                   initialShowSubscriptionColors: true,
                   onSave: (fontSize, retryInterval, jetStream, kv,
-                      objectStore, updateCheck, showSubscriptionColors) {
+                      objectStore, serviceDiscovery, updateCheck,
+                      showSubscriptionColors) {
                     savedFontSize = fontSize;
                     savedRetryInterval = retryInterval;
                     savedJetStreamEnabled = jetStream;
                     savedKvEnabled = kv;
                     savedObjectStoreEnabled = objectStore;
+                    savedServiceDiscoveryEnabled = serviceDiscovery;
                     savedUpdateCheckEnabled = updateCheck;
                     savedShowSubscriptionColors = showSubscriptionColors;
                   },
@@ -229,6 +257,7 @@ void main() {
     expect(savedJetStreamEnabled, isFalse);
     expect(savedKvEnabled, isTrue);
     expect(savedObjectStoreEnabled, isTrue);
+    expect(savedServiceDiscoveryEnabled, isTrue);
     expect(savedUpdateCheckEnabled, isTrue);
     expect(savedShowSubscriptionColors, isTrue);
     expect(find.byType(SettingsDialog), findsNothing);

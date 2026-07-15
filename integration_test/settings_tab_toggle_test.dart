@@ -136,4 +136,38 @@ void main() {
     expect(find.text('Key-Value Stores'), findsOneWidget);
     expect(find.text('Object Store'), findsOneWidget);
   });
+
+  testWidgets(
+      'Service Discovery defaults off, and toggling it on/off adds/removes its tab',
+      (tester) async {
+    await pumpDisconnectedApp(tester);
+
+    // Unlike JetStream/Key-Value/Object Store, Service Discovery defaults
+    // off — no tab for it until explicitly enabled.
+    expect(find.text('Services'), findsNothing);
+
+    await openSettings(tester);
+    // Switches, in order: Show Subscription Colors, Enable JetStream, Enable
+    // Key-Value Stores, Enable Object Store, Enable Service Discovery, Check
+    // for Updates.
+    final serviceDiscoverySwitchFinder = find.byType(Switch).at(4);
+    await tester.ensureVisible(serviceDiscoverySwitchFinder);
+    await tester.tap(serviceDiscoverySwitchFinder);
+    await saveSettings(tester);
+    expect(tester.takeException(), isNull);
+    expect(find.text('Services'), findsOneWidget);
+
+    // The tab must be interactive immediately (same TabController-rebuild
+    // regression this whole file exists to guard against).
+    await tester.tap(find.text('Services'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    await openSettings(tester);
+    await tester.ensureVisible(serviceDiscoverySwitchFinder);
+    await tester.tap(serviceDiscoverySwitchFinder);
+    await saveSettings(tester);
+    expect(tester.takeException(), isNull);
+    expect(find.text('Services'), findsNothing);
+  });
 }

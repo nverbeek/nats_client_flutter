@@ -6,9 +6,10 @@ class SettingsDialog extends StatefulWidget {
   final bool initialJetStreamEnabled;
   final bool initialKvEnabled;
   final bool initialObjectStoreEnabled;
+  final bool initialServiceDiscoveryEnabled;
   final bool initialUpdateCheckEnabled;
   final bool initialShowSubscriptionColors;
-  final void Function(double, int, bool, bool, bool, bool, bool) onSave;
+  final void Function(double, int, bool, bool, bool, bool, bool, bool) onSave;
 
   const SettingsDialog({
     super.key,
@@ -17,6 +18,7 @@ class SettingsDialog extends StatefulWidget {
     required this.initialJetStreamEnabled,
     required this.initialKvEnabled,
     required this.initialObjectStoreEnabled,
+    required this.initialServiceDiscoveryEnabled,
     required this.initialUpdateCheckEnabled,
     required this.initialShowSubscriptionColors,
     required this.onSave,
@@ -32,6 +34,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late bool tempJetStreamEnabled;
   late bool tempKvEnabled;
   late bool tempObjectStoreEnabled;
+  late bool tempServiceDiscoveryEnabled;
   late bool tempUpdateCheckEnabled;
   late bool tempShowSubscriptionColors;
 
@@ -43,6 +46,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     tempJetStreamEnabled = widget.initialJetStreamEnabled;
     tempKvEnabled = widget.initialKvEnabled;
     tempObjectStoreEnabled = widget.initialObjectStoreEnabled;
+    tempServiceDiscoveryEnabled = widget.initialServiceDiscoveryEnabled;
     tempUpdateCheckEnabled = widget.initialUpdateCheckEnabled;
     tempShowSubscriptionColors = widget.initialShowSubscriptionColors;
   }
@@ -182,6 +186,21 @@ class _SettingsDialogState extends State<SettingsDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                const Text('Enable Service Discovery'),
+                Switch(
+                  value: tempServiceDiscoveryEnabled,
+                  onChanged: (v) {
+                    setState(() {
+                      tempServiceDiscoveryEnabled = v;
+                    });
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
                 const Text('Check for Updates'),
                 Switch(
                   value: tempUpdateCheckEnabled,
@@ -212,6 +231,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 tempJetStreamEnabled,
                 tempKvEnabled,
                 tempObjectStoreEnabled,
+                tempServiceDiscoveryEnabled,
                 tempUpdateCheckEnabled,
                 tempShowSubscriptionColors);
             Navigator.of(context).pop();
