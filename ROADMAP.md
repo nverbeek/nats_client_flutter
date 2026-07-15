@@ -30,6 +30,8 @@ These features are made possible by our successful migration to the official mai
 - [ ] **Milestone 20**: Design & Implement **Per-Subscription Message Rate Sparkline** (Low Priority, tentative). Not started — user flagged this one as a "maybe," lowest-confidence of the batch.
 - [x] **Milestone 21**: Design & Implement **Message Detail Headers Table + Raw Copy** (Low Priority). The Message Detail dialog's Headers section now renders as a bordered, rounded two-column grid (key | value, one row per header, horizontal dividers, long values wrap instead of overflowing) instead of one flattened text block, with a copy button next to the "Headers" label that copies the same raw `key: value`-per-line text the section used to show. Implementation, tests, and a visual verification pass (light + dark) are done.
 - [x] **Milestone 22**: Design & Implement **Export & Replay Captured Messages to/from File** (Low Priority). Bulk **Export** (Selected/All, NDJSON with base64 payloads, warn-and-proceed past 20,000 messages) and **Replay** (file-based bulk publish with message/repeat interval + repeat count pacing, a live preview, and a cancelable `ReplayBanner` that can coexist with `PausedBanner`) added to the Live Messages tab's toolbar and row menu. Implementation, unit/widget tests, and a live-server verification pass (export/replay byte-for-byte round trip, repeat interval honored, Stop halts promptly) are done.
+- [ ] **Milestone 23** *(Blocked — not actionable yet)*: Adopt Reconnect-Buffer Overflow Handling (`maxReconnectBuffer`) (Low Priority). Not started — waiting on PR #44 to land upstream and a new `dart_nats` release (likely `1.1.3`).
+- [ ] **Milestone 24** *(Blocked — not actionable yet)*: Adopt Heartbeat Ping/Pong for Faster Dead-Connection Detection (Low Priority). Not started — waiting on PR #44 to land upstream and a new `dart_nats` release (likely `1.1.3`).
 
 ---
 
@@ -676,3 +678,44 @@ Originally scoped as Milestone 19, this was descoped once its multi-select + cli
 - [x] Scope: Live Messages tab only, matching Milestone 19's own scoping decision — JetStream Browse Messages has a different, consumer-backed data source and no shared base.
 - [x] Tests: `test/message_export_test.dart` (NDJSON round-trip including binary-payload fidelity, blank-line/malformed-line handling, multi-message ordering), `test/replay_banner_test.dart`, `test/export_confirm_dialog_test.dart` (under/over-threshold, warn-and-proceed), `test/replay_config_dialog_test.dart` (disconnected-disables-Start, live preview formula incl. repeat-count-0, parse-error surfacing, exact onReplay payload) — all using injected fake file callbacks, no real OS dialog. A live-server `integration_test/live_messages_export_replay_test.dart` covers Export Selected → Replay round-tripping byte-for-byte, a repeat-count > 0 run honoring the repeat interval, and Stop halting a running replay promptly.
 - [x] Documented the NDJSON format, the large-export warning, and the replay pacing/repeat/Stop behavior in `assets/app_help.md`, plus a disambiguation note between the per-row "Replay" (re-send one message) and this file-based "Replay" (bulk publish from a file).
+
+---
+
+## Milestone 23: Adopt Reconnect-Buffer Overflow Handling (`maxReconnectBuffer`) (Low Priority) — Blocked
+
+### Objective
+Upstream commit `3d9bd9b` (landed on `chartchuo/dart-nats` master 2026-07-13, just ahead of this project's own service-discovery PR #44) gives `Client.connect()` a new `maxReconnectBuffer` parameter (default 1000). While disconnected, `pub()`/`pubString()` still queue outgoing messages in an internal buffer for replay once reconnected, but once that buffer hits `maxReconnectBuffer` entries, the call now **throws `NatsException`** instead of buffering forever. Today's uncapped behavior means a long outage combined with continued publishing grows that buffer without bound; the new behavior trades that for a hard failure once the cap is hit — better, but only if this app is ready to catch it.
+
+### Why this is blocked
+This app depends on `dart_nats` via a `git:` pin at `nverbeek/dart-nats#feature/service-discovery` (PR #44, open as of 2026-07-15) rather than a normal pub.dev version constraint — that pin exists solely to carry the service-discovery contribution and was always meant to be temporary. `3d9bd9b` (this reconnect-buffer work) landed upstream before PR #44 was opened, so the fork branch does technically carry it already, but building app-side behavior against a personal fork/branch instead of a released version isn't worth doing. Pulling this in for real should wait until:
+1. PR #44 (client-side service discovery) is merged upstream, and
+2. The maintainer cuts a new tagged release (likely `1.1.3`) so `pubspec.yaml` can go back to a normal version constraint instead of a `git:` dependency pinned to a personal fork/branch.
+
+Adopting this milestone's app-side changes against the fork now would mean writing against an API surface that hasn't shipped in a real release yet — not worth doing until the dependency situation is normal again.
+
+### What would need to change once unblocked
+- **`lib/main.dart`'s three fire-and-forget `pubString()`/`pub()` call sites** (Send dialog ~line 2190, row-menu Replay ~line 2330, Ctrl+R/Edit & Send ~line 2442) currently have no try/catch around the publish call. None of them pass `buffer: false`, so all three rely on the default buffering behavior and would be first to hit a newly-thrown `NatsException` during a long outage with continued sending.
+- Decide the UX for the overflow case — most likely a `SnackBar` (matching the app's existing error-surfacing pattern elsewhere) explaining that too many messages are queued while disconnected, rather than an uncaught exception reaching Flutter's error zone.
+- Consider whether `maxReconnectBuffer`'s default (1000) is worth exposing as a setting, or left as the package default — no user request for this yet, so default to leaving it alone unless raised.
+- Unit/widget test coverage for the new catch path (a fake client/manager throwing `NatsException` from a buffered publish), plus a live-server verification pass forcing a disconnect and publishing past the cap.
+
+### Implementation Checklist
+- [ ] *(Blocked — do not start until PR #44 merges upstream and a new `dart_nats` release, e.g. `1.1.3`, is published and pulled into `pubspec.yaml`.)*
+
+---
+
+## Milestone 24: Adopt Heartbeat Ping/Pong for Faster Dead-Connection Detection (Low Priority) — Blocked
+
+### Objective
+The same upstream commit (`3d9bd9b`) adds a configurable heartbeat mechanism to `Client.connect()`: `pingInterval` (default 120s) and `maxPingsOut` (default 2). The client now sends periodic `PING`s while connected and, if `maxPingsOut` go unanswered, proactively tears down the socket and transitions to `Status.disconnected` — detecting a dead-but-not-yet-TCP-closed connection (e.g. a silently dropped network path, a hung proxy) faster than waiting on the OS-level TCP timeout alone. This is a pure reliability improvement that plugs into the app's existing `onConnect`/`onDisconnect`/reconnect flow (`lib/main.dart`'s `natsConnect()`) with no new UI required in the simplest case.
+
+### Why this is blocked
+Same dependency situation as Milestone 23 — this project pins `dart_nats` to a `git:` fork/branch (`nverbeek/dart-nats#feature/service-discovery`, PR #44) specifically to carry the service-discovery contribution, not as a long-term arrangement. Building app-side behavior around a feature that only exists on a personal fork branch, ahead of both the upstream PR merge and a real tagged release (likely `1.1.3`), isn't worth doing yet — the dependency needs to go back to a normal pub.dev version constraint first.
+
+### What would need to change once unblocked
+- Decide whether to pass non-default `pingInterval`/`maxPingsOut` values from `natsConnect()` in `lib/main.dart`, or accept the package defaults (120s / 2 pings ≈ up to 4 minutes to detect a dead connection) — no user complaint about reconnect latency has come up yet, so defaults are the likely starting point.
+- Confirm this doesn't change observable behavior on the happy path (pings are transport-level, invisible to the UI) — mainly a live-server verification concern (kill the underlying TCP path without a clean close, e.g. a firewall rule or killing a proxy, and confirm `Status.disconnected`/reconnect fires within roughly `pingInterval * maxPingsOut` instead of whatever the OS TCP keepalive/timeout would otherwise take).
+- No new preference/UI is anticipated unless a real need to tune the interval surfaces later.
+
+### Implementation Checklist
+- [ ] *(Blocked — do not start until PR #44 merges upstream and a new `dart_nats` release, e.g. `1.1.3`, is published and pulled into `pubspec.yaml`.)*
