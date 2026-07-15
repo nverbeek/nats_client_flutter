@@ -21,9 +21,11 @@ class MessageDetailDialog extends StatefulWidget {
   State<MessageDetailDialog> createState() => _MessageDetailDialogState();
 }
 
+enum _CopiedSection { headers, payload }
+
 class _MessageDetailDialogState extends State<MessageDetailDialog>
     with SingleTickerProviderStateMixin {
-  bool _showCopied = false;
+  _CopiedSection? _copiedSection;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
@@ -49,9 +51,9 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
     super.dispose();
   }
 
-  void _showCopiedFeedback() {
+  void _showCopiedFeedback(_CopiedSection section) {
     setState(() {
-      _showCopied = true;
+      _copiedSection = section;
     });
     _animationController.forward().then((_) {
       // Wait for 800ms, then fade out
@@ -60,13 +62,73 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
           _animationController.reverse().then((_) {
             if (mounted) {
               setState(() {
-                _showCopied = false;
+                _copiedSection = null;
               });
             }
           });
         }
       });
     });
+  }
+
+  Widget _copiedBadge() {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: Container(
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Theme.of(context).brightness == Brightness.dark
+              ? Colors.green.shade700
+              : Colors.green.shade600,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: const Text(
+          'Copied!',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _copyButton({required VoidCallback onTap, double iconPadding = 8}) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Container(
+          padding: EdgeInsets.all(iconPadding),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor.withValues(alpha: 0.9),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Icon(
+            Icons.copy,
+            size: 16,
+            color: Theme.of(context).iconTheme.color,
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -107,17 +169,83 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
                 child: SelectableText(widget.headerVersion),
               ),
             if (widget.headers.isNotEmpty)
-              const Padding(
-                padding: EdgeInsets.fromLTRB(0, 10, 0, 0),
-                child: Text(
-                  'Headers',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Headers',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_copiedSection == _CopiedSection.headers)
+                          _copiedBadge(),
+                        _copyButton(
+                          iconPadding: 6,
+                          onTap: () {
+                            Clipboard.setData(ClipboardData(text: headerText));
+                            _showCopiedFeedback(_CopiedSection.headers);
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             if (widget.headers.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
-                child: SelectableText(headerText),
+                padding: const EdgeInsets.fromLTRB(0, 6, 0, 0),
+                child: Container(
+                  width: double.infinity,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Theme.of(context)
+                          .dividerColor
+                          .withValues(alpha: 0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: Table(
+                    columnWidths: const {
+                      0: IntrinsicColumnWidth(),
+                      1: IntrinsicColumnWidth(flex: 1),
+                    },
+                    border: TableBorder(
+                      horizontalInside: BorderSide(
+                        color: Theme.of(context)
+                            .dividerColor
+                            .withValues(alpha: 0.3),
+                      ),
+                    ),
+                    children: [
+                      for (final entry in widget.headers.entries)
+                        TableRow(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              child: SelectableText(
+                                entry.key,
+                                style:
+                                    const TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              child: SelectableText(entry.value),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
               ),
             if (widget.formattedJson.isNotEmpty) ...[
               const Padding(
@@ -155,70 +283,14 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (_showCopied)
-                            FadeTransition(
-                              opacity: _fadeAnimation,
-                              child: Container(
-                                margin: const EdgeInsets.only(right: 8),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? Colors.green.shade700
-                                      : Colors.green.shade600,
-                                  borderRadius: BorderRadius.circular(12),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color:
-                                          Colors.black.withValues(alpha: 0.2),
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: const Text(
-                                  'Copied!',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(20),
-                              onTap: () {
-                                Clipboard.setData(
-                                    ClipboardData(text: widget.formattedJson));
-                                _showCopiedFeedback();
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context)
-                                      .cardColor
-                                      .withValues(alpha: 0.9),
-                                  borderRadius: BorderRadius.circular(20),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color:
-                                          Colors.black.withValues(alpha: 0.1),
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: Icon(
-                                  Icons.copy,
-                                  size: 16,
-                                  color: Theme.of(context).iconTheme.color,
-                                ),
-                              ),
-                            ),
+                          if (_copiedSection == _CopiedSection.payload)
+                            _copiedBadge(),
+                          _copyButton(
+                            onTap: () {
+                              Clipboard.setData(
+                                  ClipboardData(text: widget.formattedJson));
+                              _showCopiedFeedback(_CopiedSection.payload);
+                            },
                           ),
                         ],
                       ),

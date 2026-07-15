@@ -28,7 +28,7 @@ These features are made possible by our successful migration to the official mai
 - [ ] **Milestone 18**: Design & Implement **NATS Micro-services (Services API) Discovery** (Medium Priority). Not started.
 - [x] **Milestone 19**: Design & Implement **Multi-Select + Clipboard Copy** (Medium Priority). The Live Messages list supports Shift+Click, Ctrl+Click, and Ctrl+Shift+Up/Down for range and disconnected multi-select; Ctrl+C or the row menu's "Copy Selected (N)" copies every selected row as plain text (`subject: payload`, one line per message). The status bar shows a "Selected: N" count while anything is selected. Implementation, tests, and a live-server verification pass are done.
 - [ ] **Milestone 20**: Design & Implement **Per-Subscription Message Rate Sparkline** (Low Priority, tentative). Not started — user flagged this one as a "maybe," lowest-confidence of the batch.
-- [ ] **Milestone 21**: Design & Implement **Message Detail Headers Table + Raw Copy** (Low Priority). Not started.
+- [x] **Milestone 21**: Design & Implement **Message Detail Headers Table + Raw Copy** (Low Priority). The Message Detail dialog's Headers section now renders as a bordered, rounded two-column grid (key | value, one row per header, horizontal dividers, long values wrap instead of overflowing) instead of one flattened text block, with a copy button next to the "Headers" label that copies the same raw `key: value`-per-line text the section used to show. Implementation, tests, and a visual verification pass (light + dark) are done.
 - [ ] **Milestone 22**: Design & Implement **Export / Import Captured Messages to File** (Low Priority). Not started — descoped from the original Milestone 19 once the lighter multi-select/clipboard-copy slice (now Milestone 19) turned out sufficient for now; revisit only if a clear need for file-based bulk export/import resurfaces.
 
 ---
@@ -622,7 +622,7 @@ Milestone 11 already tags every message with its originating subscription's colo
 
 ---
 
-## Milestone 21: Message Detail Headers Table + Raw Copy (Low Priority)
+## Milestone 21: Message Detail Headers Table + Raw Copy (Low Priority) — Completed
 
 ### Objective
 `lib/message_detail_dialog.dart`'s Headers section (lines 109-121) currently renders all headers as a single flattened block — `headers.forEach((k, v) => headerText += '$k: $v\n')` into one `SelectableText`, no visual separation between keys and values once there's more than one header or a long value. The Payload section right below it already has a copy-to-clipboard `InkWell`/icon with a "Copied!" fade animation (lines 190-222); Headers has no equivalent, so copying header data means manually selecting text out of the flattened block. User-flagged as a readability gap while testing the JetStream message list.
@@ -632,10 +632,19 @@ Milestone 11 already tags every message with its originating subscription's colo
 - Add a copy button next to the Headers section header (mirroring the Payload copy button's icon/position/"Copied!" fade pattern) that copies the headers **raw**, in the same `key: value` newline-joined format already shown today — not the table markup, and not JSON — so the copied text is a plain, greppable/pasteable block identical in spirit to what Payload's copy button does for the payload.
 
 ### Implementation Checklist
-- [ ] Replace the Headers `SelectableText(headerText)` block in `lib/message_detail_dialog.dart` with a simple table/grid layout (key column, value column), keeping each value individually selectable.
-- [ ] Add a copy button for the Headers section reusing the existing `_showCopiedFeedback()`/`_fadeAnimation` mechanism already built for Payload, copying the same `k: v`-per-line raw text currently assembled into `headerText`.
-- [ ] Confirm behavior with zero headers (section already conditionally hidden — no change needed there) and with a large header value (long value shouldn't break the table layout — wrap or scroll, not overflow).
-- [ ] Update/extend `test/message_detail_dialog_test.dart` for the new table rendering and the headers-copy button + "Copied!" feedback.
+- [x] Replace the Headers `SelectableText(headerText)` block in `lib/message_detail_dialog.dart` with a simple table/grid layout (key column, value column), keeping each value individually selectable.
+- [x] Add a copy button for the Headers section reusing the existing `_showCopiedFeedback()`/`_fadeAnimation` mechanism already built for Payload, copying the same `k: v`-per-line raw text currently assembled into `headerText`.
+- [x] Confirm behavior with zero headers (section already conditionally hidden — no change needed there) and with a large header value (long value shouldn't break the table layout — wrap or scroll, not overflow).
+- [x] Update/extend `test/message_detail_dialog_test.dart` for the new table rendering and the headers-copy button + "Copied!" feedback.
+
+### Follow-up: dialog width bug found via live testing
+After shipping the table, live testing against a real server (multi-header messages published via `nats pub -H`) showed the dialog rendering far narrower than the window, with every header value wrapping into a tall column of 1-2-word lines even though most of the window was empty. Root cause: the value column used `FlexColumnWidth`, whose `minIntrinsicWidth`/`maxIntrinsicWidth` both hard-return `0.0` in the Flutter SDK (`packages/flutter/lib/src/rendering/table.dart`). `AlertDialog` already wraps its own content in an `IntrinsicWidth` to size itself (`packages/flutter/lib/src/material/dialog.dart`), so that `0.0` made the dialog completely ignore how wide the values were and collapse to just the key column's width, then cram everything else into whatever was left.
+
+Fix: swapped the value column to `IntrinsicColumnWidth(flex: 1)`, which correctly reports each cell's natural unwrapped width for the dialog's own sizing pass while still flexing to fill/shrink at final layout. No other plumbing was needed — `Dialog`'s default `constraints` (`BoxConstraints(minWidth: 280.0)`, no max) plus the already-present `IntrinsicWidth` handle the rest. Verified with three scenarios at a realistic desktop window size (short headers + short payload → compact dialog; wide headers + short payload → dialog grows to fit headers; short headers + wide payload → dialog grows to fit payload instead), confirming the dialog now sizes to whichever section is widest, as requested. Live-verified against a real `nats-server` afterward.
+
+**General lesson for this codebase**: any future `Table` inside an `AlertDialog` (or anything else that leans on `IntrinsicWidth` for auto-sizing) should use `IntrinsicColumnWidth(flex: ...)` rather than `FlexColumnWidth` for columns whose content should influence the container's size — `FlexColumnWidth` only works correctly when the container's width is already fixed by something else.
+
+**Not done**: `images/Message Detail.png` in the README's screenshot tour still shows the old flattened-text Headers block, not the new table — same "left as a follow-up" situation Milestone 16 hit with its button-style screenshots. Needs the full `scripts/capture_screenshots.ps1`/`screenshot_tour_test.dart` pipeline to re-capture, not done as part of this session.
 
 ---
 

@@ -16,7 +16,8 @@ Widget withThemeModel(Widget child) {
 }
 
 void main() {
-  testWidgets('renders header version and headers when present',
+  testWidgets(
+      'renders header version and headers as a table row when present',
       (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: Scaffold(
@@ -31,7 +32,65 @@ void main() {
     expect(find.text('Header Version'), findsOneWidget);
     expect(find.text('NATS/1.0'), findsOneWidget);
     expect(find.text('Headers'), findsOneWidget);
-    expect(find.textContaining('X-Trace-Id'), findsOneWidget);
+    expect(find.byType(Table), findsOneWidget);
+    // Key and value are separate, individually-selectable cells now, not a
+    // single flattened "key: value" block.
+    expect(find.text('X-Trace-Id'), findsOneWidget);
+    expect(find.text('abc123'), findsOneWidget);
+    expect(find.textContaining('X-Trace-Id: abc123'), findsNothing);
+  });
+
+  testWidgets('multiple headers each render as their own table row',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(
+        body: MessageDetailDialog(
+          headerVersion: '',
+          headers: {'X-Trace-Id': 'abc123', 'X-Request-Id': 'req-456'},
+          formattedJson: '',
+        ),
+      ),
+    ));
+
+    final table = tester.widget<Table>(find.byType(Table));
+    expect(table.children, hasLength(2));
+    expect(find.text('X-Trace-Id'), findsOneWidget);
+    expect(find.text('abc123'), findsOneWidget);
+    expect(find.text('X-Request-Id'), findsOneWidget);
+    expect(find.text('req-456'), findsOneWidget);
+  });
+
+  testWidgets(
+      'tapping the headers copy button copies raw key: value text and shows feedback',
+      (tester) async {
+    final copiedData = <ClipboardData>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copiedData.add(ClipboardData(text: call.arguments['text'] as String));
+        }
+        return null;
+      },
+    );
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(
+        body: MessageDetailDialog(
+          headerVersion: '',
+          headers: {'X-Trace-Id': 'abc123', 'X-Request-Id': 'req-456'},
+          formattedJson: '',
+        ),
+      ),
+    ));
+
+    await tester.tap(find.byIcon(Icons.copy));
+    await tester.pump();
+
+    expect(copiedData.single.text, 'X-Trace-Id: abc123\nX-Request-Id: req-456');
+    expect(find.text('Copied!'), findsOneWidget);
   });
 
   testWidgets('shows the formatted payload and a copy button when non-empty',
