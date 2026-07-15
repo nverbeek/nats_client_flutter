@@ -20,14 +20,16 @@ These features are made possible by our successful migration to the official mai
 - [x] **Milestone 10**: Design & Implement **JetStream Account Info Panel** (Low Priority). Implementation, unit/widget tests, and a live-server verification pass are done. The pass caught a real bug in vendored `dart_nats-1.1.1`'s `JetStream.accountInfo()` (see Milestone 10's section below) — fetching account info now bypasses it entirely.
 - [x] **Milestone 11**: Design & Implement **Subscription Manager & Per-Subscription Color Indicators** (Medium Priority). The Subjects text field is now a chip row (`lib/subject_chips_row.dart`) with a queue-group field baked into each subscription and an overflow "+N more" chip opening a full manager dialog (`lib/subscription_manager_dialog.dart`); Live Messages rows show a per-subscription color dot. Implementation, unit/widget tests, and a live-server verification pass are done.
 - [x] **Milestone 12**: Design & Implement **Connection Host/Port History** (Low/Medium Priority). The Host field is now an editable `Autocomplete` dropdown (`lib/connection_history.dart`) offering up to 10 previously-*successfully*-connected targets, filtering as you type; selecting one fills scheme/host/port together, with per-entry delete and a "Clear history" action. Implementation, unit tests, and a widget/live-server test pass are done (two real Flutter framework bugs found and fixed along the way — see the milestone's notes below).
-- [ ] **Milestone 13**: Design & Implement **Message Direction Indicator (Incoming vs. Outgoing)** (Low/Medium Priority). Not started.
-- [ ] **Milestone 14**: Design & Implement **Request/Reply Correlation Improvements** (Medium Priority). Not started.
-- [ ] **Milestone 15**: Investigate & Implement **Code Signing for Windows & macOS Builds** (Low Priority, cost-gated). Not started — research done, decision on which paid/free path pending.
+- [ ] **Milestone 13** *(Optional follow-up — may never be picked up)*: Design & Implement **Message Direction Indicator (Incoming vs. Outgoing)** (Low/Medium Priority). Not started.
+- [ ] **Milestone 14** *(Optional follow-up — may never be picked up)*: Design & Implement **Request/Reply Correlation Improvements** (Medium Priority). Not started.
+- [ ] **Milestone 15** *(Optional follow-up — may never be picked up)*: Investigate & Implement **Code Signing for Windows & macOS Builds** (Low Priority, cost-gated). Not started — research done, decision on which paid/free path pending.
 - [x] **Milestone 16**: Apply the Latest Material 3 Standards (Low/Medium Priority). Done ahead of Milestones 12-15, same as Milestones 9-11 before it. OS dynamic color (Material You) via `DynamicColorBuilder`, plus `FilledButton`/`IconButton.filled`/`.filledTonal`/`.outlined` adopted for primary/icon-only actions across the connection bar, bottom toolbar, dashboards, and Security Settings' file pickers.
 - [ ] **Milestone 17**: Design & Implement **NATS Server Monitoring Dashboard** (Medium Priority). Not started.
 - [ ] **Milestone 18**: Design & Implement **NATS Micro-services (Services API) Discovery** (Medium Priority). Not started.
-- [ ] **Milestone 19**: Design & Implement **Export / Import Captured Messages** (Medium Priority). Not started.
+- [x] **Milestone 19**: Design & Implement **Multi-Select + Clipboard Copy** (Medium Priority). The Live Messages list supports Shift+Click, Ctrl+Click, and Ctrl+Shift+Up/Down for range and disconnected multi-select; Ctrl+C or the row menu's "Copy Selected (N)" copies every selected row as plain text (`subject: payload`, one line per message). The status bar shows a "Selected: N" count while anything is selected. Implementation, tests, and a live-server verification pass are done.
 - [ ] **Milestone 20**: Design & Implement **Per-Subscription Message Rate Sparkline** (Low Priority, tentative). Not started — user flagged this one as a "maybe," lowest-confidence of the batch.
+- [ ] **Milestone 21**: Design & Implement **Message Detail Headers Table + Raw Copy** (Low Priority). Not started.
+- [ ] **Milestone 22**: Design & Implement **Export / Import Captured Messages to File** (Low Priority). Not started — descoped from the original Milestone 19 once the lighter multi-select/clipboard-copy slice (now Milestone 19) turned out sufficient for now; revisit only if a clear need for file-based bulk export/import resurfaces.
 
 ---
 
@@ -452,9 +454,11 @@ Two rounds of this feature's delete/clear buttons silently not working, tracked 
 
 ---
 
-## Milestone 13: Message Direction Indicator (Incoming vs. Outgoing) (Low/Medium Priority)
+## Milestone 13: Message Direction Indicator (Incoming vs. Outgoing) (Low/Medium Priority, Optional)
 
 ### Objective
+**Optional follow-up** — flagged by the user as something they may never get to; not on any particular timeline, and fine to stay `[ ]` indefinitely. Revisit only if it becomes an active want.
+
 On the Live Messages tab, a sent (published) message currently doesn't appear in the message list at all unless the client also happens to be subscribed back to that exact subject (loopback) — `sendMessage()` (`lib/main.dart` around line 1399) calls `natsClient.pubString()` / `JetStreamManager.publish()` directly and never adds an entry to `items` itself. That makes "did I send this or receive this" hard to track even on subjects where both directions are visible today. This milestone adds: (1) tracking locally-sent messages as first-class list entries regardless of loopback subscription, and (2) a small visual indicator on each row distinguishing outgoing from incoming.
 
 **JetStream note**: `lib/jetstream_message_view.dart`'s Browse Messages / Tail views have no send affordance of their own (verified — no `SendMessageDialog`/publish call anywhere in that file). Publishing into a stream only happens through the Live Messages tab's Send dialog via its "get delivery ack" (JetStream) toggle. So there is currently nothing to mark "outgoing" inside Browse Messages itself — this indicator applies to the Live Messages tab. Adding a dedicated publish affordance directly to the Browse view is out of scope here (see open question below); until/unless that exists, "can JetStream send?" is really "can you publish into a stream from the Send dialog," which it already can.
@@ -471,9 +475,11 @@ On the Live Messages tab, a sent (published) message currently doesn't appear in
 
 ---
 
-## Milestone 14: Request/Reply Correlation Improvements (Medium Priority)
+## Milestone 14: Request/Reply Correlation Improvements (Medium Priority, Optional)
 
 ### Objective
+**Optional follow-up** — flagged by the user as something they may never get to; not on any particular timeline, and fine to stay `[ ]` indefinitely. Revisit only if it becomes an active want.
+
 User feedback asked whether request/reply correlation could be improved. Today, "Reply To" (`lib/main.dart` around lines 1525-1532) only pre-fills the Send dialog's subject field with the original message's `replyTo` subject — it's an ordinary publish with no automatic pairing. True NATS request/reply (a private per-request inbox subject, awaited for a single correlated response) isn't used anywhere in the app today, so a real request/reply round trip wouldn't even show up in the message list (the app isn't subscribed to the inbox subject it would use).
 
 ### What `dart_nats` actually offers (verified against the vendored 1.1.1 source)
@@ -495,9 +501,11 @@ User feedback asked whether request/reply correlation could be improved. Today, 
 
 ---
 
-## Milestone 15: Code Signing for Windows & macOS Builds (Low Priority, cost-gated)
+## Milestone 15: Code Signing for Windows & macOS Builds (Low Priority, cost-gated, Optional)
 
 ### Objective
+**Optional follow-up** — flagged by the user as something they may never get to; not on any particular timeline, and fine to stay `[ ]` indefinitely. Revisit only if it becomes an active want (or the cost/eligibility picture below changes enough to be worth another look).
+
 Windows and macOS builds are currently unsigned: users hit "Unknown Publisher"/SmartScreen warnings on Windows and Gatekeeper "unidentified developer" blocks on macOS when running a downloaded build. Researched July 2026 — both are technically straightforward to wire into the existing [.github/workflows/build.yml](.github/workflows/build.yml); the real blocker is cost/eligibility, not feasibility.
 
 ### Findings
@@ -585,26 +593,19 @@ New tab or panel (`[🔧 Services]`), gated behind its own opt-in setting (defau
 
 ---
 
-## Milestone 19: Export / Import Captured Messages (Medium Priority)
+## Milestone 19: Multi-Select + Clipboard Copy (Medium Priority) — Completed
 
 ### Objective
-The Live Messages list (and JetStream Browse Messages) has **no cap on how many messages it holds in memory** (confirmed: nothing in `lib/main.dart` bounds `items.length` — the list only ever shrinks via the user's own Clear button), so a long-running capture on a busy subject can realistically reach tens of thousands of rows. Today the only way to get that data out of the app is manually copying individual messages one at a time via the row menu. This milestone adds bulk export (to a file, for offline analysis or attaching to a bug report) and import (reloading a previous capture to browse it later, without a live server).
+The Live Messages list (and JetStream Browse Messages) has **no cap on how many messages it holds in memory** (confirmed: nothing in `lib/main.dart` bounds `items.length` — the list only ever shrinks via the user's own Clear button), so a long-running capture on a busy subject can realistically reach tens of thousands of rows. Today the only way to get that data out of the app is manually copying individual messages one at a time via the row menu. This started as a broader "Export/Import Captured Messages" milestone (file-based NDJSON export/import); once planning began, it was rescoped down to just multi-select + clipboard copy as a much lighter first cut that already solves the common "grab a few messages for a bug report" case without file dialogs or a large-export safeguard. The original file-based idea lives on as Milestone 22 (Low Priority, not started), to revisit only if a clear need for it resurfaces.
 
-### Desired Behavior
-- **Export selected**: a multi-select mode on the Live Messages list (checkboxes or a "Select" toggle mirroring how JetStream/KV dashboards already have per-row actions) lets the user pick specific messages and export only those.
-- **Export all**: a separate action for the common "just dump everything" case — but given the list is unbounded, this needs an explicit, honest confirmation showing the real count before writing anything (e.g. "Export 42,318 messages?"), and a sensible safeguard past some threshold (a hard cap with "most recent N", or at minimum a stronger warning) rather than silently attempting to serialize an arbitrarily large in-memory list to JSON on the UI thread.
-- **Import**: load a previously exported file back into the message list (read-only browsing — imported rows are not "live," and it should be visually obvious which rows came from an import vs. a live connection) for offline review.
-- Format: NDJSON (one JSON object per line: subject, payload, headers, timestamp, direction if Milestone 13 lands) — streams naturally to/from disk without holding a second full in-memory copy during export, and is trivially diffable/greppable outside the app too.
-
-### Implementation Checklist
-- [ ] Decide the exact large-export safeguard (hard cap + "most recent N" vs. warn-and-proceed vs. chunked/streaming write) — worth a quick design pass given real capture sizes can plausibly hit the tens of thousands the objective calls out.
-- [ ] Multi-select mode for the Live Messages list: row checkboxes or a selection toggle, an "Export Selected (N)" action that only appears once something's selected, and a separate always-available "Export All" action carrying its own confirmation/count/threshold handling from the point above.
-- [ ] `lib/message_export.dart` (new) — pure serialization logic (message → NDJSON line and back), independent of the file-picker/save-dialog plumbing so it's unit-testable without touching `file_picker`, following the same "injectable file callbacks" pattern `ObjectStoreDashboard` already established for Upload/Download.
-- [ ] Export via the existing `file_picker`-backed save-file pattern (mirroring Object Store's download flow); Import via the existing open-file pattern (mirroring TLS cert / `.creds` file pickers).
-- [ ] Decide whether JetStream Browse Messages gets the same export capability or this is Live-Messages-tab-only for now (it already has a different, consumer-backed data source — mirrors the scoping question Milestone 13 had to answer for "outgoing").
-- [ ] Visually distinguish imported (non-live) rows from live ones in the list.
-- [ ] Unit tests for NDJSON round-trip (including edge cases: binary/non-UTF8 payloads, missing headers, empty list) + widget tests for multi-select and the export-all confirmation/threshold UI using injected fake file callbacks (no real OS dialog in tests, same reasoning as the Object Store/TLS Browse buttons already excluded from automated coverage) + a live-server integration test covering select-some/export/re-import and confirming round-tripped messages render identically to the originals.
-- [ ] Document the NDJSON format (so files are usable outside this app too) and the large-export safeguard in `assets/app_help.md`.
+### Implementation
+- [x] **Multi-select on the Live Messages list** — no checkboxes. **Shift+Click** extends/replaces a contiguous selection range from the last-clicked row; **Ctrl+Click** (Cmd+Click on Mac) toggles a single row into or out of the selection independently, without touching any other row, building a disconnected/non-contiguous selection and also becoming the new anchor for a later Shift+Click; **Ctrl+Shift+Up/Down** grows/shrinks the range by one row at a time from the current focus. Identity-based (`Set<Message<dynamic>>` in `lib/main.dart`, alongside a `Message?` anchor and a `_multiSelectActive` flag distinguishing "multi-select engaged but currently empty" from "never engaged, defer to the single-row `selectedIndex`"), not index-based — deliberately, so it survives `_insertMessages` prepending new rows above a scrolled-away viewport and `_runFilter` reassigning `filteredItems` wholesale, neither of which needs any shift-compensation the way the pre-existing single-row `selectedIndex` does. The existing single/double-tap-to-Detail logic is unchanged; a Shift/Ctrl+Click bypasses its 300ms debounce timer entirely (unambiguous intent), and any plain click collapses a multi-selection back to a single row, exactly like before this milestone.
+- [x] **Two real bugs found by live manual testing, not caught by the automated tests as originally written** (same pattern as several earlier milestones): (1) a payload's line breaks were only escaped if they were a bare `\n` — payloads built from concatenated CRLF-terminated lines (e.g. NMEA sentences) left the `\r` behind, which still rendered as a real line break wherever the copied text was pasted; fixed by matching `\r\n`/`\r`/`\n` uniformly. (2) Ctrl+C silently did nothing whenever anything else (e.g. the Filter/Find field) had last held keyboard focus, since the app's shortcut-handling `Focus(onKeyEvent: ...)` only claims focus once via `autofocus: true` at first build and nothing ever reclaimed it afterward; fixed by having `_handleMessageTap` explicitly request focus onto a dedicated `_messageListFocusNode` on every row click (plain, Shift, or Ctrl), regardless of what had focus before.
+- [x] **Ctrl+C** copies every selected row as one line per message (`subject: payload`), in on-screen top-to-bottom order, with a payload's own embedded line breaks escaped as a literal `\n` so the copied line count always equals the selected-message count. Unchanged for exactly one selected row (still the bare payload, no subject prefix) — preserves the pre-existing, already-tested single-select Ctrl+C behavior rather than a since-day-one format change.
+- [x] A **"Copy Selected (N)"** entry was added to the existing per-row popup menu (`_buildSafePopupMenuButton`) alongside the pre-existing single-row `copy`, so the bulk action is discoverable without knowing the shortcut. It always operates on the existing selection regardless of which row's menu was opened — opening the menu on a row outside the current range does not implicitly fold it in (matches Explorer/Finder/VS Code convention).
+- [x] Scope: Live Messages tab only — JetStream Browse Messages is a separate widget with no shared base and no existing selection state, so it's excluded here for the same reason Milestone 13 excluded it for "outgoing" tagging.
+- [x] The status bar's existing "Total Messages: N, Showing: N" text now also shows "Selected: N" (via `_effectiveSelection().length`), but only appended when at least one row is selected — no "Selected: 0" clutter the rest of the time.
+- [x] Tests: extended `integration_test/live_messages_interactions_test.dart` with a new case covering Shift+Click range selection, Ctrl+Shift+Up/Down grow/shrink, Ctrl+C on a multi-selection (including the embedded-newline escape), Ctrl+C on a single selection (regression guard on the unchanged format), the "Copy Selected (N)" menu item (including that opening it on a non-selected row doesn't fold that row in), selection surviving both a new message arriving mid-selection and a Filter-field change, a dedicated Ctrl+Click case (disconnected add/remove, toggling down to nothing without crashing, and moving the range anchor for a later Shift+Click), and the status bar's "Selected: N" text appearing/disappearing at the right points — run against a real local `nats-server`. `assets/app_help.md`'s "Message-Specific Shortcuts"/new "Multi-Select" sections document the behavior.
 
 ---
 
@@ -618,3 +619,43 @@ Milestone 11 already tags every message with its originating subscription's colo
 - [ ] Compute a rolling rate per `sid` from existing arrival timestamps — no new `dart_nats` data needed, this is purely a local aggregation over what's already tagged.
 - [ ] Confirm it doesn't reintroduce the offstage-measurement/`OverflowBox`/`Tooltip` pitfalls documented in Milestone 11's notes if implemented inside the chip row itself.
 - [ ] Unit tests for the rate computation (fake clock) + widget/live-server verification that the displayed rate roughly tracks a known publish rate from a second test client.
+
+---
+
+## Milestone 21: Message Detail Headers Table + Raw Copy (Low Priority)
+
+### Objective
+`lib/message_detail_dialog.dart`'s Headers section (lines 109-121) currently renders all headers as a single flattened block — `headers.forEach((k, v) => headerText += '$k: $v\n')` into one `SelectableText`, no visual separation between keys and values once there's more than one header or a long value. The Payload section right below it already has a copy-to-clipboard `InkWell`/icon with a "Copied!" fade animation (lines 190-222); Headers has no equivalent, so copying header data means manually selecting text out of the flattened block. User-flagged as a readability gap while testing the JetStream message list.
+
+### Desired Behavior
+- Replace the flattened `SelectableText(headerText)` with a simple two-column grid/table (key | value), one row per header — a `Table`/`DataTable`-style layout, not a redesign of the whole dialog. Keep `Header Version` above it as-is (it's a single value, not a map, so it doesn't need tabular treatment).
+- Add a copy button next to the Headers section header (mirroring the Payload copy button's icon/position/"Copied!" fade pattern) that copies the headers **raw**, in the same `key: value` newline-joined format already shown today — not the table markup, and not JSON — so the copied text is a plain, greppable/pasteable block identical in spirit to what Payload's copy button does for the payload.
+
+### Implementation Checklist
+- [ ] Replace the Headers `SelectableText(headerText)` block in `lib/message_detail_dialog.dart` with a simple table/grid layout (key column, value column), keeping each value individually selectable.
+- [ ] Add a copy button for the Headers section reusing the existing `_showCopiedFeedback()`/`_fadeAnimation` mechanism already built for Payload, copying the same `k: v`-per-line raw text currently assembled into `headerText`.
+- [ ] Confirm behavior with zero headers (section already conditionally hidden — no change needed there) and with a large header value (long value shouldn't break the table layout — wrap or scroll, not overflow).
+- [ ] Update/extend `test/message_detail_dialog_test.dart` for the new table rendering and the headers-copy button + "Copied!" feedback.
+
+---
+
+## Milestone 22: Export / Import Captured Messages to File (Low Priority)
+
+### Objective
+Originally scoped as Milestone 19, this was descoped once its multi-select + clipboard-copy slice (now Milestone 19, completed) turned out sufficient for the common case of grabbing a few messages for a bug report. This is what's left: bulk export of a capture to a file (for offline analysis, or captures too large for a clipboard paste) and re-importing a previous capture to browse later without a live server. Demoted to Low Priority and moved to the end of the list — revisit only if a clear need for it resurfaces (e.g. someone actually hits the tens-of-thousands-of-messages scenario the original objective called out and clipboard copy isn't enough).
+
+### Desired Behavior
+- **Export selected**: reuses Milestone 19's multi-select range to let the user pick specific messages and export only those to a file.
+- **Export all**: a separate action for the common "just dump everything" case — but given the list is unbounded (nothing in `lib/main.dart` bounds `items.length`), this needs an explicit, honest confirmation showing the real count before writing anything (e.g. "Export 42,318 messages?"), and a sensible safeguard past some threshold (a hard cap with "most recent N", or at minimum a stronger warning) rather than silently attempting to serialize an arbitrarily large in-memory list to JSON on the UI thread.
+- **Import**: load a previously exported file back into the message list (read-only browsing — imported rows are not "live," and it should be visually obvious which rows came from an import vs. a live connection) for offline review.
+- Format: NDJSON (one JSON object per line: subject, payload, headers, timestamp, direction if Milestone 13 lands) — streams naturally to/from disk without holding a second full in-memory copy during export, and is trivially diffable/greppable outside the app too.
+
+### Implementation Checklist
+- [ ] Decide the exact large-export safeguard (hard cap + "most recent N" vs. warn-and-proceed vs. chunked/streaming write) — worth a quick design pass given real capture sizes can plausibly hit the tens of thousands the objective calls out.
+- [ ] An "Export Selected (N)" action reusing Milestone 19's multi-select range, and a separate always-available "Export All" action carrying its own confirmation/count/threshold handling from the point above.
+- [ ] `lib/message_export.dart` (new) — pure serialization logic (message → NDJSON line and back), independent of the file-picker/save-dialog plumbing so it's unit-testable without touching `file_picker`, following the same "injectable file callbacks" pattern `ObjectStoreDashboard` already established for Upload/Download.
+- [ ] Export via the existing `file_picker`-backed save-file pattern (mirroring Object Store's download flow); Import via the existing open-file pattern (mirroring TLS cert / `.creds` file pickers).
+- [ ] Decide whether JetStream Browse Messages gets the same export capability or this is Live-Messages-tab-only for now (it already has a different, consumer-backed data source — mirrors the scoping question Milestone 13 had to answer for "outgoing").
+- [ ] Visually distinguish imported (non-live) rows from live ones in the list.
+- [ ] Unit tests for NDJSON round-trip (including edge cases: binary/non-UTF8 payloads, missing headers, empty list) + widget tests for multi-select and the export-all confirmation/threshold UI using injected fake file callbacks (no real OS dialog in tests, same reasoning as the Object Store/TLS Browse buttons already excluded from automated coverage) + a live-server integration test covering select-some/export/re-import and confirming round-tripped messages render identically to the originals.
+- [ ] Document the NDJSON format (so files are usable outside this app too) and the large-export safeguard in `assets/app_help.md`.

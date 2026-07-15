@@ -163,7 +163,15 @@ When a message is selected (highlighted), the following keyboard shortcuts are a
 - **`r`** - Execute Replay (re-send the message)
 - **`e`** - Open Edit & Send dialog
 - **`Ctrl + C`** (Windows/Linux) or **`Cmd + C`** (Mac) - Copy message content to clipboard
-- **`Esc`** - Un-select the currently selected message
+- **`Esc`** - Un-select the currently selected message (also clears a multi-selection, if any)
+
+## Multi-Select (Live Messages tab)
+Select more than one row to copy them together:
+
+- **Shift + Click** a row to select every row between it and the last-clicked row.
+- **Ctrl + Click** (Cmd + Click on Mac) a row to add just that row to the selection without affecting any others — useful for picking out a few non-adjacent rows. Ctrl+Clicking an already-selected row removes just that row instead.
+- **`Ctrl + Shift + ↓`** / **`Ctrl + Shift + ↑`** grows or shrinks the selection by one row at a time from the currently-selected row.
+- With more than one row selected, **`Ctrl + C`**/**`Cmd + C`** or the row menu's **Copy Selected (N)** entry copies every selected row as plain text, one line per message (`subject: payload`) in the order they're shown on screen. A payload's own embedded line breaks are escaped as a literal `\n` so the copied line count always matches the number of messages selected. A plain click on any row collapses the selection back to just that one row.
 
 ## Send Message Dialog Shortcuts
 When the Send Message dialog is open:

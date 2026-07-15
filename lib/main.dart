@@ -118,8 +118,8 @@ void main() async {
     tempSubscriptions = (legacySubject != null && legacySubject.isNotEmpty)
         ? migrateFromLegacySubject(legacySubject)
         : [SubscriptionInfo(subject: constants.defaultSubject, colorIndex: 0)];
-    await prefs.setString(constants.prefSubscriptions,
-        encodeSubscriptionList(tempSubscriptions));
+    await prefs.setString(
+        constants.prefSubscriptions, encodeSubscriptionList(tempSubscriptions));
   }
 
   // connection history: JSON list of previously-used {scheme, host, port}
@@ -295,6 +295,30 @@ class _MyHomePageState extends State<MyHomePage>
   String scheme = constants.defaultScheme;
   String fullUri = '';
   int selectedIndex = -1;
+  // Multi-select for bulk copy (Shift+Click, Ctrl+Click, Ctrl+Shift+Up/
+  // Down). Identity-based (a Set of the actual Message objects, not
+  // indices) so it survives _insertMessages prepending rows and _runFilter
+  // swapping filteredItems out wholesale -- unlike selectedIndex, no
+  // shift-compensation is ever needed since membership is by object
+  // identity, not position.
+  final Set<Message<dynamic>> _multiSelected = {};
+  // Whether _multiSelected is the current source of truth for "what's
+  // selected" (true once a Shift/Ctrl-gesture has run), as opposed to the
+  // plain single-row model (selectedIndex alone). This can't be inferred
+  // from `_multiSelected.isEmpty` -- Ctrl+Click toggling every selected row
+  // back off legitimately leaves the set empty while still meaning "nothing
+  // is selected", which is different from "multi-select was never engaged,
+  // defer to selectedIndex". A plain click resets this to false.
+  bool _multiSelectActive = false;
+  // Fixed end of the current Shift+Click/Ctrl+Shift+Up/Down range. Stored as
+  // a Message reference (re-located by identity in filteredItems each time a
+  // range is computed) rather than a raw index, since filteredItems can be
+  // re-sorted/replaced by a filter change or reordered by inserts underneath
+  // a stored index but not underneath an object reference. Ctrl+Click also
+  // moves this to the clicked row, so a later Shift+Click extends from
+  // wherever the user last clicked (with or without Ctrl), matching
+  // standard file-manager behavior.
+  Message<dynamic>? _selectionAnchor;
   String currentFilter = '';
   String currentFind = '';
   Status currentStatus = Status.disconnected;
@@ -354,6 +378,15 @@ class _MyHomePageState extends State<MyHomePage>
   // Focus nodes for keyboard shortcuts
   final FocusNode _filterFocusNode = FocusNode();
   final FocusNode _findFocusNode = FocusNode();
+  // The outer Focus(onKeyEvent: ...) below has no explicit FocusNode of its
+  // own by default -- its `autofocus: true` only claims focus once, at first
+  // build. Once the user focuses anything else (Filter/Find, a dialog
+  // field, ...), message-row keyboard shortcuts (D/R/E/Ctrl+C/Escape/
+  // Ctrl+Shift+Up/Down) silently stop firing because nothing is focused for
+  // the key event to bubble up from. Selecting a row via _handleMessageTap
+  // explicitly reclaims focus onto this node so the shortcuts keep working
+  // no matter what had focus beforehand.
+  final FocusNode _messageListFocusNode = FocusNode();
 
   // user preferences
   late SharedPreferences prefs;
@@ -408,6 +441,7 @@ class _MyHomePageState extends State<MyHomePage>
     _incomingFlushTimer?.cancel();
     _filterFocusNode.dispose(); // Dispose focus nodes
     _findFocusNode.dispose();
+    _messageListFocusNode.dispose();
     _tabController.dispose();
     portController.dispose();
     super.dispose();
@@ -609,12 +643,43 @@ class _MyHomePageState extends State<MyHomePage>
     prefs.setBool(constants.prefKvEnabled, kvEnabled);
     prefs.setBool(constants.prefObjectStoreEnabled, objectStoreEnabled);
     prefs.setBool(constants.prefUpdateCheckEnabled, updateCheckEnabled);
-    prefs.setBool(
-        constants.prefShowSubscriptionColors, showSubscriptionColors);
+    prefs.setBool(constants.prefShowSubscriptionColors, showSubscriptionColors);
   }
 
   /// Handles tap logic to distinguish between single and double taps
   void _handleMessageTap(int index) {
+    // Reclaim keyboard focus for the message list's shortcuts (D/R/E/
+    // Ctrl+C/Escape/Ctrl+Shift+Up/Down) regardless of what had focus before
+    // this click -- e.g. the Filter/Find field. Without this, clicking a
+    // row doesn't grant it keyboard focus the way clicking a text field
+    // does, so those shortcuts would silently have nothing to bubble up
+    // from and do nothing.
+    _messageListFocusNode.requestFocus();
+
+    if (HardwareKeyboard.instance.isShiftPressed) {
+      // Shift+Click: intent is unambiguous (extend/replace the selection
+      // range), so skip the single/double-tap timer entirely rather than
+      // waiting 300ms to disambiguate from a double-tap-to-Detail.
+      _tapTimer?.cancel();
+      _lastTappedIndex = null;
+      setState(() {
+        _selectRange(index);
+      });
+      return;
+    }
+
+    if (HardwareKeyboard.instance.isControlPressed ||
+        HardwareKeyboard.instance.isMetaPressed) {
+      // Ctrl+Click (Cmd+Click on Mac): same reasoning as Shift+Click above
+      // -- unambiguous intent, skip the tap timer.
+      _tapTimer?.cancel();
+      _lastTappedIndex = null;
+      setState(() {
+        _toggleSelection(index);
+      });
+      return;
+    }
+
     // Cancel any existing timer
     _tapTimer?.cancel();
 
@@ -628,6 +693,12 @@ class _MyHomePageState extends State<MyHomePage>
       _tapTimer = Timer(const Duration(milliseconds: 300), () {
         // Timer expired, this was a single tap
         setState(() {
+          // A plain click always collapses back to single-row selection,
+          // clearing any multi-select range/toggle set from a previous
+          // Shift/Ctrl-gesture.
+          _multiSelected.clear();
+          _multiSelectActive = false;
+          _selectionAnchor = null;
           if (index == selectedIndex) {
             // user tapped the already-selected item.
             // un-select it
@@ -638,6 +709,101 @@ class _MyHomePageState extends State<MyHomePage>
         });
         _lastTappedIndex = null;
       });
+    }
+  }
+
+  /// Extends/replaces the multi-select range using `_selectionAnchor` as the
+  /// fixed end and `targetIndex` (into `filteredItems`) as the moving end.
+  /// Shared by Shift+Click and Ctrl+Shift+Up/Down. Must be called inside a
+  /// `setState`.
+  void _selectRange(int targetIndex) {
+    var anchorIndex = _selectionAnchor != null
+        ? filteredItems.indexOf(_selectionAnchor!)
+        : -1;
+    if (anchorIndex == -1) {
+      // No anchor yet, or the previous anchor scrolled out of the current
+      // filtered view -- seed a fresh one from the existing single
+      // selection (if any), otherwise from the click/move target itself.
+      anchorIndex = selectedIndex >= 0 && selectedIndex < filteredItems.length
+          ? selectedIndex
+          : targetIndex;
+      _selectionAnchor = filteredItems[anchorIndex];
+    }
+
+    final lo = anchorIndex <= targetIndex ? anchorIndex : targetIndex;
+    final hi = anchorIndex <= targetIndex ? targetIndex : anchorIndex;
+    _multiSelected
+      ..clear()
+      ..addAll(filteredItems.sublist(lo, hi + 1));
+    selectedIndex = targetIndex;
+    _multiSelectActive = true;
+  }
+
+  /// Ctrl+Click (Cmd+Click on Mac): toggles a single row's membership in the
+  /// multi-selection without touching any other row -- builds a
+  /// disconnected/non-contiguous selection (e.g. rows 1-4 plus row 6), and
+  /// toggling an already-selected row deselects just that one. The clicked
+  /// row also becomes the new anchor/focus for a subsequent Shift+Click or
+  /// Ctrl+Shift+Up/Down, matching standard file-manager behavior (Explorer/
+  /// Finder). Must be called inside a `setState`.
+  void _toggleSelection(int index) {
+    // Bridge the implicit single-selection (selectedIndex alone) into the
+    // explicit multi-select set on the first Shift/Ctrl-gesture, so
+    // toggling adds to what's actually shown as selected rather than
+    // starting from a stale empty set.
+    if (!_multiSelectActive &&
+        selectedIndex >= 0 &&
+        selectedIndex < filteredItems.length) {
+      _multiSelected.add(filteredItems[selectedIndex]);
+    }
+    final target = filteredItems[index];
+    if (!_multiSelected.remove(target)) {
+      _multiSelected.add(target);
+    }
+    selectedIndex = index;
+    _selectionAnchor = target;
+    _multiSelectActive = true;
+  }
+
+  /// The set of messages bulk actions (Ctrl+C, "Copy Selected", row
+  /// highlighting) should act on: `_multiSelected` once a Shift/Ctrl-gesture
+  /// has engaged multi-select mode (which may legitimately be empty, e.g.
+  /// every row was Ctrl+Click-toggled back off), otherwise the single
+  /// `selectedIndex` row (or empty if nothing is selected at all). This
+  /// makes `_multiSelected` transparently subsume today's pre-existing
+  /// single-select behavior for any caller that only needs to know "what's
+  /// currently selected".
+  Set<Message<dynamic>> _effectiveSelection() {
+    if (_multiSelectActive) {
+      return _multiSelected;
+    }
+    if (selectedIndex >= 0 && selectedIndex < filteredItems.length) {
+      return {filteredItems[selectedIndex]};
+    }
+    return {};
+  }
+
+  /// Matches any line-break style (`\r\n`, bare `\r`, or bare `\n`) so every
+  /// flavor collapses to the same literal `\n` marker in `_copyMultiSelection`
+  /// -- replacing only `\n` would leave a bare `\r` (common in payloads built
+  /// from concatenated CRLF-terminated lines, e.g. NMEA sentences) still
+  /// rendering as a real line break wherever the copied text gets pasted.
+  static final RegExp _anyLineBreak = RegExp(r'\r\n|\r|\n');
+
+  /// Copies every message in `selection` as one line per message
+  /// (`subject: payload`), in on-screen top-to-bottom order regardless
+  /// of the order `selection` iterates in. Payload line breaks are escaped
+  /// as a literal `\n` so the copied line count always equals the message
+  /// count.
+  Future<void> _copyMultiSelection(Set<Message<dynamic>> selection) async {
+    final ordered = filteredItems.where(selection.contains);
+    final text = ordered
+        .map((m) =>
+            '${m.subject}: ${decodeMessageText(m.byte).replaceAll(_anyLineBreak, r'\n')}')
+        .join('\n');
+    await Clipboard.setData(ClipboardData(text: text));
+    if (mounted) {
+      showSnackBar('Copied ${selection.length} messages to clipboard!');
     }
   }
 
@@ -657,8 +823,20 @@ class _MyHomePageState extends State<MyHomePage>
     }
 
     if (mounted) {
+      // selectedIndex is an index into filteredItems, which is about to be
+      // replaced wholesale -- capture the previously-selected message by
+      // identity first and re-locate it in the new list, rather than
+      // leaving selectedIndex pointing at an unrelated row (or past the
+      // end) once the filter changes what's visible.
+      final previouslySelected =
+          selectedIndex >= 0 && selectedIndex < filteredItems.length
+              ? filteredItems[selectedIndex]
+              : null;
       setState(() {
         filteredItems = results;
+        selectedIndex = previouslySelected != null
+            ? results.indexOf(previouslySelected)
+            : -1;
       });
     }
   }
@@ -1110,8 +1288,7 @@ class _MyHomePageState extends State<MyHomePage>
             _updateQueueGroup(existing, queueGroup);
           }
         },
-        onRemove:
-            existing == null ? null : () => _removeSubscription(existing),
+        onRemove: existing == null ? null : () => _removeSubscription(existing),
       ),
     );
   }
@@ -1737,8 +1914,9 @@ class _MyHomePageState extends State<MyHomePage>
 
   Future<void> sendMessage(String subject, String data,
       [bool useJetStream = false, Map<String, String>? headers]) async {
-    final header =
-        (headers != null && headers.isNotEmpty) ? Header(headers: headers) : null;
+    final header = (headers != null && headers.isNotEmpty)
+        ? Header(headers: headers)
+        : null;
 
     if (!useJetStream) {
       natsClient.pubString(subject, data, header: header);
@@ -1788,11 +1966,21 @@ class _MyHomePageState extends State<MyHomePage>
         if (!mounted) return [];
 
         try {
+          // The bulk action always operates on the existing multi-selection
+          // regardless of which row's menu was opened -- opening the menu
+          // on a row outside the current range does NOT implicitly fold it
+          // in (matches Explorer/Finder/VS Code convention).
+          final selection = _effectiveSelection();
           return [
             const PopupMenuItem(
               value: 'copy',
               child: Text('Copy'),
             ),
+            if (selection.length > 1)
+              PopupMenuItem(
+                value: 'copy_selected',
+                child: Text('Copy Selected (${selection.length})'),
+              ),
             const PopupMenuItem(
               value: 'detail',
               child: Text('Detail'),
@@ -1852,6 +2040,9 @@ class _MyHomePageState extends State<MyHomePage>
               if (mounted) {
                 showSnackBar('Copied to clipboard!');
               }
+              break;
+            case 'copy_selected':
+              await _copyMultiSelection(_effectiveSelection());
               break;
             case 'detail':
               if (mounted) {
@@ -1924,8 +2115,13 @@ class _MyHomePageState extends State<MyHomePage>
             theme.colorScheme.surface)
         : Color.alphaBlend(theme.colorScheme.secondaryContainer.withAlpha(140),
             theme.colorScheme.surface);
+    // Only shown in the status bar's message-count text below when
+    // something is actually selected -- an always-present "Selected: 0"
+    // would just be noise alongside Total/Showing.
+    final selectedCount = _effectiveSelection().length;
 
     return Focus(
+      focusNode: _messageListFocusNode,
       autofocus: true,
       onKeyEvent: (node, event) {
         if (event is KeyDownEvent) {
@@ -1986,19 +2182,47 @@ class _MyHomePageState extends State<MyHomePage>
               }
               return KeyEventResult.handled;
             }
+            // Ctrl+Shift+Up/Down: grow/shrink the multi-select range by one
+            // row at a time from the current anchor.
+            else if ((event.logicalKey == LogicalKeyboardKey.arrowDown ||
+                    event.logicalKey == LogicalKeyboardKey.arrowUp) &&
+                HardwareKeyboard.instance.isControlPressed &&
+                HardwareKeyboard.instance.isShiftPressed) {
+              final delta =
+                  event.logicalKey == LogicalKeyboardKey.arrowDown ? 1 : -1;
+              final newIndex =
+                  (selectedIndex + delta).clamp(0, filteredItems.length - 1);
+              setState(() {
+                _selectRange(newIndex);
+              });
+              return KeyEventResult.handled;
+            }
             // Handle Ctrl+C/Cmd+C shortcut
             else if (event.logicalKey == LogicalKeyboardKey.keyC &&
                 (HardwareKeyboard.instance.isControlPressed ||
                     HardwareKeyboard.instance.isMetaPressed)) {
-              Clipboard.setData(ClipboardData(
-                  text: decodeMessageText(filteredItems[selectedIndex].byte)));
-              showSnackBar('Copied to clipboard!');
+              // Read the selected message(s) from `_effectiveSelection()`
+              // itself rather than `filteredItems[selectedIndex]` -- once
+              // Ctrl+Click can toggle rows independently of `selectedIndex`
+              // (which tracks the last-clicked row, not necessarily one
+              // that's still selected), the two can disagree.
+              final selection = _effectiveSelection();
+              if (selection.length > 1) {
+                _copyMultiSelection(selection);
+              } else if (selection.isNotEmpty) {
+                Clipboard.setData(ClipboardData(
+                    text: decodeMessageText(selection.first.byte)));
+                showSnackBar('Copied to clipboard!');
+              }
               return KeyEventResult.handled;
             }
             // Handle Esc key to un-select message
             else if (event.logicalKey == LogicalKeyboardKey.escape) {
               setState(() {
                 selectedIndex = -1;
+                _multiSelected.clear();
+                _multiSelectActive = false;
+                _selectionAnchor = null;
               });
               return KeyEventResult.handled;
             }
@@ -2134,9 +2358,9 @@ class _MyHomePageState extends State<MyHomePage>
                         // only taking effect on the next connect.
                         child: _withConnectShortcut(SubjectChipsRow(
                           subscriptions: subscriptions,
-                          isDark: Provider.of<ThemeModel>(context,
-                                  listen: false)
-                              .isDark(),
+                          isDark:
+                              Provider.of<ThemeModel>(context, listen: false)
+                                  .isDark(),
                           showSubscriptionColors: showSubscriptionColors,
                           onTapChip: _showEditSubscriptionDialog,
                           onRemoveChip: _removeSubscription,
@@ -2227,8 +2451,10 @@ class _MyHomePageState extends State<MyHomePage>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: <Widget>[
-                  Text(
-                      'Total Messages: ${items.length}, Showing: ${filteredItems.length}  |  '),
+                  Text('Total Messages: ${items.length}, '
+                      'Showing: ${filteredItems.length}'
+                      '${selectedCount > 0 ? ', Selected: $selectedCount' : ''}'
+                      '  |  '),
                   Text('URL: $fullUri'),
                   if (isConnected && tlsConnection)
                     Padding(
@@ -2272,6 +2498,8 @@ class _MyHomePageState extends State<MyHomePage>
   /// JetStream tab was introduced, just extracted so it can be reused as a
   /// `TabBarView` page.
   Widget _buildLiveMessagesTab(Color evenRowColor, Color oddRowColor) {
+    // Computed once per rebuild rather than once per row inside itemBuilder.
+    final effectiveSelection = _effectiveSelection();
     return Column(
       children: <Widget>[
         if (messagesPaused)
@@ -2351,7 +2579,7 @@ class _MyHomePageState extends State<MyHomePage>
                               // index would flip every stripe as messages
                               // arrive. Distance-from-oldest is fixed per
                               // message, so stripes stay put.
-                              tileColor: selectedIndex == index
+                              tileColor: effectiveSelection.contains(message)
                                   ? Theme.of(context).colorScheme.inversePrimary
                                   : (filteredItems.length - 1 - index) % 2 == 0
                                       ? evenRowColor
@@ -2412,8 +2640,7 @@ class _MyHomePageState extends State<MyHomePage>
               padding: const EdgeInsets.fromLTRB(10, 10, 5, 10),
               child: IconButton.outlined(
                   tooltip: 'Clear messages',
-                  style: IconButton.styleFrom(
-                      minimumSize: const Size(50, 50)),
+                  style: IconButton.styleFrom(minimumSize: const Size(50, 50)),
                   onPressed: clearMessageList,
                   icon: const Icon(
                     Icons.delete,
@@ -2473,8 +2700,7 @@ class _MyHomePageState extends State<MyHomePage>
               padding: const EdgeInsets.fromLTRB(0, 10, 5, 10),
               child: IconButton.filled(
                   tooltip: 'Send message',
-                  style: IconButton.styleFrom(
-                      minimumSize: const Size(50, 50)),
+                  style: IconButton.styleFrom(minimumSize: const Size(50, 50)),
                   onPressed: currentStatus == Status.connected
                       ? () {
                           showSendMessageDialog(null, null, null);
@@ -2640,8 +2866,8 @@ class _ConnectionHistoryOptionsState extends State<_ConnectionHistoryOptions> {
         child: ConstrainedBox(
           // The overlay is anchored to the field but sized against the
           // screen, so bound the width to keep the menu readable but sane.
-          constraints:
-              const BoxConstraints(maxHeight: 280, minWidth: 280, maxWidth: 460),
+          constraints: const BoxConstraints(
+              maxHeight: 280, minWidth: 280, maxWidth: 460),
           // Autocomplete tears this whole overlay down the instant the Host
           // field loses keyboard focus, and IconButton/ListTile normally grab
           // focus as part of handling a tap -- which would steal focus from
@@ -2679,8 +2905,8 @@ class _ConnectionHistoryOptionsState extends State<_ConnectionHistoryOptions> {
                       selected: highlight,
                       selectedTileColor:
                           colorScheme.onSurface.withValues(alpha: 0.08),
-                      title: Text(entry.fullUri,
-                          overflow: TextOverflow.ellipsis),
+                      title:
+                          Text(entry.fullUri, overflow: TextOverflow.ellipsis),
                       onTap: () => widget.onSelected(entry),
                       trailing: IconButton(
                         icon: const Icon(Icons.close, size: 18),
@@ -2693,8 +2919,7 @@ class _ConnectionHistoryOptionsState extends State<_ConnectionHistoryOptions> {
                 if (_visibleOptions.isNotEmpty)
                   ListTile(
                     dense: true,
-                    leading:
-                        Icon(Icons.delete_sweep, color: colorScheme.error),
+                    leading: Icon(Icons.delete_sweep, color: colorScheme.error),
                     title: Text('Clear history',
                         style: TextStyle(color: colorScheme.error)),
                     onTap: _handleClear,
