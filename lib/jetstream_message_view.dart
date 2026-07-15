@@ -338,32 +338,28 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
                 message: _paused
                     ? 'Resume (${_pendingMessages.length} buffered)'
                     : 'Pause incoming messages',
-                // Fixed width so the buffered-count pill's text changing
-                // length (e.g. "1" -> "1.2k") doesn't shift this row's
-                // other controls; wide enough for the 48px minimum
-                // IconButton tap target plus a realistic wide count. A
-                // `Badge` here used to overlap the icon closely enough
-                // that it was hard to tell Pause from Resume at a glance
-                // without the tooltip — a plain Row with the count as a
-                // separate pill keeps the icon fully visible.
-                child: SizedBox(
-                  width: 120,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      IconButton(
-                        icon: Icon(_paused ? Icons.play_arrow : Icons.pause),
-                        onPressed: _paused ? _resume : _pause,
+                // No fixed-width reservation here (unlike the equivalent
+                // control in main.dart's bottom toolbar) — this is the last
+                // item in the row, so there's nothing to its right that the
+                // buffered-count pill's changing width could shift. A
+                // `Badge` here used to overlap the icon closely enough that
+                // it was hard to tell Pause from Resume at a glance without
+                // the tooltip — a plain Row with the count as a separate
+                // pill keeps the icon fully visible.
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: Icon(_paused ? Icons.play_arrow : Icons.pause),
+                      onPressed: _paused ? _resume : _pause,
+                    ),
+                    if (_paused && _pendingMessages.isNotEmpty)
+                      Text(
+                        formatCompactCount(_pendingMessages.length),
+                        overflow: TextOverflow.clip,
+                        softWrap: false,
                       ),
-                      if (_paused && _pendingMessages.isNotEmpty)
-                        Text(
-                          formatCompactCount(_pendingMessages.length),
-                          overflow: TextOverflow.clip,
-                          softWrap: false,
-                        ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
             ],
