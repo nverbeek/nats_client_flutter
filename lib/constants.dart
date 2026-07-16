@@ -3,7 +3,11 @@ import 'package:flutter/material.dart';
 // connection state strings
 const String connected = 'Connected';
 const String disconnected = 'Disconnected';
-const String connectionFailure = 'Failed to connect!';
+const String connectionFailureTls =
+    'Failed to connect: TLS/certificate problem — check your trusted certificate settings.';
+const String connectionFailureNetwork =
+    'Failed to connect: could not reach the server — check the host, port, and that it is running.';
+const String connectionFailureGenericPrefix = 'Failed to connect';
 const String tlsHandshake = 'TLS Handshake';
 const String infoHandshake = 'Info Handshake';
 const String reconnecting = 'Reconnecting';
@@ -76,6 +80,8 @@ const String prefObjectStoreEnabled = "OBJECT_STORE_ENABLED";
 const String prefServiceDiscoveryEnabled = "SERVICE_DISCOVERY_ENABLED";
 const String prefUpdateCheckEnabled = "UPDATE_CHECK_ENABLED";
 const String prefShowSubscriptionColors = "SHOW_SUBSCRIPTION_COLORS";
+const String prefMaxMessages = "MAX_MESSAGES";
+const String prefShowTimestamps = "SHOW_TIMESTAMPS";
 
 // retry interval options (in seconds)
 const int defaultRetryInterval = 10;
@@ -100,6 +106,10 @@ const bool defaultUpdateCheckEnabled = true;
 
 // subscription color display default
 const bool defaultShowSubscriptionColors = true;
+
+// message list caps/display defaults
+const int defaultMaxMessages = 10000;
+const bool defaultShowTimestamps = false;
 
 // authentication preference keys
 const String prefAuthMethod = "AUTH_METHOD";

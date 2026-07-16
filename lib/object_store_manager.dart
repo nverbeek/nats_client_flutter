@@ -3,7 +3,8 @@ import 'dart:typed_data';
 
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 
-import 'jetstream_manager.dart' show describeJetStreamError;
+import 'jetstream_manager.dart'
+    show describeJetStreamError, listStreamsPaginated;
 
 /// Prefix JetStream uses for the backing stream of every Object Store
 /// bucket. Bucket names shown in the UI have this stripped back off.
@@ -40,9 +41,14 @@ class ObjectStoreManager {
   /// List all Object Store buckets visible to the current account, by
   /// listing streams and keeping only the ones backing a bucket
   /// (`OBJ_<bucket>`).
+  ///
+  /// Uses [listStreamsPaginated] rather than `JetStream.listStreams()`
+  /// directly -- see that function's doc comment for why (a busy shared
+  /// account can silently truncate the unpaginated call before it ever
+  /// reaches any `OBJ_`-prefixed streams).
   Future<List<StreamInfo>> listBuckets(
       {Duration timeout = const Duration(seconds: 5)}) async {
-    final streams = await _js.listStreams(timeout: timeout);
+    final streams = await listStreamsPaginated(client, timeout: timeout);
     return streams
         .where((s) => s.config.name.startsWith(objectStoreStreamPrefix))
         .toList();

@@ -165,6 +165,37 @@ void main() {
     expect(find.byIcon(Icons.copy), findsNothing);
   });
 
+  testWidgets('shows a Received row with the full timestamp when capturedAt is set',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: MessageDetailDialog(
+          headerVersion: '',
+          headers: const {},
+          formattedJson: '',
+          capturedAt: DateTime(2026, 3, 5, 14, 7, 9, 42),
+        ),
+      ),
+    ));
+
+    expect(find.text('Received'), findsOneWidget);
+    expect(find.text('2026-03-05 02:07:09.042 PM'), findsOneWidget);
+  });
+
+  testWidgets('shows no Received row when capturedAt is null', (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(
+        body: MessageDetailDialog(
+          headerVersion: '',
+          headers: {},
+          formattedJson: '',
+        ),
+      ),
+    ));
+
+    expect(find.text('Received'), findsNothing);
+  });
+
   testWidgets('close icon and Close button both pop the dialog',
       (tester) async {
     await tester.pumpWidget(MaterialApp(

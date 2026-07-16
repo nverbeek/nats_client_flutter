@@ -4,7 +4,9 @@ import 'dart:convert';
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'constants.dart' as constants;
 import 'format_utils.dart';
 import 'jetstream_manager.dart';
 import 'message_detail_dialog.dart';
@@ -41,16 +43,63 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
   final Set<Message> _resolved = {};
   String? _errorMessage;
 
+  // Read once at open time -- this view has no constructor-level settings
+  // plumbing today, so a change made in Settings while this panel is
+  // already open only takes effect the next time it's reopened.
+  int _maxMessages = constants.defaultMaxMessages;
+
+  // The underlying pull-consumer loop swallows delivery errors forever
+  // rather than surfacing them (e.g. after the server-side consumer is
+  // deleted out from under it), so without this the view would sit on
+  // "Waiting for messages..." with a green "live" dot indefinitely. This
+  // periodically checks the consumer still exists via a lightweight
+  // metadata call and surfaces the existing error/Retry row if it doesn't.
+  Timer? _healthProbeTimer;
+  bool _probeInFlight = false;
+  static const _healthProbeInterval = Duration(seconds: 5);
+
   @override
   void initState() {
     super.initState();
+    _loadMaxMessages();
     _startTailing();
+    _startHealthProbe();
+  }
+
+  Future<void> _loadMaxMessages() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getInt(constants.prefMaxMessages) ??
+        constants.defaultMaxMessages;
+    if (!mounted) return;
+    setState(() => _maxMessages = value);
   }
 
   @override
   void dispose() {
     _subscription?.cancel();
+    _healthProbeTimer?.cancel();
     super.dispose();
+  }
+
+  void _startHealthProbe() {
+    _healthProbeTimer?.cancel();
+    _healthProbeTimer = Timer.periodic(_healthProbeInterval, (_) => _probeHealth());
+  }
+
+  Future<void> _probeHealth() async {
+    if (_probeInFlight || !mounted || _errorMessage != null) return;
+    _probeInFlight = true;
+    try {
+      await widget.manager.consumerInfo(widget.streamName, widget.consumerName);
+    } catch (e) {
+      _healthProbeTimer?.cancel();
+      _subscription?.cancel();
+      if (mounted) {
+        setState(() => _errorMessage = describeJetStreamError(e));
+      }
+    } finally {
+      _probeInFlight = false;
+    }
   }
 
   void _startTailing() {
@@ -61,6 +110,10 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
         if (!mounted) return;
         setState(() {
           _messages.insert(0, message);
+          if (_maxMessages > 0 && _messages.length > _maxMessages) {
+            final dropped = _messages.removeLast();
+            _resolved.remove(dropped);
+          }
         });
       },
       onError: (Object err) {
@@ -80,6 +133,7 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
     });
     _subscription?.cancel();
     _startTailing();
+    _startHealthProbe();
   }
 
   void _ack(Message message) {
@@ -105,7 +159,7 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
       headers = message.header?.headers ?? <String, String>{};
     }
 
-    final text = decodeMessageText(message.byte);
+    final text = decodeMessageTextFor(message);
     String formattedJson;
     try {
       final json = jsonDecode(text);
@@ -141,7 +195,11 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
                 tooltip: 'Back to stream details',
                 onPressed: widget.onClose,
               ),
-              Icon(Icons.circle, size: 10, color: Colors.green.shade400),
+              Icon(Icons.circle,
+                  size: 10,
+                  color: _errorMessage == null
+                      ? Colors.green.shade400
+                      : Colors.grey.shade500),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -192,7 +250,7 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
                 return ListTile(
                   key: ValueKey(message.hashCode),
                   title: RegexTextHighlight(
-                    text: decodeMessageText(message.byte),
+                    text: decodeMessageTextFor(message),
                     searchTerm: '',
                     fontSize: 14,
                     highlightStyle: TextStyle(
@@ -235,8 +293,8 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
                       IconButton(
                         icon: const Icon(Icons.copy),
                         tooltip: 'Copy',
-                        onPressed: () => Clipboard.setData(ClipboardData(
-                            text: decodeMessageText(message.byte))),
+                        onPressed: () => Clipboard.setData(
+                            ClipboardData(text: decodeMessageTextFor(message))),
                       ),
                     ],
                   ),

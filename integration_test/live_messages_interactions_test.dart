@@ -1,7 +1,9 @@
+import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:nats_client_flutter/constants.dart' as constants;
 import 'package:nats_client_flutter/regex_text_highlight.dart';
 import 'package:nats_client_flutter/send_message_dialog.dart';
 
@@ -701,5 +703,61 @@ void main() {
     expect(isSelected(payloadC), isTrue);
     expect(isSelected(payloadB), isTrue);
     expect(isSelected(payloadA), isFalse);
+  });
+
+  testWidgets(
+      'Max Messages cap trims the oldest messages and clears a selection that gets trimmed',
+      (tester) async {
+    // Smaller than any Settings dropdown option -- passed directly to
+    // `pumpConnectedApp` (rather than seeded beforehand, which would just
+    // be clobbered by its own reset-to-default) so this doesn't need to
+    // publish thousands of messages to observe trimming in action.
+    await pumpConnectedApp(tester, maxMessages: 5);
+    addTearDown(() => disconnectApp(tester));
+
+    final runId = DateTime.now().microsecondsSinceEpoch;
+    final subject = 'it.cap.$runId';
+    final payloads = List.generate(8, (i) => 'it-cap-payload-$i-$runId');
+
+    final publisher = Client();
+    await publisher.connect(Uri.parse(
+        '${constants.defaultScheme}${constants.defaultHost}:${constants.defaultPort}'));
+    addTearDown(() => publisher.close());
+
+    // Select the oldest message before the rest arrive -- it's the one that
+    // should end up trimmed once the cap kicks in, and the selection should
+    // be cleared along with it rather than left dangling on a wrong row.
+    publisher.pubString(subject, payloads[0]);
+    await pumpUntil(
+        tester, () => messageRowText(payloads[0]).evaluate().isNotEmpty);
+    await tester.tap(messageRowText(payloads[0]));
+    final rowFinder = find.ancestor(
+        of: messageRowText(payloads[0]), matching: find.byType(ListTile));
+    final selectedColor =
+        Theme.of(tester.element(rowFinder)).colorScheme.inversePrimary;
+    await pumpUntil(tester,
+        () => tester.widget<ListTile>(rowFinder).tileColor == selectedColor,
+        timeout: const Duration(seconds: 2));
+    expect(find.textContaining('Selected: 1'), findsOneWidget);
+
+    for (var i = 1; i < payloads.length; i++) {
+      publisher.pubString(subject, payloads[i]);
+    }
+    await pumpUntil(
+        tester, () => messageRowText(payloads.last).evaluate().isNotEmpty);
+    await tester.pumpAndSettle();
+
+    // Only the 5 newest survive; the selected (now-trimmed) message and the
+    // rest of the oldest are gone.
+    for (var i = 0; i < 3; i++) {
+      expect(messageRowText(payloads[i]), findsNothing,
+          reason: 'payload $i should have been trimmed past the cap of 5');
+    }
+    for (var i = 3; i < 8; i++) {
+      expect(messageRowText(payloads[i]), findsOneWidget);
+    }
+    expect(find.textContaining('Selected:'), findsNothing,
+        reason:
+            'the selection should be cleared once its message is trimmed');
   });
 }

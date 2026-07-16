@@ -88,7 +88,9 @@ class _SubjectChipsRowState extends State<SubjectChipsRow> {
       text: TextSpan(text: _labelFor(info), style: _labelStyle),
       textDirection: TextDirection.ltr,
     )..layout();
-    return painter.width + _chipOverhead;
+    final width = painter.width + _chipOverhead;
+    painter.dispose();
+    return width;
   }
 
   // setState during the same frame's layout would assert -- defer to the

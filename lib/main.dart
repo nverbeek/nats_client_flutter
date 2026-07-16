@@ -333,6 +333,10 @@ class _MyHomePageState extends State<MyHomePage>
   Message<dynamic>? _selectionAnchor;
   String currentFilter = '';
   String currentFind = '';
+  // Surfaced as the Find field's errorText -- an invalid regex disables
+  // highlighting (RegexTextHighlight falls back to plain text) rather than
+  // crashing, but the user should still know why nothing is highlighted.
+  bool _findPatternInvalid = false;
   Status currentStatus = Status.disconnected;
   bool tlsConnection = false;
   List<Message<dynamic>> filteredItems = [];
@@ -342,6 +346,13 @@ class _MyHomePageState extends State<MyHomePage>
   // still counted) instead of touching `items`/the rendered list at all.
   bool messagesPaused = false;
   final List<Message<dynamic>> pendingMessages = [];
+  // Mirrors `pendingMessages.length` while paused, but as a
+  // `ValueNotifier` rather than plain state -- a firehose subject can flush
+  // this every ~32ms while paused, and routing that through `setState`
+  // would rebuild the entire tab on every tick just to update a count in
+  // the toolbar pill and the paused banner. Only their
+  // `ValueListenableBuilder`s rebuild instead.
+  final ValueNotifier<int> _pendingCount = ValueNotifier<int>(0);
 
   // A NATS subject can deliver far faster than the UI needs to reflect it —
   // incoming messages land here first (cheap O(1) append) and get flushed
@@ -407,6 +418,11 @@ class _MyHomePageState extends State<MyHomePage>
   ServiceDiscoveryManager? _serviceDiscoveryManager;
   bool isConnected = false;
   String connectionStateString = constants.disconnected;
+  // Cancelled and reassigned on every `natsConnect` -- without this, a
+  // reconnect (or repeated connect attempts) would stack a new listener on
+  // the new `Client`'s status stream on top of any still-active listener
+  // from a previous one.
+  StreamSubscription<Status>? _statusSub;
 
   var filterBoxController = TextEditingController();
   var findBoxController = TextEditingController();
@@ -430,6 +446,9 @@ class _MyHomePageState extends State<MyHomePage>
   int retryInterval = constants.defaultRetryInterval;
   bool updateCheckEnabled = constants.defaultUpdateCheckEnabled;
   bool showSubscriptionColors = constants.defaultShowSubscriptionColors;
+  // 0 means unlimited -- see `maxMessagesOptions` in settings_dialog.dart.
+  int maxMessages = constants.defaultMaxMessages;
+  bool showTimestamps = constants.defaultShowTimestamps;
   OverlayEntry? _updateOverlayEntry;
 
   // authentication
@@ -475,6 +494,11 @@ class _MyHomePageState extends State<MyHomePage>
     _listScrollController.dispose(); // Dispose the controller
     _tapTimer?.cancel(); // Cancel any pending timer
     _incomingFlushTimer?.cancel();
+    _statusSub?.cancel();
+    for (final info in subscriptions) {
+      info.subscription?.cancel();
+    }
+    _pendingCount.dispose();
     _filterFocusNode.dispose(); // Dispose focus nodes
     _findFocusNode.dispose();
     _messageListFocusNode.dispose();
@@ -529,8 +553,13 @@ class _MyHomePageState extends State<MyHomePage>
       showSubscriptionColors =
           prefs.getBool(constants.prefShowSubscriptionColors) ??
               constants.defaultShowSubscriptionColors;
+      maxMessages =
+          prefs.getInt(constants.prefMaxMessages) ?? constants.defaultMaxMessages;
+      showTimestamps = prefs.getBool(constants.prefShowTimestamps) ??
+          constants.defaultShowTimestamps;
       loadAuthSettings(prefs);
       _ensureTabController();
+      _trimToCap();
     });
 
     if (updateCheckEnabled) {
@@ -685,6 +714,8 @@ class _MyHomePageState extends State<MyHomePage>
         constants.prefServiceDiscoveryEnabled, serviceDiscoveryEnabled);
     prefs.setBool(constants.prefUpdateCheckEnabled, updateCheckEnabled);
     prefs.setBool(constants.prefShowSubscriptionColors, showSubscriptionColors);
+    prefs.setInt(constants.prefMaxMessages, maxMessages);
+    prefs.setBool(constants.prefShowTimestamps, showTimestamps);
   }
 
   /// Handles tap logic to distinguish between single and double taps
@@ -840,7 +871,7 @@ class _MyHomePageState extends State<MyHomePage>
     final ordered = filteredItems.where(selection.contains);
     final text = ordered
         .map((m) =>
-            '${m.subject}: ${decodeMessageText(m.byte).replaceAll(_anyLineBreak, r'\n')}')
+            '${m.subject}: ${decodeMessageTextFor(m).replaceAll(_anyLineBreak, r'\n')}')
         .join('\n');
     await Clipboard.setData(ClipboardData(text: text));
     if (mounted) {
@@ -855,11 +886,10 @@ class _MyHomePageState extends State<MyHomePage>
       results = items;
     } else {
       // filter the items based on the message payload against the search term
+      final lowerFilter = currentFilter.toLowerCase();
       results = items
-          .where((message) => decodeMessageText(message.byte)
-              .toLowerCase()
-              // we use the toLowerCase() method to make it case-insensitive
-              .contains(currentFilter.toLowerCase()))
+          .where((message) =>
+              decodeMessageTextFor(message).toLowerCase().contains(lowerFilter))
           .toList();
     }
 
@@ -946,6 +976,16 @@ class _MyHomePageState extends State<MyHomePage>
   }
 
   void natsConnect() async {
+    // Cancel any subscriptions/status listener left over from a previous
+    // `Client` before discarding it -- otherwise reconnecting stacks a new
+    // listener on top of the old one, double-inserting every message.
+    _statusSub?.cancel();
+    _statusSub = null;
+    for (final info in subscriptions) {
+      info.subscription?.cancel();
+      info.subscription = null;
+    }
+
     natsClient = Client();
     // sids are only meaningful for the lifetime of one Client instance --
     // null them all out now that we've discarded the old one.
@@ -981,7 +1021,7 @@ class _MyHomePageState extends State<MyHomePage>
     debugPrint('About to connect to $fullUri');
     try {
       Uri uri = Uri.parse(fullUri);
-      natsClient.statusStream.listen((Status event) {
+      _statusSub = natsClient.statusStream.listen((Status event) {
         debugPrint('Connection status event $event');
         currentStatus = event;
         String stateString = '';
@@ -1062,16 +1102,14 @@ class _MyHomePageState extends State<MyHomePage>
           connectOption: authConnectOption,
           securityContext: securityContext as dynamic);
     } on TlsException {
-      showSnackBar(constants.connectionFailure);
+      showSnackBar(constants.connectionFailureTls);
       setStateDisconnected();
     } on HttpException {
-      showSnackBar(constants.connectionFailure);
+      showSnackBar(constants.connectionFailureNetwork);
       setStateDisconnected();
-    } on Exception {
-      showSnackBar(constants.connectionFailure);
-      setStateDisconnected();
-    } catch (_) {
-      showSnackBar(constants.connectionFailure);
+    } catch (e) {
+      showSnackBar(
+          '${constants.connectionFailureGenericPrefix}: ${truncatedErrorDetail(e)}');
       setStateDisconnected();
     }
   }
@@ -1136,10 +1174,16 @@ class _MyHomePageState extends State<MyHomePage>
   void _subscribeOne(SubscriptionInfo info) {
     debugPrint('Subscribing to ${info.subject}'
         '${info.queueGroup != null ? ' (queue group: ${info.queueGroup})' : ''}');
+    // Cancel any listener left over from a previous subscribe on this same
+    // `SubscriptionInfo` (e.g. a queue-group change unsub+resubs it) before
+    // attaching a new one, so the old listener can't keep double-inserting
+    // messages alongside the new one.
+    info.subscription?.cancel();
+
     var sub = natsClient.sub(info.subject, queueGroup: info.queueGroup);
     info.sid = sub.sid;
 
-    sub.stream.listen((event) {
+    info.subscription = sub.stream.listen((event) {
       // Tag with this subscription's colorIndex at arrival time -- info.sid
       // gets nulled on every disconnect (see natsDisconnect/natsConnect), so
       // looking that up dynamically at render time would make every
@@ -1292,6 +1336,8 @@ class _MyHomePageState extends State<MyHomePage>
     if (currentStatus == Status.connected && info.sid != null) {
       natsClient.unSubById(info.sid!);
     }
+    info.subscription?.cancel();
+    info.subscription = null;
     setState(() {
       subscriptions.remove(info);
     });
@@ -1390,9 +1436,18 @@ class _MyHomePageState extends State<MyHomePage>
     _incomingBatch.clear();
 
     if (messagesPaused) {
-      setState(() {
-        pendingMessages.insertAll(0, newestFirst);
-      });
+      // No `setState` here -- see `_pendingCount`'s doc comment. Nothing in
+      // the widget tree reads `pendingMessages`/its length directly at
+      // build time; both places that display it are `_pendingCount`
+      // listeners.
+      pendingMessages.insertAll(0, newestFirst);
+      // Cap the buffer the same way `_trimToCap` caps `items` -- drop the
+      // oldest (tail) entries past the limit -- so a long pause with a
+      // firehose subject can't grow this without bound either.
+      if (maxMessages > 0 && pendingMessages.length > maxMessages) {
+        pendingMessages.removeRange(maxMessages, pendingMessages.length);
+      }
+      _pendingCount.value = pendingMessages.length;
       return;
     }
 
@@ -1411,38 +1466,95 @@ class _MyHomePageState extends State<MyHomePage>
   /// that we shift the scroll offset down by exactly the height of the rows
   /// we just added, so the messages already on screen don't visually move.
   ///
-  /// That exact compensation is only possible because every row has a fixed
-  /// `_messageRowExtent` (see its doc comment) — the added height is simply
-  /// the growth in `maxScrollExtent`, which for a fixed-extent list is
-  /// exact rather than an estimate.
+  /// Everything here (including the cap trim) happens inside one `setState`
+  /// -- a single rebuild per flush rather than this plus a separate
+  /// `_runFilter()` full-list rebuild. Only the new batch is tested against
+  /// the filter (via the cached `decodeMessageTextFor`) rather than
+  /// re-filtering the whole list; `_runFilter`'s full rebuild remains the
+  /// path for when the filter text itself changes.
   void _insertMessages(List<Message<dynamic>> newestFirst) {
     if (newestFirst.isEmpty) return;
     final hasClients = _listScrollController.hasClients;
     final atTop = !hasClients || _listScrollController.offset <= 1.0;
     final oldOffset = hasClients ? _listScrollController.offset : 0.0;
-    final oldMax =
-        hasClients ? _listScrollController.position.maxScrollExtent : 0.0;
 
+    late final int matchedCount;
     setState(() {
       items.insertAll(0, newestFirst);
-      if (selectedIndex > -1) {
-        selectedIndex += newestFirst.length;
+      if (identical(filteredItems, items)) {
+        // No active filter -- filteredItems already grew along with items.
+        matchedCount = newestFirst.length;
+      } else {
+        final lowerFilter = currentFilter.toLowerCase();
+        final matched = newestFirst
+            .where((m) =>
+                decodeMessageTextFor(m).toLowerCase().contains(lowerFilter))
+            .toList(growable: false);
+        filteredItems.insertAll(0, matched);
+        matchedCount = matched.length;
       }
+      if (selectedIndex > -1) {
+        selectedIndex += matchedCount;
+      }
+      _trimToCap();
     });
-    _runFilter();
 
     // At the top: nothing to do — the offset stays 0 and the new newest
     // message renders at the top on its own. Scrolled away: shift down by
-    // however much the content above the viewport grew, keeping the same
-    // messages under the user's eyes.
-    if (!atTop) {
+    // exactly the height of the rows just prepended into `filteredItems`
+    // (what's actually rendered), clamped to the new max so a same-frame
+    // cap trim (which only removes rows below the viewport) can't overshoot
+    // past the end of the now-shorter list.
+    if (!atTop && matchedCount > 0) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_listScrollController.hasClients) return;
         final newMax = _listScrollController.position.maxScrollExtent;
-        final target = oldOffset + (newMax - oldMax);
+        final target = oldOffset + matchedCount * _messageRowExtent;
         _listScrollController.jumpTo(target > newMax ? newMax : target);
       });
     }
+  }
+
+  /// Trims `items` (and `filteredItems`/selection state derived from it)
+  /// back down to `maxMessages`, dropping the oldest messages first -- the
+  /// tail of the newest-first list. `maxMessages <= 0` means unlimited: no
+  /// trimming ever happens.
+  ///
+  /// Must run inside the same `setState` that grew `items` (see
+  /// `_insertMessages`) so a prepend-then-trim in one flush produces exactly
+  /// one rebuild. Expandos keyed on the trimmed `Message`s (colorIndex,
+  /// capturedAt, decoded-text cache) need no explicit cleanup -- once
+  /// nothing else references a trimmed message, its entries become
+  /// collectible along with it.
+  void _trimToCap() {
+    if (maxMessages <= 0 || items.length <= maxMessages) return;
+    final cutIndex = maxMessages;
+    final trimmed = items.sublist(cutIndex);
+
+    // Capture the currently-selected message by identity before anything
+    // is mutated, so it can be re-located afterward regardless of whether
+    // it was trimmed or just shifted.
+    final previouslySelected =
+        selectedIndex >= 0 && selectedIndex < filteredItems.length
+            ? filteredItems[selectedIndex]
+            : null;
+
+    items.removeRange(cutIndex, items.length);
+    if (!identical(filteredItems, items)) {
+      final trimmedSet = trimmed.toSet();
+      filteredItems.removeWhere(trimmedSet.contains);
+    }
+    // else: filteredItems IS items, so removeRange above already shrank it.
+
+    final trimmedSet = trimmed.toSet();
+    _multiSelected.removeWhere(trimmedSet.contains);
+    if (_selectionAnchor != null && trimmedSet.contains(_selectionAnchor)) {
+      _selectionAnchor = null;
+    }
+
+    selectedIndex = previouslySelected != null
+        ? filteredItems.indexOf(previouslySelected)
+        : -1;
   }
 
   /// Tracks whether the list has scrolled away from the top so the "jump to
@@ -1472,6 +1584,7 @@ class _MyHomePageState extends State<MyHomePage>
       pendingMessages.clear();
       messagesPaused = false;
     });
+    _pendingCount.value = 0;
     _insertMessages(buffered);
   }
 
@@ -1582,8 +1695,12 @@ class _MyHomePageState extends State<MyHomePage>
   void natsDisconnect() async {
     await natsClient.forceClose();
 
+    _statusSub?.cancel();
+    _statusSub = null;
     for (final info in subscriptions) {
       info.sid = null;
+      info.subscription?.cancel();
+      info.subscription = null;
     }
 
     if (mounted) {
@@ -1600,7 +1717,12 @@ class _MyHomePageState extends State<MyHomePage>
         filteredItems.clear();
         pendingMessages.clear();
         _incomingBatch.clear();
+        selectedIndex = -1;
+        _multiSelected.clear();
+        _multiSelectActive = false;
+        _selectionAnchor = null;
       });
+      _pendingCount.value = 0;
     }
   }
 
@@ -1651,7 +1773,7 @@ class _MyHomePageState extends State<MyHomePage>
       headers = message.header?.headers ?? <String, String>{};
     }
 
-    final text = decodeMessageText(message.byte);
+    final text = decodeMessageTextFor(message);
     String formattedJson = '';
     try {
       var json = jsonDecode(text);
@@ -1671,6 +1793,7 @@ class _MyHomePageState extends State<MyHomePage>
           headerVersion: headerVersion,
           headers: headers,
           formattedJson: formattedJson,
+          capturedAt: _capturedAtFor(message),
         );
       },
     );
@@ -1695,7 +1818,7 @@ class _MyHomePageState extends State<MyHomePage>
 
     // Add mounted check before using context after async gap
     if (!mounted) return;
-    return showDialog<void>(
+    await showDialog<void>(
       context: context,
       builder: (BuildContext context) {
         return SendMessageDialog(
@@ -1711,6 +1834,17 @@ class _MyHomePageState extends State<MyHomePage>
         );
       },
     );
+    // Deferred rather than disposed immediately: `showDialog`'s Future
+    // resolves as soon as the route is popped, before its exit transition
+    // has finished rendering -- disposing these controllers synchronously
+    // here crashes the still-fading-out dialog's `TextFormField`s
+    // ("A TextEditingController was used after being disposed"). The
+    // default Material dialog transition is ~150ms; wait comfortably past
+    // it before freeing them.
+    Future.delayed(const Duration(milliseconds: 300), () {
+      subjectBoxController.dispose();
+      dataBoxController.dispose();
+    });
   }
 
   /// Real, `file_picker`-backed implementation of saving exported message
@@ -1785,7 +1919,12 @@ class _MyHomePageState extends State<MyHomePage>
   void _showExportDialog({required bool exportAll}) {
     final List<Message<dynamic>> messages;
     if (exportAll) {
-      messages = items;
+      // A snapshot, not a live reference -- messages can keep arriving (and
+      // being trimmed by the cap) between opening this dialog and the user
+      // confirming, and `_exportMessages` awaits between chunks while
+      // exporting. Exporting `items` directly would let both mutate the
+      // very list being iterated mid-export.
+      messages = List<Message<dynamic>>.of(items);
     } else {
       final selection = _effectiveSelection();
       messages = filteredItems.where(selection.contains).toList();
@@ -1866,6 +2005,8 @@ class _MyHomePageState extends State<MyHomePage>
           initialServiceDiscoveryEnabled: serviceDiscoveryEnabled,
           initialUpdateCheckEnabled: updateCheckEnabled,
           initialShowSubscriptionColors: showSubscriptionColors,
+          initialMaxMessages: maxMessages,
+          initialShowTimestamps: showTimestamps,
           onSave: (
             fontSize,
             retryIntervalValue,
@@ -1875,6 +2016,8 @@ class _MyHomePageState extends State<MyHomePage>
             serviceDiscoveryEnabledValue,
             updateCheckEnabledValue,
             showSubscriptionColorsValue,
+            maxMessagesValue,
+            showTimestampsValue,
           ) {
             final updateCheckJustEnabled =
                 updateCheckEnabledValue && !updateCheckEnabled;
@@ -1887,7 +2030,12 @@ class _MyHomePageState extends State<MyHomePage>
               serviceDiscoveryEnabled = serviceDiscoveryEnabledValue;
               updateCheckEnabled = updateCheckEnabledValue;
               showSubscriptionColors = showSubscriptionColorsValue;
+              maxMessages = maxMessagesValue;
+              showTimestamps = showTimestampsValue;
               _ensureTabController();
+              // A no-op unless the new cap is smaller than the list's
+              // current size (e.g. the user just lowered it here).
+              _trimToCap();
             });
             saveMessageSettings();
             if (updateCheckJustEnabled) {
@@ -2309,7 +2457,7 @@ class _MyHomePageState extends State<MyHomePage>
           switch (value) {
             case 'copy':
               await Clipboard.setData(ClipboardData(
-                  text: decodeMessageText(filteredItems[index].byte)));
+                  text: decodeMessageTextFor(filteredItems[index])));
               if (mounted) {
                 showSnackBar('Copied to clipboard!');
               }
@@ -2328,7 +2476,7 @@ class _MyHomePageState extends State<MyHomePage>
             case 'replay':
               if (mounted && currentStatus == Status.connected) {
                 natsClient.pubString(filteredItems[index].subject!,
-                    decodeMessageText(filteredItems[index].byte),
+                    decodeMessageTextFor(filteredItems[index]),
                     header: filteredItems[index].header);
               }
               break;
@@ -2337,7 +2485,7 @@ class _MyHomePageState extends State<MyHomePage>
                 showSendMessageDialog(
                     filteredItems[index].subject!,
                     null,
-                    decodeMessageText(filteredItems[index].byte),
+                    decodeMessageTextFor(filteredItems[index]),
                     filteredItems[index].header?.headers);
               }
               break;
@@ -2440,7 +2588,7 @@ class _MyHomePageState extends State<MyHomePage>
             } else if (event.logicalKey == LogicalKeyboardKey.keyR) {
               if (currentStatus == Status.connected) {
                 natsClient.pubString(filteredItems[selectedIndex].subject!,
-                    decodeMessageText(filteredItems[selectedIndex].byte),
+                    decodeMessageTextFor(filteredItems[selectedIndex]),
                     header: filteredItems[selectedIndex].header);
               } else {
                 showSnackBar('Not connected, cannot replay message');
@@ -2451,7 +2599,7 @@ class _MyHomePageState extends State<MyHomePage>
                 showSendMessageDialog(
                     filteredItems[selectedIndex].subject!,
                     null,
-                    decodeMessageText(filteredItems[selectedIndex].byte),
+                    decodeMessageTextFor(filteredItems[selectedIndex]),
                     filteredItems[selectedIndex].header?.headers);
               } else {
                 showSnackBar('Not connected, cannot send message');
@@ -2487,7 +2635,7 @@ class _MyHomePageState extends State<MyHomePage>
                 _copyMultiSelection(selection);
               } else if (selection.isNotEmpty) {
                 Clipboard.setData(ClipboardData(
-                    text: decodeMessageText(selection.first.byte)));
+                    text: decodeMessageTextFor(selection.first)));
                 showSnackBar('Copied to clipboard!');
               }
               return KeyEventResult.handled;
@@ -2796,7 +2944,7 @@ class _MyHomePageState extends State<MyHomePage>
           ),
         if (messagesPaused)
           PausedBanner(
-            pendingCount: pendingMessages.length,
+            pendingCount: _pendingCount,
             onResume: _resumeMessageList,
           ),
         Expanded(
@@ -2851,7 +2999,7 @@ class _MyHomePageState extends State<MyHomePage>
                               // height makes its own centering math correct.
                               minTileHeight: _messageRowExtent,
                               title: RegexTextHighlight(
-                                text: decodeMessageText(message.byte),
+                                text: decodeMessageTextFor(message),
                                 searchTerm: currentFind,
                                 fontSize: messageFontSize,
                                 highlightStyle: TextStyle(
@@ -2880,6 +3028,25 @@ class _MyHomePageState extends State<MyHomePage>
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: <Widget>[
+                                  if (showTimestamps &&
+                                      _messageCapturedAt[message] != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(right: 6),
+                                      child: Text(
+                                        formatTimeOfDay(
+                                            _messageCapturedAt[message]!),
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurface
+                                              .withValues(alpha: 0.55),
+                                          fontFeatures: const [
+                                            FontFeature.tabularFigures(),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
                                   ConstrainedBox(
                                     constraints:
                                         const BoxConstraints(maxWidth: 450),
@@ -2952,40 +3119,49 @@ class _MyHomePageState extends State<MyHomePage>
               child: SizedBox(
                   height: 50,
                   width: 108,
-                  child: Tooltip(
-                    message: messagesPaused
-                        ? 'Resume (${pendingMessages.length} buffered)'
-                        : 'Pause incoming messages',
-                    child: FilledButton.tonal(
-                        style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 8)),
-                        onPressed: messagesPaused
-                            ? _resumeMessageList
-                            : _pauseMessageList,
-                        // A `Badge` here used to overlap the icon closely
-                        // enough that it was hard to tell Pause from Resume
-                        // at a glance without the tooltip — a plain Row
-                        // with the count as a separate pill keeps the icon
-                        // fully visible.
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              messagesPaused ? Icons.play_arrow : Icons.pause,
-                              size: 18,
-                            ),
-                            if (messagesPaused && pendingMessages.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 4),
-                                child: Text(
-                                  formatCompactCount(pendingMessages.length),
-                                  overflow: TextOverflow.clip,
-                                  softWrap: false,
-                                ),
+                  // Only this listens to `_pendingCount` -- the tooltip text
+                  // and count pill are the only parts of the toolbar that
+                  // change on every paused flush, so only they rebuild.
+                  child: ValueListenableBuilder<int>(
+                    valueListenable: _pendingCount,
+                    builder: (context, pendingCount, _) => Tooltip(
+                      message: messagesPaused
+                          ? 'Resume ($pendingCount buffered)'
+                          : 'Pause incoming messages',
+                      child: FilledButton.tonal(
+                          style: FilledButton.styleFrom(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 8)),
+                          onPressed: messagesPaused
+                              ? _resumeMessageList
+                              : _pauseMessageList,
+                          // A `Badge` here used to overlap the icon closely
+                          // enough that it was hard to tell Pause from Resume
+                          // at a glance without the tooltip — a plain Row
+                          // with the count as a separate pill keeps the icon
+                          // fully visible.
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                messagesPaused
+                                    ? Icons.play_arrow
+                                    : Icons.pause,
+                                size: 18,
                               ),
-                          ],
-                        )),
+                              if (messagesPaused && pendingCount > 0)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 4),
+                                  child: Text(
+                                    formatCompactCount(pendingCount),
+                                    overflow: TextOverflow.clip,
+                                    softWrap: false,
+                                  ),
+                                ),
+                            ],
+                          )),
+                    ),
                   )),
             ),
             Container(
@@ -3073,12 +3249,16 @@ class _MyHomePageState extends State<MyHomePage>
                   onChanged: (value) {
                     setState(() {
                       currentFind = value;
+                      _findPatternInvalid = !isValidRegexPattern(value);
                     });
                   },
                   decoration: InputDecoration(
                     border: const OutlineInputBorder(),
                     hintText: 'Find',
                     labelText: 'Find',
+                    errorText: _findPatternInvalid
+                        ? 'Invalid regex — highlighting disabled'
+                        : null,
                     prefixIcon: const Icon(Icons.search),
                     suffixIcon: IconButton(
                       icon: const Icon(Icons.clear),
@@ -3086,6 +3266,7 @@ class _MyHomePageState extends State<MyHomePage>
                         setState(() {
                           findBoxController.clear();
                           currentFind = '';
+                          _findPatternInvalid = false;
                         });
                       },
                     ),

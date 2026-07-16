@@ -55,6 +55,13 @@ Future<void> pumpBriefly(
 Future<void> pumpConnectedApp(
   WidgetTester tester, {
   String subject = constants.defaultSubject,
+  // Overridable (rather than always reset to the default) so a test can
+  // seed a cap/toggle that takes effect from this app instance's very
+  // first `loadMessageSettings` read -- setting the pref before calling
+  // this function wouldn't work, since the reset below would just
+  // clobber it before `app.main()` ever reads it.
+  int maxMessages = constants.defaultMaxMessages,
+  bool showTimestamps = constants.defaultShowTimestamps,
 }) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setString(constants.prefScheme, constants.defaultScheme);
@@ -83,6 +90,8 @@ Future<void> pumpConnectedApp(
   // fast-failing-connect scenario) would otherwise silently leak into and
   // crash a later, unrelated test that opens Settings.
   await prefs.setInt(constants.prefRetryInterval, constants.defaultRetryInterval);
+  await prefs.setInt(constants.prefMaxMessages, maxMessages);
+  await prefs.setBool(constants.prefShowTimestamps, showTimestamps);
   await prefs.setString(constants.prefTrustedCertificate, '');
   await prefs.setString(constants.prefTrustedCertificateName, '');
   await prefs.setString(constants.prefCertificateChain, '');
@@ -131,6 +140,13 @@ Future<void> pumpDisconnectedApp(
   // fast-failing-connect scenario) would otherwise silently leak into and
   // crash a later, unrelated test that opens Settings.
   await prefs.setInt(constants.prefRetryInterval, constants.defaultRetryInterval);
+  // Same reasoning as every other reset in this function -- a cap/toggle a
+  // test seeds directly (bypassing the Settings dropdown's options) would
+  // otherwise leak into and silently change what a later, unrelated test is
+  // actually exercising.
+  await prefs.setInt(constants.prefMaxMessages, constants.defaultMaxMessages);
+  await prefs.setBool(
+      constants.prefShowTimestamps, constants.defaultShowTimestamps);
   await prefs.setString(constants.prefTrustedCertificate, '');
   await prefs.setString(constants.prefTrustedCertificateName, '');
   await prefs.setString(constants.prefCertificateChain, '');

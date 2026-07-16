@@ -4,8 +4,11 @@ import 'package:nats_client_flutter/settings_dialog.dart';
 
 void main() {
   Widget buildDialog(
-      void Function(double, int, bool, bool, bool, bool, bool, bool)
-          onSave) {
+      void Function(double, int, bool, bool, bool, bool, bool, bool, int,
+              bool)
+          onSave,
+      {int initialMaxMessages = 10000,
+      bool initialShowTimestamps = false}) {
     return MaterialApp(
       home: Scaffold(
         body: SettingsDialog(
@@ -17,18 +20,23 @@ void main() {
           initialServiceDiscoveryEnabled: true,
           initialUpdateCheckEnabled: true,
           initialShowSubscriptionColors: true,
+          initialMaxMessages: initialMaxMessages,
+          initialShowTimestamps: initialShowTimestamps,
           onSave: onSave,
         ),
       ),
     );
   }
 
+  void noopSave(double a, int b, bool c, bool d, bool e, bool f, bool g,
+      bool h, int i, bool j) {}
+
   testWidgets('shows the initial values', (tester) async {
-    await tester.pumpWidget(
-        buildDialog((_, __, ___, ____, _____, ______, _______, ________) {}));
+    await tester.pumpWidget(buildDialog(noopSave));
 
     expect(find.text('14'), findsOneWidget);
     expect(find.text('5 seconds'), findsOneWidget);
+    expect(find.text('10k'), findsOneWidget);
 
     final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
     final showSubscriptionColorsSwitch = switches[0];
@@ -37,18 +45,19 @@ void main() {
     final objectStoreSwitch = switches[3];
     final serviceDiscoverySwitch = switches[4];
     final updateCheckSwitch = switches[5];
+    final showTimestampsSwitch = switches[6];
     expect(showSubscriptionColorsSwitch.value, isTrue);
     expect(jetStreamSwitch.value, isTrue);
     expect(kvSwitch.value, isTrue);
     expect(objectStoreSwitch.value, isTrue);
     expect(serviceDiscoverySwitch.value, isTrue);
     expect(updateCheckSwitch.value, isTrue);
+    expect(showTimestampsSwitch.value, isFalse);
   });
 
   testWidgets('toggling Show Subscription Colors flips its switch',
       (tester) async {
-    await tester.pumpWidget(
-        buildDialog((_, __, ___, ____, _____, ______, _______, ________) {}));
+    await tester.pumpWidget(buildDialog(noopSave));
 
     final showSubscriptionColorsSwitchFinder = find.byType(Switch).at(0);
     await tester.tap(showSubscriptionColorsSwitchFinder);
@@ -60,8 +69,7 @@ void main() {
   });
 
   testWidgets('toggling Enable JetStream flips its switch', (tester) async {
-    await tester.pumpWidget(
-        buildDialog((_, __, ___, ____, _____, ______, _______, ________) {}));
+    await tester.pumpWidget(buildDialog(noopSave));
 
     final jetStreamSwitchFinder = find.byType(Switch).at(1);
     await tester.tap(jetStreamSwitchFinder);
@@ -73,8 +81,7 @@ void main() {
 
   testWidgets('toggling Enable Key-Value Stores flips its switch',
       (tester) async {
-    await tester.pumpWidget(
-        buildDialog((_, __, ___, ____, _____, ______, _______, ________) {}));
+    await tester.pumpWidget(buildDialog(noopSave));
 
     final kvSwitchFinder = find.byType(Switch).at(2);
     await tester.tap(kvSwitchFinder);
@@ -85,8 +92,7 @@ void main() {
   });
 
   testWidgets('toggling Enable Object Store flips its switch', (tester) async {
-    await tester.pumpWidget(
-        buildDialog((_, __, ___, ____, _____, ______, _______, ________) {}));
+    await tester.pumpWidget(buildDialog(noopSave));
 
     final objectStoreSwitchFinder = find.byType(Switch).at(3);
     await tester.tap(objectStoreSwitchFinder);
@@ -98,8 +104,7 @@ void main() {
 
   testWidgets('toggling Enable Service Discovery flips its switch',
       (tester) async {
-    await tester.pumpWidget(
-        buildDialog((_, __, ___, ____, _____, ______, _______, ________) {}));
+    await tester.pumpWidget(buildDialog(noopSave));
 
     // The dialog's content is scrollable once this many toggles are present
     // — scroll the switch into view before tapping it, same reasoning as
@@ -115,25 +120,34 @@ void main() {
   });
 
   testWidgets('toggling Check for Updates flips its switch', (tester) async {
-    await tester.pumpWidget(
-        buildDialog((_, __, ___, ____, _____, ______, _______, ________) {}));
+    await tester.pumpWidget(buildDialog(noopSave));
 
-    // The dialog's content became scrollable once the Object Store toggle
-    // pushed it past the fixed content height — scroll the last switch into
-    // view before tapping it, or the tap misses (hits whatever's on top of
-    // the still-off-screen widget instead).
-    await tester.ensureVisible(find.byType(Switch).last);
-    await tester.tap(find.byType(Switch).last);
+    final updateCheckSwitchFinder = find.byType(Switch).at(5);
+    await tester.ensureVisible(updateCheckSwitchFinder);
+    await tester.tap(updateCheckSwitchFinder);
     await tester.pump();
 
-    final updateCheckSwitch = tester.widget<Switch>(find.byType(Switch).last);
+    final updateCheckSwitch = tester.widget<Switch>(updateCheckSwitchFinder);
     expect(updateCheckSwitch.value, isFalse);
+  });
+
+  testWidgets('toggling Show Message Timestamps flips its switch',
+      (tester) async {
+    await tester.pumpWidget(buildDialog(noopSave));
+
+    final showTimestampsSwitchFinder = find.byType(Switch).at(6);
+    await tester.ensureVisible(showTimestampsSwitchFinder);
+    await tester.tap(showTimestampsSwitchFinder);
+    await tester.pump();
+
+    final showTimestampsSwitch =
+        tester.widget<Switch>(showTimestampsSwitchFinder);
+    expect(showTimestampsSwitch.value, isTrue);
   });
 
   testWidgets('changing the Reconnect Interval dropdown updates the value',
       (tester) async {
-    await tester.pumpWidget(
-        buildDialog((_, __, ___, ____, _____, ______, _______, ________) {}));
+    await tester.pumpWidget(buildDialog(noopSave));
 
     await tester.tap(find.text('5 seconds'));
     await tester.pumpAndSettle();
@@ -143,10 +157,31 @@ void main() {
     expect(find.text('10 seconds'), findsOneWidget);
   });
 
+  testWidgets('changing the Max Messages Kept dropdown updates the value',
+      (tester) async {
+    await tester.pumpWidget(buildDialog(noopSave));
+
+    await tester.ensureVisible(find.text('10k'));
+    await tester.tap(find.text('10k'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Unlimited').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Unlimited'), findsOneWidget);
+  });
+
+  testWidgets(
+      'a persisted Max Messages value outside the standard options still '
+      'shows up as a selected item', (tester) async {
+    await tester.pumpWidget(buildDialog(noopSave, initialMaxMessages: 42));
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('42'), findsOneWidget);
+  });
+
   testWidgets('dragging the font size slider updates the displayed value',
       (tester) async {
-    await tester.pumpWidget(
-        buildDialog((_, __, ___, ____, _____, ______, _______, ________) {}));
+    await tester.pumpWidget(buildDialog(noopSave));
 
     expect(find.text('14'), findsOneWidget);
     await tester.drag(find.byType(Slider), const Offset(200, 0));
@@ -173,8 +208,10 @@ void main() {
                   initialServiceDiscoveryEnabled: true,
                   initialUpdateCheckEnabled: true,
                   initialShowSubscriptionColors: true,
-                  onSave: (_, __, ___, ____, _____, ______, _______,
-                          ________) =>
+                  initialMaxMessages: 10000,
+                  initialShowTimestamps: false,
+                  onSave: (_, __, ___, ____, _____, ______, _______, ________,
+                          _________, __________) =>
                       saveCalled = true,
                 ),
               ),
@@ -204,6 +241,8 @@ void main() {
     bool? savedServiceDiscoveryEnabled;
     bool? savedUpdateCheckEnabled;
     bool? savedShowSubscriptionColors;
+    int? savedMaxMessages;
+    bool? savedShowTimestamps;
 
     await tester.pumpWidget(MaterialApp(
       home: Builder(
@@ -221,9 +260,11 @@ void main() {
                   initialServiceDiscoveryEnabled: true,
                   initialUpdateCheckEnabled: true,
                   initialShowSubscriptionColors: true,
+                  initialMaxMessages: 10000,
+                  initialShowTimestamps: false,
                   onSave: (fontSize, retryInterval, jetStream, kv,
                       objectStore, serviceDiscovery, updateCheck,
-                      showSubscriptionColors) {
+                      showSubscriptionColors, maxMessages, showTimestamps) {
                     savedFontSize = fontSize;
                     savedRetryInterval = retryInterval;
                     savedJetStreamEnabled = jetStream;
@@ -232,6 +273,8 @@ void main() {
                     savedServiceDiscoveryEnabled = serviceDiscovery;
                     savedUpdateCheckEnabled = updateCheck;
                     savedShowSubscriptionColors = showSubscriptionColors;
+                    savedMaxMessages = maxMessages;
+                    savedShowTimestamps = showTimestamps;
                   },
                 ),
               ),
@@ -249,6 +292,10 @@ void main() {
     // occupies index 0 — see the widget-order comment in settings_dialog.dart.
     await tester.tap(find.byType(Switch).at(1));
     await tester.pump();
+    final showTimestampsSwitchFinder = find.byType(Switch).at(6);
+    await tester.ensureVisible(showTimestampsSwitchFinder);
+    await tester.tap(showTimestampsSwitchFinder);
+    await tester.pump();
     await tester.tap(find.widgetWithText(TextButton, 'Save'));
     await tester.pumpAndSettle();
 
@@ -260,6 +307,8 @@ void main() {
     expect(savedServiceDiscoveryEnabled, isTrue);
     expect(savedUpdateCheckEnabled, isTrue);
     expect(savedShowSubscriptionColors, isTrue);
+    expect(savedMaxMessages, 10000);
+    expect(savedShowTimestamps, isTrue);
     expect(find.byType(SettingsDialog), findsNothing);
   });
 }

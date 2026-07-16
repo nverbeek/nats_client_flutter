@@ -46,10 +46,22 @@ class FakeKvManager extends KvManager {
   String? lastPurgedKey;
 
   final Map<String, StreamController<KeyValueEntry?>> _watchControllers = {};
+  final Map<String, int> _watchListenerCounts = {};
+
+  /// Number of currently-active listeners on `bucket`'s watch stream --
+  /// lets a test assert that a bucket switch or a refresh never leaves more
+  /// than one live subscription stacked underneath another.
+  int watchListenerCount(String bucket) => _watchListenerCounts[bucket] ?? 0;
 
   StreamController<KeyValueEntry?> watchControllerFor(String bucket) =>
       _watchControllers.putIfAbsent(
-          bucket, () => StreamController<KeyValueEntry?>.broadcast());
+          bucket,
+          () => StreamController<KeyValueEntry?>.broadcast(
+                onListen: () => _watchListenerCounts[bucket] =
+                    (_watchListenerCounts[bucket] ?? 0) + 1,
+                onCancel: () => _watchListenerCounts[bucket] =
+                    (_watchListenerCounts[bucket] ?? 0) - 1,
+              ));
 
   @override
   Future<String?> checkAvailability({Duration? timeout}) {
@@ -516,6 +528,54 @@ void main() {
         _entry('db.port', '', revision: 6, op: KeyValueOp.delete));
     await tester.pumpAndSettle();
     expect(find.text('db.port'), findsNothing);
+  });
+
+  testWidgets(
+      'exactly one active watch survives a keys-load failure, Retry, and a '
+      'bucket reselect',
+      (tester) async {
+    final manager = FakeKvManager();
+    manager.listBucketsImpl =
+        () async => [_bucketStream('app-config'), _bucketStream('other')];
+    var failFirstLoad = true;
+    manager.listKeysImpl = (_) async {
+      if (failFirstLoad) {
+        failFirstLoad = false;
+        throw Exception('boom');
+      }
+      return ['db.port'];
+    };
+    manager.getEntryImpl = (_, key) async => _entry(key, '5432');
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: KvDashboard(manager: manager))),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('app-config'));
+    await tester.pumpAndSettle();
+
+    // The failed load never reached `_startWatch` at all.
+    expect(find.text('Retry'), findsOneWidget);
+    expect(manager.watchListenerCount('app-config'), 0);
+
+    // `_loadKeys`'s Retry button reaches `_startWatch` directly, without
+    // going through `_selectBucket`'s own cancel-first step -- the path
+    // `_startWatch`'s own cancel-before-listen guards against stacking a
+    // second subscription on top of a still-active one.
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(find.text('db.port'), findsOneWidget);
+    expect(manager.watchListenerCount('app-config'), 1);
+
+    // Switching to another bucket and back re-selects the same bucket --
+    // still exactly one active watch, not stacked on the previous one.
+    await tester.tap(find.text('other'));
+    await tester.pumpAndSettle();
+    expect(manager.watchListenerCount('app-config'), 0);
+    await tester.tap(find.text('app-config'));
+    await tester.pumpAndSettle();
+    expect(manager.watchListenerCount('app-config'), 1);
   });
 
   testWidgets(

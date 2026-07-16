@@ -1,22 +1,29 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:flutter/material.dart';
 
 import 'constants.dart' as constants;
 
 /// Desired-state model for one NATS subscription the app manages.
 ///
-/// [subject] and [queueGroup] are persisted; [colorIndex] and [sid] are not.
-/// [sid] is runtime-only: null while disconnected, populated when the
-/// subscription is actually placed on the wire, and must be nulled again
-/// whenever the underlying `Client` is discarded (see natsConnect/
-/// natsDisconnect in main.dart) since sids are only meaningful for the
-/// lifetime of one `Client` instance.
+/// [subject] and [queueGroup] are persisted; [colorIndex], [sid], and
+/// [subscription] are not. [sid] is runtime-only: null while disconnected,
+/// populated when the subscription is actually placed on the wire, and must
+/// be nulled again whenever the underlying `Client` is discarded (see
+/// natsConnect/natsDisconnect in main.dart) since sids are only meaningful
+/// for the lifetime of one `Client` instance. [subscription] holds the
+/// listener `_subscribeOne` (main.dart) attaches to this subscription's
+/// message stream, so it can be cancelled before a new one is attached —
+/// without that, reconnecting (or any other resubscribe path) would stack a
+/// duplicate listener on top of the old one, double-inserting every message.
 class SubscriptionInfo {
   String subject;
   String? queueGroup;
   final int colorIndex;
   int? sid;
+  StreamSubscription<Message<dynamic>>? subscription;
 
   SubscriptionInfo({
     required this.subject,

@@ -4,7 +4,9 @@ import 'dart:convert';
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'constants.dart' as constants;
 import 'format_utils.dart';
 import 'jetstream_manager.dart';
 import 'message_detail_dialog.dart';
@@ -66,6 +68,12 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
   // touching `_messages`/the rendered list at all.
   bool _paused = false;
   final List<Message> _pendingMessages = [];
+  // Mirrors `_pendingMessages.length` for `PausedBanner`/the toolbar pill's
+  // `ValueListenableBuilder` -- see the matching `_pendingCount` in
+  // `main.dart` for the full reasoning (kept in sync inside the same
+  // `setState`s here rather than replicating that file's no-`setState`
+  // optimization, since this view's flush isn't rewritten to skip it).
+  final ValueNotifier<int> _pendingCount = ValueNotifier<int>(0);
 
   // A stream can deliver far faster than the UI needs to reflect it —
   // incoming messages land here first (cheap O(1) append) and get flushed
@@ -73,6 +81,11 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
   final List<Message> _incomingBatch = [];
   Timer? _incomingFlushTimer;
   static const _incomingFlushInterval = Duration(milliseconds: 32);
+
+  // Read once at open time -- this view has no constructor-level settings
+  // plumbing today, so a change made in Settings while this panel is
+  // already open only takes effect the next time it's reopened.
+  int _maxMessages = constants.defaultMaxMessages;
 
   /// Lets the app-wide Ctrl+F / Ctrl+Shift+F shortcut handler in `main.dart`
   /// reach this view's Find field via the `GlobalKey` held by
@@ -86,7 +99,16 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
   void initState() {
     super.initState();
     _scrollController.addListener(_updateJumpToTopVisibility);
+    _loadMaxMessages();
     _startBrowsing();
+  }
+
+  Future<void> _loadMaxMessages() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getInt(constants.prefMaxMessages) ??
+        constants.defaultMaxMessages;
+    if (!mounted) return;
+    setState(() => _maxMessages = value);
   }
 
   @override
@@ -98,6 +120,7 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
       _filteredMessages = [];
       _errorMessage = null;
       _pendingMessages.clear();
+      _pendingCount.value = 0;
       _incomingBatch.clear();
       _incomingFlushTimer?.cancel();
       _incomingFlushTimer = null;
@@ -109,6 +132,7 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
   void dispose() {
     _stopBrowsing();
     _incomingFlushTimer?.cancel();
+    _pendingCount.dispose();
     _filterController.dispose();
     _findController.dispose();
     _filterFocusNode.dispose();
@@ -167,6 +191,12 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
     if (_paused) {
       setState(() {
         _pendingMessages.insertAll(0, newestFirst);
+        // Cap the buffer the same way `_trimMessagesToCap` caps `_messages`
+        // -- drop the oldest (tail) entries past the limit.
+        if (_maxMessages > 0 && _pendingMessages.length > _maxMessages) {
+          _pendingMessages.removeRange(_maxMessages, _pendingMessages.length);
+        }
+        _pendingCount.value = _pendingMessages.length;
       });
       return;
     }
@@ -186,21 +216,42 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
     final hasClients = _scrollController.hasClients;
     final atTop = !hasClients || _scrollController.offset <= 1.0;
     final oldOffset = hasClients ? _scrollController.offset : 0.0;
-    final oldMax =
-        hasClients ? _scrollController.position.maxScrollExtent : 0.0;
 
+    late final int addedToFiltered;
     setState(() {
       _messages.insertAll(0, newestFirst);
+      final oldFilteredLength = _filteredMessages.length;
       _runFilter();
+      addedToFiltered = _filteredMessages.length - oldFilteredLength;
+      _trimMessagesToCap();
     });
 
-    if (!atTop) {
+    // Shift down by exactly the height of the rows actually added to
+    // `_filteredMessages` (what's rendered), clamped to the new max so a
+    // same-frame cap trim (which only removes rows below the viewport)
+    // can't overshoot past the end of the now-shorter list.
+    if (!atTop && addedToFiltered > 0) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_scrollController.hasClients) return;
         final newMax = _scrollController.position.maxScrollExtent;
-        final target = oldOffset + (newMax - oldMax);
+        final target = oldOffset + addedToFiltered * _messageRowExtent;
         _scrollController.jumpTo(target > newMax ? newMax : target);
       });
+    }
+  }
+
+  /// Trims `_messages` (and `_filteredMessages`) back down to `_maxMessages`,
+  /// dropping the oldest messages first -- the tail of the newest-first
+  /// list. `_maxMessages <= 0` means unlimited: no trimming ever happens.
+  /// Must run inside the same `setState` that grew `_messages`.
+  void _trimMessagesToCap() {
+    if (_maxMessages <= 0 || _messages.length <= _maxMessages) return;
+    final cutIndex = _maxMessages;
+    final trimmed = _messages.sublist(cutIndex);
+    _messages.removeRange(cutIndex, _messages.length);
+    if (!identical(_filteredMessages, _messages)) {
+      final trimmedSet = trimmed.toSet();
+      _filteredMessages.removeWhere(trimmedSet.contains);
     }
   }
 
@@ -214,6 +265,7 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
       _pendingMessages.clear();
       _paused = false;
     });
+    _pendingCount.value = 0;
     _insertMessages(buffered);
   }
 
@@ -224,6 +276,7 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
       _pendingMessages.clear();
       _incomingBatch.clear();
     });
+    _pendingCount.value = 0;
   }
 
   void _stopBrowsing() {
@@ -241,6 +294,7 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
       _pendingMessages.clear();
       _incomingBatch.clear();
     });
+    _pendingCount.value = 0;
     _incomingFlushTimer?.cancel();
     _incomingFlushTimer = null;
     _stopBrowsing();
@@ -251,10 +305,10 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
     if (_currentFilter.isEmpty) {
       _filteredMessages = _messages;
     } else {
+      final lowerFilter = _currentFilter.toLowerCase();
       _filteredMessages = _messages
-          .where((message) => decodeMessageText(message.byte)
-              .toLowerCase()
-              .contains(_currentFilter.toLowerCase()))
+          .where((message) =>
+              decodeMessageTextFor(message).toLowerCase().contains(lowerFilter))
           .toList();
     }
   }
@@ -267,7 +321,7 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
       headers = message.header?.headers ?? <String, String>{};
     }
 
-    final text = decodeMessageText(message.byte);
+    final text = decodeMessageTextFor(message);
     String formattedJson;
     try {
       final json = jsonDecode(text);
@@ -431,7 +485,7 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
         const Divider(height: 1),
         if (_paused)
           PausedBanner(
-            pendingCount: _pendingMessages.length,
+            pendingCount: _pendingCount,
             onResume: _resume,
           ),
         if (_errorMessage != null)
@@ -488,7 +542,7 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
                                   ? rowEvenColor
                                   : rowOddColor,
                           title: RegexTextHighlight(
-                            text: decodeMessageText(message.byte),
+                            text: decodeMessageTextFor(message),
                             searchTerm: _currentFind,
                             fontSize: 14,
                             highlightStyle: TextStyle(
@@ -538,8 +592,7 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
                                   switch (value) {
                                     case 'copy':
                                       Clipboard.setData(ClipboardData(
-                                          text:
-                                              decodeMessageText(message.byte)));
+                                          text: decodeMessageTextFor(message)));
                                       break;
                                     case 'detail':
                                       _showDetailDialog(message);

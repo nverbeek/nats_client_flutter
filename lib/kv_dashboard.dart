@@ -190,6 +190,13 @@ class KvDashboardState extends State<KvDashboard> {
     final manager = widget.manager;
     if (manager == null) return;
 
+    // `_loadKeys` calls this on every successful load, including a Retry
+    // that doesn't go through `_selectBucket` (which cancels first) -- so a
+    // retry (or any other refresh path) without this would leave the
+    // previous watch subscription running underneath the new one, stacking
+    // a duplicate client-side listener per refresh.
+    _watchSub?.cancel();
+
     _watchSub = manager.watch(bucket).listen((entry) {
       if (!mounted || widget.manager != manager || _selectedBucket != bucket) {
         return;

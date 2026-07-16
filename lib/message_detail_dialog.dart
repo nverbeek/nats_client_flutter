@@ -3,18 +3,26 @@ import 'package:flutter/services.dart';
 import 'package:flutter_highlighter/flutter_highlighter.dart';
 import 'package:provider/provider.dart';
 import 'package:nats_client_flutter/main.dart'; // For ThemeModel
+import 'format_utils.dart';
 import 'highlight_theme.dart';
 
 class MessageDetailDialog extends StatefulWidget {
   final String headerVersion;
   final Map<String, String> headers;
   final String formattedJson;
+  // Arrival time, if known -- `null` for a message with no captured arrival
+  // time (e.g. the JetStream Browse/Tail views, which don't tag one). The
+  // Live Messages Settings toggle governs only the thin per-row timestamp;
+  // this row is shown here whenever the data is available, regardless of
+  // that toggle.
+  final DateTime? capturedAt;
 
   const MessageDetailDialog({
     super.key,
     required this.headerVersion,
     required this.headers,
     required this.formattedJson,
+    this.capturedAt,
   });
 
   @override
@@ -155,6 +163,20 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
       content: SingleChildScrollView(
         child: ListBody(
           children: <Widget>[
+            if (widget.capturedAt != null) ...[
+              const Padding(
+                padding: EdgeInsets.fromLTRB(0, 10, 0, 0),
+                child: Text(
+                  'Received',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
+                child: SelectableText(
+                    formatFullTimestamp(widget.capturedAt!)),
+              ),
+            ],
             if (widget.headerVersion.isNotEmpty)
               const Padding(
                 padding: EdgeInsets.fromLTRB(0, 10, 0, 0),

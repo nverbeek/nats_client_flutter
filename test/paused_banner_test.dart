@@ -7,7 +7,7 @@ void main() {
     return MaterialApp(
       home: Scaffold(
         body: PausedBanner(
-          pendingCount: pendingCount,
+          pendingCount: ValueNotifier<int>(pendingCount),
           onResume: onResume ?? () {},
         ),
       ),
@@ -46,5 +46,23 @@ void main() {
     ));
     await tester.tap(find.widgetWithText(TextButton, 'Resume'));
     expect(resumed, isTrue);
+  });
+
+  testWidgets(
+      'updating the ValueNotifier updates the count without rebuilding the parent',
+      (tester) async {
+    final notifier = ValueNotifier<int>(0);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: PausedBanner(pendingCount: notifier, onResume: () {}),
+      ),
+    ));
+
+    expect(find.text('Paused — no new messages yet'), findsOneWidget);
+
+    notifier.value = 5;
+    await tester.pump();
+
+    expect(find.text('Paused — 5 new messages buffered'), findsOneWidget);
   });
 }

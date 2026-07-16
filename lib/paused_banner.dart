@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'format_utils.dart';
@@ -9,8 +10,13 @@ import 'format_utils.dart';
 /// Deliberately placed outside the `ListView` it sits above (a sibling in
 /// the enclosing `Column`, never a list item) so it never interacts with
 /// that list's fixed-`itemExtent` scroll-position-stability math.
+///
+/// [pendingCount] is a [ValueListenable] rather than a plain `int` so the
+/// count can tick up on every incoming message while paused without
+/// requiring the enclosing page to rebuild its whole tree on every flush --
+/// only this banner's `ValueListenableBuilder` rebuilds.
 class PausedBanner extends StatelessWidget {
-  final int pendingCount;
+  final ValueListenable<int> pendingCount;
   final VoidCallback onResume;
 
   const PausedBanner({
@@ -22,9 +28,6 @@ class PausedBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final countLabel = pendingCount > 0
-        ? '${formatCompactCount(pendingCount)} new message${pendingCount == 1 ? '' : 's'} buffered'
-        : 'no new messages yet';
     return Material(
       color: theme.colorScheme.secondaryContainer,
       child: Padding(
@@ -35,9 +38,18 @@ class PausedBanner extends StatelessWidget {
                 size: 18, color: theme.colorScheme.onSecondaryContainer),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                'Paused — $countLabel',
-                style: TextStyle(color: theme.colorScheme.onSecondaryContainer),
+              child: ValueListenableBuilder<int>(
+                valueListenable: pendingCount,
+                builder: (context, count, _) {
+                  final countLabel = count > 0
+                      ? '${formatCompactCount(count)} new message${count == 1 ? '' : 's'} buffered'
+                      : 'no new messages yet';
+                  return Text(
+                    'Paused — $countLabel',
+                    style:
+                        TextStyle(color: theme.colorScheme.onSecondaryContainer),
+                  );
+                },
               ),
             ),
             TextButton(

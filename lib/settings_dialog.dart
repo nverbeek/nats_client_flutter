@@ -1,5 +1,20 @@
 import 'package:flutter/material.dart';
 
+/// Options offered by the "Max Messages Kept" dropdown, in display order.
+/// `0` is a sentinel meaning unlimited. If a persisted value isn't in this
+/// list (e.g. it was set by a future version, or migrated oddly), the
+/// dialog adds it as an extra item on the fly -- see
+/// `_SettingsDialogState.initState` -- rather than asserting.
+const List<int> maxMessagesOptions = [
+  1000,
+  5000,
+  10000,
+  25000,
+  50000,
+  100000,
+  0
+];
+
 class SettingsDialog extends StatefulWidget {
   final double initialFontSize;
   final int initialRetryInterval;
@@ -9,7 +24,10 @@ class SettingsDialog extends StatefulWidget {
   final bool initialServiceDiscoveryEnabled;
   final bool initialUpdateCheckEnabled;
   final bool initialShowSubscriptionColors;
-  final void Function(double, int, bool, bool, bool, bool, bool, bool) onSave;
+  final int initialMaxMessages;
+  final bool initialShowTimestamps;
+  final void Function(double, int, bool, bool, bool, bool, bool, bool, int,
+      bool) onSave;
 
   const SettingsDialog({
     super.key,
@@ -21,6 +39,8 @@ class SettingsDialog extends StatefulWidget {
     required this.initialServiceDiscoveryEnabled,
     required this.initialUpdateCheckEnabled,
     required this.initialShowSubscriptionColors,
+    required this.initialMaxMessages,
+    required this.initialShowTimestamps,
     required this.onSave,
   });
 
@@ -37,6 +57,13 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late bool tempServiceDiscoveryEnabled;
   late bool tempUpdateCheckEnabled;
   late bool tempShowSubscriptionColors;
+  late int tempMaxMessages;
+  late bool tempShowTimestamps;
+  // maxMessagesOptions plus, if needed, the persisted value -- so a value
+  // that isn't one of the standard options (e.g. from a future version)
+  // still shows up as a valid, selected item instead of tripping the
+  // dropdown's "value must be one of items" assertion.
+  late List<int> _maxMessagesItems;
 
   @override
   void initState() {
@@ -49,6 +76,21 @@ class _SettingsDialogState extends State<SettingsDialog> {
     tempServiceDiscoveryEnabled = widget.initialServiceDiscoveryEnabled;
     tempUpdateCheckEnabled = widget.initialUpdateCheckEnabled;
     tempShowSubscriptionColors = widget.initialShowSubscriptionColors;
+    tempMaxMessages = widget.initialMaxMessages;
+    tempShowTimestamps = widget.initialShowTimestamps;
+    _maxMessagesItems = maxMessagesOptions.contains(tempMaxMessages)
+        ? maxMessagesOptions
+        : [
+            ...maxMessagesOptions.where((v) => v != 0 && v < tempMaxMessages),
+            tempMaxMessages,
+            ...maxMessagesOptions.where((v) => v == 0 || v > tempMaxMessages),
+          ];
+  }
+
+  String _maxMessagesLabel(int value) {
+    if (value == 0) return 'Unlimited';
+    if (value >= 1000) return '${value ~/ 1000}k';
+    return '$value';
   }
 
   @override
@@ -212,6 +254,50 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const Text('Max Messages Kept'),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: DropdownButtonFormField<int>(
+                    initialValue: tempMaxMessages,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    items: [
+                      for (final value in _maxMessagesItems)
+                        DropdownMenuItem(
+                          value: value,
+                          child: Text(_maxMessagesLabel(value)),
+                        ),
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                        tempMaxMessages = value!;
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Show Message Timestamps'),
+                Switch(
+                  value: tempShowTimestamps,
+                  onChanged: (v) {
+                    setState(() {
+                      tempShowTimestamps = v;
+                    });
+                  },
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -233,7 +319,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 tempObjectStoreEnabled,
                 tempServiceDiscoveryEnabled,
                 tempUpdateCheckEnabled,
-                tempShowSubscriptionColors);
+                tempShowSubscriptionColors,
+                tempMaxMessages,
+                tempShowTimestamps);
             Navigator.of(context).pop();
           },
         ),
