@@ -2,7 +2,7 @@
 
 This living roadmap details the development plan, UI architecture, and implementation milestones for expanding the **NATS Client UI** with core advanced NATS ecosystem capabilities: **JetStream (Phase B)**, **Key-Value Stores (Phase A)**, **Expanded Authentication (Phase D)**, and **Update Notifications (Phase E)**.
 
-These features are made possible by our successful migration to the official mainline `dart_nats: ^1.1.1` package.
+These features are made possible by our successful migration to the official mainline `dart_nats` package (originally `^1.1.1`; now `^1.2.1`, see Milestone 18).
 
 ---
 
@@ -25,13 +25,14 @@ These features are made possible by our successful migration to the official mai
 - [ ] **Milestone 15** *(Optional follow-up — may never be picked up)*: Investigate & Implement **Code Signing for Windows & macOS Builds** (Low Priority, cost-gated). Not started — research done, decision on which paid/free path pending.
 - [x] **Milestone 16**: Apply the Latest Material 3 Standards (Low/Medium Priority). Done ahead of Milestones 12-15, same as Milestones 9-11 before it. OS dynamic color (Material You) via `DynamicColorBuilder`, plus `FilledButton`/`IconButton.filled`/`.filledTonal`/`.outlined` adopted for primary/icon-only actions across the connection bar, bottom toolbar, dashboards, and Security Settings' file pickers.
 - [ ] **Milestone 17**: Design & Implement **NATS Server Monitoring Dashboard** (Medium Priority). Not started.
-- [x] **Milestone 18**: Design & Implement **NATS Micro-services (Services API) Discovery** (Medium Priority). Client-side discovery (`discoverServices()`/`getServicesInfo()`/`getServicesStats()`) was contributed to a fork of `dart_nats` (`nverbeek/dart-nats`, branch `feature/service-discovery`, currently pinned via a `git:` dependency pending an upstream PR) as the complement to the hosting-side `addService()`/`MicroService` the upstream maintainer landed independently just before this milestone started. App-side: a new opt-in (default **off**) Services tab, `lib/service_discovery_manager.dart`, `lib/service_discovery_dashboard.dart`. Implementation, unit/widget tests, and a live-server verification pass (a real second `dart_nats` client hosting a fake ADR-32 service, discovered/inspected/stats-checked, then confirmed to vanish from a fresh Discover after it stops) are done.
+- [x] **Milestone 18**: Design & Implement **NATS Micro-services (Services API) Discovery** (Medium Priority). Client-side discovery (`discoverServices()`/`getServicesInfo()`/`getServicesStats()`) was contributed to a fork of `dart_nats` (`nverbeek/dart-nats`, branch `feature/service-discovery`, PR #44) as the complement to the hosting-side `addService()`/`MicroService` the upstream maintainer landed independently just before this milestone started. PR #44 has since merged upstream and shipped in `chartchuo/dart-nats` **1.2.0** (published to pub.dev as **1.2.1**, 2026-07-16) — `pubspec.yaml` now depends on a normal `dart_nats: ^1.2.1` pub.dev version constraint, no `git:` pin needed. App-side: a new opt-in (default **off**) Services tab, `lib/service_discovery_manager.dart`, `lib/service_discovery_dashboard.dart`. Implementation, unit/widget tests, and a live-server verification pass (a real second `dart_nats` client hosting a fake ADR-32 service, discovered/inspected/stats-checked, then confirmed to vanish from a fresh Discover after it stops) are done.
 - [x] **Milestone 19**: Design & Implement **Multi-Select + Clipboard Copy** (Medium Priority). The Live Messages list supports Shift+Click, Ctrl+Click, and Ctrl+Shift+Up/Down for range and disconnected multi-select; Ctrl+C or the row menu's "Copy Selected (N)" copies every selected row as plain text (`subject: payload`, one line per message). The status bar shows a "Selected: N" count while anything is selected. Implementation, tests, and a live-server verification pass are done.
 - [ ] **Milestone 20**: Design & Implement **Per-Subscription Message Rate Sparkline** (Low Priority, tentative). Not started — user flagged this one as a "maybe," lowest-confidence of the batch.
 - [x] **Milestone 21**: Design & Implement **Message Detail Headers Table + Raw Copy** (Low Priority). The Message Detail dialog's Headers section now renders as a bordered, rounded two-column grid (key | value, one row per header, horizontal dividers, long values wrap instead of overflowing) instead of one flattened text block, with a copy button next to the "Headers" label that copies the same raw `key: value`-per-line text the section used to show. Implementation, tests, and a visual verification pass (light + dark) are done.
 - [x] **Milestone 22**: Design & Implement **Export & Replay Captured Messages to/from File** (Low Priority). Bulk **Export** (Selected/All, NDJSON with base64 payloads, warn-and-proceed past 20,000 messages) and **Replay** (file-based bulk publish with message/repeat interval + repeat count pacing, a live preview, and a cancelable `ReplayBanner` that can coexist with `PausedBanner`) added to the Live Messages tab's toolbar and row menu. Implementation, unit/widget tests, and a live-server verification pass (export/replay byte-for-byte round trip, repeat interval honored, Stop halts promptly) are done.
 - [ ] **Milestone 23** *(Blocked — not actionable yet)*: Adopt Reconnect-Buffer Overflow Handling (`maxReconnectBuffer`) (Low Priority). Not started — waiting on PR #44 to land upstream and a new `dart_nats` release (likely `1.1.3`).
 - [ ] **Milestone 24** *(Blocked — not actionable yet)*: Adopt Heartbeat Ping/Pong for Faster Dead-Connection Detection (Low Priority). Not started — waiting on PR #44 to land upstream and a new `dart_nats` release (likely `1.1.3`).
+- [ ] **Milestone 25**: Design & Implement **Quick-Subscribe to Exact Subject from Message Row** (Low/Medium Priority). Not started.
 
 ---
 
@@ -681,41 +682,63 @@ Originally scoped as Milestone 19, this was descoped once its multi-select + cli
 
 ---
 
-## Milestone 23: Adopt Reconnect-Buffer Overflow Handling (`maxReconnectBuffer`) (Low Priority) — Blocked
+## Milestone 23: Adopt Reconnect-Buffer Overflow Handling (`maxReconnectBuffer`) (Low Priority) — Unblocked
 
 ### Objective
 Upstream commit `3d9bd9b` (landed on `chartchuo/dart-nats` master 2026-07-13, just ahead of this project's own service-discovery PR #44) gives `Client.connect()` a new `maxReconnectBuffer` parameter (default 1000). While disconnected, `pub()`/`pubString()` still queue outgoing messages in an internal buffer for replay once reconnected, but once that buffer hits `maxReconnectBuffer` entries, the call now **throws `NatsException`** instead of buffering forever. Today's uncapped behavior means a long outage combined with continued publishing grows that buffer without bound; the new behavior trades that for a hard failure once the cap is hit — better, but only if this app is ready to catch it.
 
-### Why this is blocked
-This app depends on `dart_nats` via a `git:` pin at `nverbeek/dart-nats#feature/service-discovery` (PR #44, open as of 2026-07-15) rather than a normal pub.dev version constraint — that pin exists solely to carry the service-discovery contribution and was always meant to be temporary. `3d9bd9b` (this reconnect-buffer work) landed upstream before PR #44 was opened, so the fork branch does technically carry it already, but building app-side behavior against a personal fork/branch instead of a released version isn't worth doing. Pulling this in for real should wait until:
-1. PR #44 (client-side service discovery) is merged upstream, and
-2. The maintainer cuts a new tagged release (likely `1.1.3`) so `pubspec.yaml` can go back to a normal version constraint instead of a `git:` dependency pinned to a personal fork/branch.
+### Unblocked (2026-07-16)
+PR #44 has merged upstream into `chartchuo/dart-nats` master and shipped in the **1.2.0** release (published to pub.dev as **1.2.1**), which also carries this reconnect-buffer work. `pubspec.yaml` now depends on a normal `dart_nats: ^1.2.1` pub.dev version constraint (verified `maxReconnectBuffer` present in `client.dart`, both the constructor parameter and the throw site at the buffer-full check). No dependency blocker remains — this milestone is ready to implement.
 
-Adopting this milestone's app-side changes against the fork now would mean writing against an API surface that hasn't shipped in a real release yet — not worth doing until the dependency situation is normal again.
-
-### What would need to change once unblocked
+### What needs to change
 - **`lib/main.dart`'s three fire-and-forget `pubString()`/`pub()` call sites** (Send dialog ~line 2190, row-menu Replay ~line 2330, Ctrl+R/Edit & Send ~line 2442) currently have no try/catch around the publish call. None of them pass `buffer: false`, so all three rely on the default buffering behavior and would be first to hit a newly-thrown `NatsException` during a long outage with continued sending.
 - Decide the UX for the overflow case — most likely a `SnackBar` (matching the app's existing error-surfacing pattern elsewhere) explaining that too many messages are queued while disconnected, rather than an uncaught exception reaching Flutter's error zone.
 - Consider whether `maxReconnectBuffer`'s default (1000) is worth exposing as a setting, or left as the package default — no user request for this yet, so default to leaving it alone unless raised.
 - Unit/widget test coverage for the new catch path (a fake client/manager throwing `NatsException` from a buffered publish), plus a live-server verification pass forcing a disconnect and publishing past the cap.
 
 ### Implementation Checklist
-- [ ] *(Blocked — do not start until PR #44 merges upstream and a new `dart_nats` release, e.g. `1.1.3`, is published and pulled into `pubspec.yaml`.)*
+- [ ] Wrap the three fire-and-forget publish call sites in `lib/main.dart` with error handling for the new `NatsException` overflow case.
+- [ ] Decide and implement the overflow UX (likely a `SnackBar`).
+- [ ] Unit/widget tests for the new catch path.
+- [ ] Live-server verification pass (force a disconnect, publish past the cap, confirm the new behavior surfaces cleanly).
 
 ---
 
-## Milestone 24: Adopt Heartbeat Ping/Pong for Faster Dead-Connection Detection (Low Priority) — Blocked
+## Milestone 24: Adopt Heartbeat Ping/Pong for Faster Dead-Connection Detection (Low Priority) — Unblocked
 
 ### Objective
 The same upstream commit (`3d9bd9b`) adds a configurable heartbeat mechanism to `Client.connect()`: `pingInterval` (default 120s) and `maxPingsOut` (default 2). The client now sends periodic `PING`s while connected and, if `maxPingsOut` go unanswered, proactively tears down the socket and transitions to `Status.disconnected` — detecting a dead-but-not-yet-TCP-closed connection (e.g. a silently dropped network path, a hung proxy) faster than waiting on the OS-level TCP timeout alone. This is a pure reliability improvement that plugs into the app's existing `onConnect`/`onDisconnect`/reconnect flow (`lib/main.dart`'s `natsConnect()`) with no new UI required in the simplest case.
 
-### Why this is blocked
-Same dependency situation as Milestone 23 — this project pins `dart_nats` to a `git:` fork/branch (`nverbeek/dart-nats#feature/service-discovery`, PR #44) specifically to carry the service-discovery contribution, not as a long-term arrangement. Building app-side behavior around a feature that only exists on a personal fork branch, ahead of both the upstream PR merge and a real tagged release (likely `1.1.3`), isn't worth doing yet — the dependency needs to go back to a normal pub.dev version constraint first.
+### Unblocked (2026-07-16)
+Same dependency resolution as Milestone 23 — `dart_nats: ^1.2.1` on pub.dev carries this heartbeat work (verified `pingInterval`/`maxPingsOut` present in `client.dart`'s `connect()` and the ping-timer/dead-connection teardown logic). No dependency blocker remains.
 
-### What would need to change once unblocked
+### What needs to change
 - Decide whether to pass non-default `pingInterval`/`maxPingsOut` values from `natsConnect()` in `lib/main.dart`, or accept the package defaults (120s / 2 pings ≈ up to 4 minutes to detect a dead connection) — no user complaint about reconnect latency has come up yet, so defaults are the likely starting point.
 - Confirm this doesn't change observable behavior on the happy path (pings are transport-level, invisible to the UI) — mainly a live-server verification concern (kill the underlying TCP path without a clean close, e.g. a firewall rule or killing a proxy, and confirm `Status.disconnected`/reconnect fires within roughly `pingInterval * maxPingsOut` instead of whatever the OS TCP keepalive/timeout would otherwise take).
 - No new preference/UI is anticipated unless a real need to tune the interval surfaces later.
 
 ### Implementation Checklist
-- [ ] *(Blocked — do not start until PR #44 merges upstream and a new `dart_nats` release, e.g. `1.1.3`, is published and pulled into `pubspec.yaml`.)*
+- [ ] Decide on `pingInterval`/`maxPingsOut` values (defaults vs. app-chosen).
+- [ ] Live-server verification: kill the underlying TCP path and confirm faster dead-connection detection.
+- [ ] Confirm no regression on the happy-path reconnect flow.
+
+---
+
+## Milestone 25: Quick-Subscribe to Exact Subject from Message Row (Low/Medium Priority)
+
+### Objective
+A common exploration pattern: the user subscribes to a wide wildcard subject (e.g. `orders.>`) because they don't yet know the exact subject taxonomy, then wants to narrow down to just one or two specific subjects they've spotted going by. Today that means opening the Subscription Manager dialog and typing the exact subject out by hand. This milestone adds a shortcut directly on a Live Messages row — "Subscribe to this exact subject" — that adds `message.subject` as its own new subscription via the existing add-subscription path (`lib/main.dart`'s `_addSubscription`, `lib/subscription_manager_dialog.dart`), with the user then free to remove the original wildcard chip (its existing × delete affordance from Milestone 11) to shrink down to just what they care about, live, with no reconnect.
+
+This is a complement to the existing Filter box, not a replacement: Filter narrows what's already been received and rendered (client-side only, no effect on the wire); this feature narrows what the app actually subscribes to and receives from the server in the first place.
+
+### Desired Behavior
+- New row-menu entry (and/or context action), e.g. "Subscribe to This Subject", using the row's literal `message.subject` — not a pattern/wildcard guess.
+- Adding it goes through the same live-subscribe path Milestone 11 already built (`natsClient.sub()` immediately if connected), so it takes effect without needing to reconnect or open the full manager dialog.
+- No auto-removal of the wider subscription that originally delivered the message — NATS subscriptions overlap rather than replace each other, so until the user manually removes the wide one (via its existing chip × icon) they'll receive the message twice (once per matching subscription). Surface this plainly — e.g. a brief SnackBar noting the new subscription was added and that the existing wildcard subscription still applies — rather than let duplicate delivery look like a bug.
+- Disabled/hidden for a row whose subject is already covered by an existing *exact* subscription (no point adding a literal duplicate); still offered when only a wildcard subscription currently covers it.
+
+### Implementation Checklist
+- [ ] Add the row-menu entry in `lib/main.dart`'s message popup menu, reusing `_addSubscription`/`SubscriptionInfo` (Milestone 11) with the row's exact subject and no queue group.
+- [ ] Surface the "you may now receive this subject twice until you remove the wildcard" caveat (SnackBar or similar), following this app's existing error/notice SnackBar pattern.
+- [ ] Guard against adding a literal duplicate of a subject that's already its own exact subscription.
+- [ ] Unit/widget test coverage for the new menu entry (added subscription list, duplicate-guard, disconnected state) plus a live-server verification pass: subscribe wide, receive a message, use the shortcut, confirm the new exact subscription is active server-side (e.g. via a second direct `dart_nats` client or `$SYS` subscription info), then remove the wildcard chip and confirm delivery continues uninterrupted for the exact subject.

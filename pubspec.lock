@@ -108,12 +108,11 @@ packages:
   dart_nats:
     dependency: "direct main"
     description:
-      path: "."
-      ref: "feature/service-discovery"
-      resolved-ref: ef57002b98e64f8297bbfaff91971e2d58fe3e3e
-      url: "https://github.com/nverbeek/dart-nats.git"
-    source: git
-    version: "1.1.2"
+      name: dart_nats
+      sha256: "0678af02e2ddc8d7357aa69b7a8e456ce513d63d833311631d5b9bfac204dea0"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.2.1"
   dbus:
     dependency: transitive
     description:
