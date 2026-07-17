@@ -136,20 +136,40 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
     _startHealthProbe();
   }
 
-  void _ack(Message message) {
-    message.ack();
+  // Optimistically mark the row resolved, then wait for the server to
+  // actually confirm the ack/nak/term ([ackSync]/[nakSync]/[termSync] --
+  // unlike the fire-and-forget [ack]/[nak]/[term], these throw if the
+  // publish never reaches the server, e.g. a disconnected client). On
+  // failure, revert so the buttons re-enable rather than silently leaving
+  // the user believing an unresolved message was handled.
+  Future<void> _resolve(Message message, Future<void> Function() action,
+      String failureText) async {
     setState(() => _resolved.add(message));
+    try {
+      await action();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _resolved.remove(message));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '$failureText ${describeJetStreamError(e)}',
+            style: TextStyle(color: Theme.of(context).colorScheme.onError),
+          ),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
   }
 
-  void _nak(Message message) {
-    message.nak();
-    setState(() => _resolved.add(message));
-  }
+  void _ack(Message message) => _resolve(
+      message, () => message.ackSync(), 'Ack failed — message not acknowledged.');
 
-  void _term(Message message) {
-    message.term();
-    setState(() => _resolved.add(message));
-  }
+  void _nak(Message message) => _resolve(
+      message, () => message.nakSync(), 'Nak failed — message not redelivered.');
+
+  void _term(Message message) => _resolve(
+      message, () => message.termSync(), 'Term failed — message not terminated.');
 
   Future<void> _showDetailDialog(Message message) async {
     var headerVersion = '';

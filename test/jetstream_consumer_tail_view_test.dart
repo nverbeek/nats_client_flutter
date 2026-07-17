@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:dart_nats/dart_nats.dart' as nats show Consumer;
@@ -7,17 +9,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nats_client_flutter/jetstream_consumer_tail_view.dart';
 import 'package:nats_client_flutter/jetstream_manager.dart';
 
-/// A [nats.Consumer] whose `messages()` never emits or errors on its own --
-/// this view's own health probe (backed by [FakeJetStreamManager.consumerInfo]
-/// below) is what's under test here, not message delivery, and the real
-/// `Consumer.messages()` pull loop needs a live server.
+/// A [nats.Consumer] whose `messages()` never emits or errors on its own,
+/// unless fed via [incoming] -- this view's own health probe (backed by
+/// [FakeJetStreamManager.consumerInfo] below) or ack/nak/term handling is
+/// what's under test here, not real message delivery, which needs a live
+/// server.
 class _FakeConsumer extends nats.Consumer<dynamic> {
-  _FakeConsumer(super.js, super.streamName, super.name);
+  _FakeConsumer(super.js, super.streamName, super.name, {this.incoming});
+
+  final Stream<Message<dynamic>>? incoming;
 
   @override
   Stream<Message<dynamic>> messages(
           {int batch = 1, Duration timeout = const Duration(seconds: 5)}) =>
-      const Stream.empty();
+      incoming ?? const Stream.empty();
 }
 
 class FakeJetStreamManager extends JetStreamManager {
@@ -25,10 +30,12 @@ class FakeJetStreamManager extends JetStreamManager {
 
   Future<ConsumerInfo> Function(String, String)? consumerInfoImpl;
   int consumerInfoCalls = 0;
+  Stream<Message<dynamic>>? incomingMessages;
 
   @override
   nats.Consumer<dynamic> tailConsumer(String streamName, String consumerName) {
-    return _FakeConsumer(client.jetStream(), streamName, consumerName);
+    return _FakeConsumer(client.jetStream(), streamName, consumerName,
+        incoming: incomingMessages);
   }
 
   @override
@@ -149,5 +156,41 @@ void main() {
 
     probeFinish.complete(_fakeConsumerInfo('ORDERS', 'worker-1'));
     await tester.pump();
+  });
+
+  testWidgets(
+      'a failed ack reverts the optimistic resolution and shows a snackbar',
+      (tester) async {
+    final incoming = StreamController<Message<dynamic>>();
+    final manager = FakeJetStreamManager();
+    manager.incomingMessages = incoming.stream;
+
+    await tester.pumpWidget(buildView(manager));
+    await tester.pump();
+
+    // A fresh, never-connected Client -- ackSync()'s underlying
+    // Client.request() throws synchronously since `connected` is false,
+    // simulating the ack publish never reaching the server.
+    final message = Message<dynamic>(
+      'ORDERS.new',
+      1,
+      Uint8List.fromList(utf8.encode('payload')),
+      Client(),
+      replyTo: r'$JS.ACK.ORDERS.worker-1.1.1.1.0.0',
+    );
+    incoming.add(message);
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.byTooltip('Ack'));
+    await tester.pump();
+
+    expect(find.textContaining('Ack failed'), findsOneWidget);
+    final ackButton = tester.widget<IconButton>(
+        find.widgetWithIcon(IconButton, Icons.check_circle_outline));
+    expect(ackButton.onPressed, isNotNull,
+        reason: 'the button should re-enable after the revert');
+
+    await incoming.close();
   });
 }
