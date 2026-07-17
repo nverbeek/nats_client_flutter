@@ -138,6 +138,31 @@ void main() {
     });
   });
 
+  group('describePublishError', () {
+    test('names the reconnect-buffer-full case distinctly', () {
+      final error = NatsException('reconnect buffer full');
+      expect(describePublishError(error),
+          'Too many messages queued while disconnected — this one was not sent.');
+    });
+
+    test('is case-insensitive when matching the buffer-full message', () {
+      final error = NatsException('Reconnect Buffer Full');
+      expect(describePublishError(error), contains('Too many messages queued'));
+    });
+
+    test('falls back to a truncated generic message for anything else', () {
+      final error = NatsException('request error: client not connected');
+      expect(describePublishError(error),
+          'Failed to send: NatsException: request error: client not connected');
+    });
+
+    test('handles a non-NatsException error the same generic way', () {
+      final error = Exception('socket closed');
+      expect(
+          describePublishError(error), 'Failed to send: Exception: socket closed');
+    });
+  });
+
   group('formatEstimatedDuration', () {
     test('shows <1s for a duration that rounds down to nothing', () {
       expect(formatEstimatedDuration(Duration.zero), '<1s');

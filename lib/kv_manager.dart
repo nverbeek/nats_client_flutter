@@ -2,8 +2,7 @@ import 'dart:async';
 
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 
-import 'jetstream_manager.dart'
-    show describeJetStreamError, listStreamsPaginated;
+import 'jetstream_manager.dart' show describeJetStreamError;
 
 /// Prefix JetStream uses for the backing stream of every KV bucket. Bucket
 /// names shown in the UI have this stripped back off.
@@ -49,14 +48,9 @@ class KvManager {
 
   /// List all KV buckets visible to the current account, by listing streams
   /// and keeping only the ones backing a KV bucket (`KV_<bucket>`).
-  ///
-  /// Uses [listStreamsPaginated] rather than `JetStream.listStreams()`
-  /// directly -- see that function's doc comment for why (a busy shared
-  /// account can silently truncate the unpaginated call before it ever
-  /// reaches any `KV_`-prefixed streams).
   Future<List<StreamInfo>> listBuckets(
       {Duration timeout = const Duration(seconds: 5)}) async {
-    final streams = await listStreamsPaginated(client, timeout: timeout);
+    final streams = await _js.listStreams(timeout: timeout);
     return streams.where((s) => s.config.name.startsWith(kvStreamPrefix))
         .toList();
   }

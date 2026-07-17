@@ -75,6 +75,20 @@ String truncatedErrorDetail(Object error, {int maxLength = 120}) {
   return '${text.substring(0, maxLength)}…';
 }
 
+/// Turns a failed `Client.pub`/`pubString` call into a user-facing message.
+/// A long disconnect combined with continued sending can fill `dart_nats`'s
+/// internal reconnect buffer (`maxReconnectBuffer`, default 1000): once full,
+/// the client throws a `NatsException('reconnect buffer full')` instead of
+/// buffering forever, so this is called out distinctly rather than showing
+/// as a generic failure.
+String describePublishError(Object error) {
+  if (error is NatsException &&
+      (error.message ?? '').toLowerCase().contains('reconnect buffer full')) {
+    return 'Too many messages queued while disconnected — this one was not sent.';
+  }
+  return 'Failed to send: ${truncatedErrorDetail(error)}';
+}
+
 String _twoDigits(int n) => n.toString().padLeft(2, '0');
 
 /// `dt`'s hour on a 12-hour clock (`0` maps to `12`, matching civilian

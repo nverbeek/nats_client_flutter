@@ -1094,7 +1094,11 @@ class _MyHomePageState extends State<MyHomePage>
         natsClient.loadCredentials(utf8.decode(authCredsFileBytes!));
       }
 
-      // finally, make the connection attempt
+      // finally, make the connection attempt. Deliberately not overriding
+      // pingInterval/maxPingsOut: dart_nats 1.2.2's defaults (120s / 2
+      // outstanding pings) already give heartbeat-based dead-connection
+      // detection with no observable happy-path change -- no user complaint
+      // about reconnect latency has come up to justify tuning them.
       await natsClient.connect(uri,
           retry: true,
           retryCount: -1,
@@ -2335,7 +2339,12 @@ class _MyHomePageState extends State<MyHomePage>
         : null;
 
     if (!useJetStream) {
-      natsClient.pubString(subject, data, header: header);
+      try {
+        await natsClient.pubString(subject, data, header: header);
+      } catch (e) {
+        _showErrorSnackBar(describePublishError(e));
+        return;
+      }
       if (mounted) {
         Navigator.of(context).pop();
       }
@@ -2356,20 +2365,41 @@ class _MyHomePageState extends State<MyHomePage>
         ),
       );
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            describeJetStreamError(e),
-            // The theme's default SnackBar text color (`onSurface`) doesn't
-            // contrast against an `error` background — see the identical
-            // comment in JetStreamDashboard._showSnack.
-            style: TextStyle(color: Theme.of(context).colorScheme.onError),
-          ),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
+      _showErrorSnackBar(describeJetStreamError(e));
     }
+  }
+
+  /// Publishes a captured message's original subject/payload/headers again
+  /// (row-menu "Replay" and the Ctrl+R shortcut both go through this). A long
+  /// disconnect combined with continued sending can fill `dart_nats`'s
+  /// reconnect buffer, so unlike a fire-and-forget `pubString()` this awaits
+  /// the publish and surfaces any failure instead of letting it vanish as an
+  /// unhandled Future rejection.
+  Future<void> _publishReplay(Message<dynamic> message) async {
+    try {
+      await natsClient.pubString(
+          message.subject!, decodeMessageTextFor(message),
+          header: message.header);
+    } catch (e) {
+      _showErrorSnackBar(describePublishError(e));
+    }
+  }
+
+  /// Shows [message] in the app's error-styled SnackBar. `colorScheme.error`
+  /// background always needs `colorScheme.onError` text, or it's unreadable
+  /// (especially in dark mode) -- the theme's default SnackBar text color
+  /// (`onSurface`, used by [showSnackBar]) doesn't contrast against it.
+  void _showErrorSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: TextStyle(color: Theme.of(context).colorScheme.onError),
+        ),
+        backgroundColor: Theme.of(context).colorScheme.error,
+      ),
+    );
   }
 
   /// Creates a safe PopupMenuButton that handles mounted state properly
@@ -2475,9 +2505,7 @@ class _MyHomePageState extends State<MyHomePage>
               break;
             case 'replay':
               if (mounted && currentStatus == Status.connected) {
-                natsClient.pubString(filteredItems[index].subject!,
-                    decodeMessageTextFor(filteredItems[index]),
-                    header: filteredItems[index].header);
+                await _publishReplay(filteredItems[index]);
               }
               break;
             case 'edit_and_send':
@@ -2587,9 +2615,7 @@ class _MyHomePageState extends State<MyHomePage>
               return KeyEventResult.handled;
             } else if (event.logicalKey == LogicalKeyboardKey.keyR) {
               if (currentStatus == Status.connected) {
-                natsClient.pubString(filteredItems[selectedIndex].subject!,
-                    decodeMessageTextFor(filteredItems[selectedIndex]),
-                    header: filteredItems[selectedIndex].header);
+                unawaited(_publishReplay(filteredItems[selectedIndex]));
               } else {
                 showSnackBar('Not connected, cannot replay message');
               }

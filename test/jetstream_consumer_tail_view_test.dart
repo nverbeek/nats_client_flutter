@@ -10,10 +10,9 @@ import 'package:nats_client_flutter/jetstream_consumer_tail_view.dart';
 import 'package:nats_client_flutter/jetstream_manager.dart';
 
 /// A [nats.Consumer] whose `messages()` never emits or errors on its own,
-/// unless fed via [incoming] -- this view's own health probe (backed by
-/// [FakeJetStreamManager.consumerInfo] below) or ack/nak/term handling is
-/// what's under test here, not real message delivery, which needs a live
-/// server.
+/// unless fed via [incoming] -- lets a test drive exactly what the tailed
+/// consumer's stream would deliver (messages or a delivery error) without a
+/// live server.
 class _FakeConsumer extends nats.Consumer<dynamic> {
   _FakeConsumer(super.js, super.streamName, super.name, {this.incoming});
 
@@ -28,8 +27,6 @@ class _FakeConsumer extends nats.Consumer<dynamic> {
 class FakeJetStreamManager extends JetStreamManager {
   FakeJetStreamManager() : super(Client());
 
-  Future<ConsumerInfo> Function(String, String)? consumerInfoImpl;
-  int consumerInfoCalls = 0;
   Stream<Message<dynamic>>? incomingMessages;
 
   @override
@@ -37,29 +34,7 @@ class FakeJetStreamManager extends JetStreamManager {
     return _FakeConsumer(client.jetStream(), streamName, consumerName,
         incoming: incomingMessages);
   }
-
-  @override
-  Future<ConsumerInfo> consumerInfo(String streamName, String consumerName,
-      {Duration timeout = const Duration(seconds: 5)}) {
-    consumerInfoCalls++;
-    if (consumerInfoImpl != null) {
-      return consumerInfoImpl!(streamName, consumerName);
-    }
-    return Future.value(_fakeConsumerInfo(streamName, consumerName));
-  }
 }
-
-ConsumerInfo _fakeConsumerInfo(String streamName, String name) => ConsumerInfo(
-      type: 'io.nats.jetstream.api.v1.consumer_info_response',
-      streamName: streamName,
-      name: name,
-      created: DateTime.now().toIso8601String(),
-      config: ConsumerConfig(durable: name, ackPolicy: 'explicit'),
-      numPending: 0,
-      numWaiting: 0,
-      numAckPending: 0,
-      numRedelivered: 0,
-    );
 
 void main() {
   Widget buildView(FakeJetStreamManager manager) {
@@ -91,71 +66,50 @@ void main() {
   });
 
   testWidgets(
-      'a consumer that stops existing server-side flips the dot to grey and '
-      'surfaces a Retry row within one probe interval',
-      (tester) async {
+      'a stream delivery error (e.g. the consumer was deleted server-side) '
+      'flips the dot to grey and surfaces a Retry row', (tester) async {
+    final incoming = StreamController<Message<dynamic>>();
     final manager = FakeJetStreamManager();
-    manager.consumerInfoImpl =
-        (_, __) async => throw Exception('consumer not found');
+    manager.incomingMessages = incoming.stream;
 
     await tester.pumpWidget(buildView(manager));
     await tester.pump();
-    // Before the first probe fires, the view still looks healthy.
     expect(find.byIcon(Icons.error_outline), findsNothing);
 
-    await tester.pump(const Duration(seconds: 5));
+    // dart_nats 1.2.2's pull-consumer loop surfaces a deleted/unreachable
+    // consumer via the stream's own error channel (see jetstream.dart's
+    // `Consumer.messages()`) -- this view's `onError` is what's under test,
+    // not any app-side polling.
+    incoming.addError(Exception('consumer not found'));
+    await tester.pump();
     await tester.pump();
 
     expect(find.byIcon(Icons.error_outline), findsOneWidget);
-    expect(find.textContaining('JetStream is unavailable'), findsOneWidget);
+    expect(find.textContaining('consumer not found'), findsOneWidget);
     expect(find.widgetWithText(TextButton, 'Retry'), findsOneWidget);
     final dot = tester.widget<Icon>(find.byIcon(Icons.circle));
     expect(dot.color, Colors.grey.shade500);
   });
 
-  testWidgets('Retry clears the error and probes again', (tester) async {
+  testWidgets('Retry clears the error and re-subscribes', (tester) async {
+    // Broadcast (not single-subscription) because Retry re-subscribes to the
+    // same fake stream -- a single-subscription controller can only ever be
+    // listened to once, even after its first subscription is cancelled.
+    final incoming = StreamController<Message<dynamic>>.broadcast();
     final manager = FakeJetStreamManager();
-    var shouldFail = true;
-    manager.consumerInfoImpl = (_, __) async {
-      if (shouldFail) throw Exception('consumer not found');
-      return _fakeConsumerInfo('ORDERS', 'worker-1');
-    };
+    manager.incomingMessages = incoming.stream;
 
     await tester.pumpWidget(buildView(manager));
-    await tester.pump(const Duration(seconds: 5));
+    incoming.addError(Exception('consumer not found'));
+    await tester.pump();
     await tester.pump();
     expect(find.widgetWithText(TextButton, 'Retry'), findsOneWidget);
 
-    shouldFail = false;
     await tester.tap(find.widgetWithText(TextButton, 'Retry'));
     await tester.pump();
 
     expect(find.byIcon(Icons.error_outline), findsNothing);
     expect(find.text('Waiting for messages...'), findsOneWidget);
-  });
-
-  testWidgets('overlapping probes are guarded -- a slow probe is not '
-      'restarted before it resolves', (tester) async {
-    final manager = FakeJetStreamManager();
-    final probeStarted = Completer<void>();
-    final probeFinish = Completer<ConsumerInfo>();
-    manager.consumerInfoImpl = (streamName, name) {
-      if (!probeStarted.isCompleted) probeStarted.complete();
-      return probeFinish.future;
-    };
-
-    await tester.pumpWidget(buildView(manager));
-    await tester.pump(const Duration(seconds: 5));
-    await probeStarted.future;
-    expect(manager.consumerInfoCalls, 1);
-
-    // A second interval elapses while the first probe is still in flight --
-    // `_probeInFlight` should prevent a second overlapping call.
-    await tester.pump(const Duration(seconds: 5));
-    expect(manager.consumerInfoCalls, 1);
-
-    probeFinish.complete(_fakeConsumerInfo('ORDERS', 'worker-1'));
-    await tester.pump();
   });
 
   testWidgets(

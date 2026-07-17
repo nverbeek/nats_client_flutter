@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:dart_nats/dart_nats.dart' as nats show Consumer;
@@ -21,12 +19,9 @@ class JetStreamManager {
   AccountInfo? lastAccountInfo;
 
   /// List all JetStream streams visible to the current account.
-  ///
-  /// Deliberately bypasses `JetStream.listStreams()` -- see
-  /// [listStreamsPaginated]'s doc comment for why.
   Future<List<StreamInfo>> listStreams(
       {Duration timeout = const Duration(seconds: 5)}) {
-    return listStreamsPaginated(client, timeout: timeout);
+    return _js.listStreams(timeout: timeout);
   }
 
   /// List all consumers bound to [streamName].
@@ -122,45 +117,6 @@ class JetStreamManager {
     lastAccountInfo = info;
     return info;
   }
-}
-
-/// Lists every JetStream stream visible to the account, paginating through
-/// `$JS.API.STREAM.LIST` as needed.
-///
-/// The vendored `dart_nats` package's own `JetStream.listStreams()` (still
-/// true as of 1.2.1) sends a single request with no `offset`, and
-/// nats-server caps each `STREAM.LIST` response to a fixed page (256 items)
-/// regardless of how many streams actually exist -- the rest are silently
-/// dropped, no error, no truncation flag surfaced anywhere. Invisible
-/// against a small personal server, but very real against a busy shared
-/// account (e.g. `demo.nats.io`, which routinely has 500+ streams
-/// contributed by other users): this app's own JetStream/KV/Object Store
-/// streams can end up entirely past page 1 and vanish from every
-/// dashboard's list with no error shown. `KvManager.listBuckets` and
-/// `ObjectStoreManager.listBuckets` both route through this too, for the
-/// same reason.
-Future<List<StreamInfo>> listStreamsPaginated(Client client,
-    {Duration timeout = const Duration(seconds: 5)}) async {
-  final streams = <StreamInfo>[];
-  var offset = 0;
-  while (true) {
-    final payload = utf8.encode(jsonEncode({'offset': offset}));
-    final response = await client.request(
-        '\$JS.API.STREAM.LIST', Uint8List.fromList(payload),
-        timeout: timeout);
-    final map = jsonDecode(response.string) as Map<String, dynamic>;
-    if (map['error'] != null) {
-      throw NatsException(map['error']['description'] as String);
-    }
-    final page = (map['streams'] as List? ?? [])
-        .map((item) => StreamInfo.fromJson(item as Map<String, dynamic>))
-        .toList();
-    streams.addAll(page);
-    final total = map['total'] as int? ?? streams.length;
-    offset += page.length;
-    if (page.isEmpty || offset >= total) break;
-  }
-  return streams;
 }
 
 /// Turns an error raised by a JetStream API call into a short, user-facing

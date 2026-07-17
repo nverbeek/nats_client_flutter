@@ -48,22 +48,11 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
   // already open only takes effect the next time it's reopened.
   int _maxMessages = constants.defaultMaxMessages;
 
-  // The underlying pull-consumer loop swallows delivery errors forever
-  // rather than surfacing them (e.g. after the server-side consumer is
-  // deleted out from under it), so without this the view would sit on
-  // "Waiting for messages..." with a green "live" dot indefinitely. This
-  // periodically checks the consumer still exists via a lightweight
-  // metadata call and surfaces the existing error/Retry row if it doesn't.
-  Timer? _healthProbeTimer;
-  bool _probeInFlight = false;
-  static const _healthProbeInterval = Duration(seconds: 5);
-
   @override
   void initState() {
     super.initState();
     _loadMaxMessages();
     _startTailing();
-    _startHealthProbe();
   }
 
   Future<void> _loadMaxMessages() async {
@@ -77,31 +66,16 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
   @override
   void dispose() {
     _subscription?.cancel();
-    _healthProbeTimer?.cancel();
     super.dispose();
   }
 
-  void _startHealthProbe() {
-    _healthProbeTimer?.cancel();
-    _healthProbeTimer = Timer.periodic(_healthProbeInterval, (_) => _probeHealth());
-  }
-
-  Future<void> _probeHealth() async {
-    if (_probeInFlight || !mounted || _errorMessage != null) return;
-    _probeInFlight = true;
-    try {
-      await widget.manager.consumerInfo(widget.streamName, widget.consumerName);
-    } catch (e) {
-      _healthProbeTimer?.cancel();
-      _subscription?.cancel();
-      if (mounted) {
-        setState(() => _errorMessage = describeJetStreamError(e));
-      }
-    } finally {
-      _probeInFlight = false;
-    }
-  }
-
+  // dart_nats 1.2.2 (PR #45) fixed the underlying pull-consumer loop that
+  // used to swallow delivery errors forever (e.g. after the server-side
+  // consumer is deleted out from under it) -- it now surfaces them via this
+  // stream's onError, so a separate polling health-probe timer that used to
+  // paper over that gap is no longer needed. Cancel on first error so a
+  // truly dead consumer doesn't keep retrying/erroring in the background
+  // once the row already shows Retry.
   void _startTailing() {
     final consumer =
         widget.manager.tailConsumer(widget.streamName, widget.consumerName);
@@ -117,6 +91,7 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
         });
       },
       onError: (Object err) {
+        _subscription?.cancel();
         if (!mounted) return;
         setState(() {
           _errorMessage = describeJetStreamError(err);
@@ -133,7 +108,6 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
     });
     _subscription?.cancel();
     _startTailing();
-    _startHealthProbe();
   }
 
   // Optimistically mark the row resolved, then wait for the server to
