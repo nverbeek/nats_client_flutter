@@ -417,6 +417,7 @@ void main() {
             saveDownloadedFile: (name, bytes) async {
               savedName = name;
               savedBytes = bytes;
+              return true;
             },
           ),
         ),
@@ -432,6 +433,173 @@ void main() {
     expect(savedName, 'report.pdf');
     expect(savedBytes, downloadedBytes);
     expect(find.text('Downloaded "report.pdf".'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Download does not show a success message when the save dialog is cancelled',
+      (tester) async {
+    final manager = FakeObjectStoreManager();
+    manager.listBucketsImpl = () async => [_bucketStream('documents')];
+    manager.listObjectsImpl = (_) async => [_objectInfo('report.pdf', 100)];
+    manager.getObjectImpl = (_, __) async => Uint8List.fromList([9, 9, 9]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ObjectStoreDashboard(
+            manager: manager,
+            // Mirrors the desktop save dialog being cancelled: a `null`
+            // path returns `false`, nothing was actually written.
+            saveDownloadedFile: (name, bytes) async => false,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('documents'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Download'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Downloaded'), findsNothing);
+  });
+
+  testWidgets(
+      'Download surfaces an honest failure message when getObject returns null',
+      (tester) async {
+    final manager = FakeObjectStoreManager();
+    manager.listBucketsImpl = () async => [_bucketStream('documents')];
+    manager.listObjectsImpl = (_) async => [_objectInfo('report.pdf', 100)];
+    manager.getObjectImpl = (_, __) async => null;
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: ObjectStoreDashboard(manager: manager))),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('documents'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Download'));
+    await tester.pumpAndSettle();
+
+    // Not the old "is no longer available" wording -- the library also
+    // returns null on its own download timeout or a missing chunk, not
+    // only on deletion.
+    expect(find.textContaining('could not be downloaded'), findsOneWidget);
+    expect(find.textContaining('is no longer available'), findsNothing);
+  });
+
+  testWidgets('Download over the large-transfer threshold asks for confirmation',
+      (tester) async {
+    final manager = FakeObjectStoreManager();
+    manager.listBucketsImpl = () async => [_bucketStream('documents')];
+    manager.listObjectsImpl = (_) async => [
+          _objectInfo('huge.bin', largeObjectTransferWarningThreshold + 1)
+        ];
+    var getObjectCalls = 0;
+    manager.getObjectImpl = (_, __) async {
+      getObjectCalls++;
+      return Uint8List.fromList([1]);
+    };
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: ObjectStoreDashboard(manager: manager))),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('documents'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Download'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Large Download?'), findsOneWidget);
+    expect(getObjectCalls, 0);
+
+    // Cancelling does not download.
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+    expect(getObjectCalls, 0);
+
+    // Confirming proceeds.
+    await tester.tap(find.byTooltip('Download'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Download').last);
+    await tester.pumpAndSettle();
+    expect(getObjectCalls, 1);
+  });
+
+  testWidgets('Upload over the large-transfer threshold asks for confirmation',
+      (tester) async {
+    final manager = FakeObjectStoreManager();
+    manager.listBucketsImpl = () async => [_bucketStream('documents')];
+    final hugeBytes = Uint8List(largeObjectTransferWarningThreshold + 1);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ObjectStoreDashboard(
+            manager: manager,
+            pickUploadFile: () async => (hugeBytes, 'huge.bin'),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('documents'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Upload'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Large Upload?'), findsOneWidget);
+    expect(manager.lastPutName, isNull);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Upload').last);
+    await tester.pumpAndSettle();
+
+    expect(manager.lastPutName, 'huge.bin');
+  });
+
+  testWidgets('Upload over an existing object name asks to confirm overwrite',
+      (tester) async {
+    final manager = FakeObjectStoreManager();
+    manager.listBucketsImpl = () async => [_bucketStream('documents')];
+    manager.listObjectsImpl = (_) async => [_objectInfo('report.pdf', 100)];
+    final fakeBytes = Uint8List.fromList([1, 2, 3]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ObjectStoreDashboard(
+            manager: manager,
+            pickUploadFile: () async => (fakeBytes, 'report.pdf'),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('documents'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Upload'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Overwrite Object?'), findsOneWidget);
+    expect(manager.lastPutName, isNull);
+
+    // Cancelling does not overwrite.
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+    expect(manager.lastPutName, isNull);
+
+    // Confirming proceeds.
+    await tester.tap(find.widgetWithText(FilledButton, 'Upload'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Overwrite'));
+    await tester.pumpAndSettle();
+
+    expect(manager.lastPutName, 'report.pdf');
   });
 
   testWidgets('Delete object confirms then calls the manager and removes the row',

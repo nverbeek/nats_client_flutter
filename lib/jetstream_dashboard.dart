@@ -280,6 +280,15 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
   Future<void> _runMutation(Future<void> Function() action,
       {required String successMessage}) async {
     if (_mutating) return;
+    // A confirm dialog can be left open across a disconnect (e.g. the
+    // connection drops while "Delete Stream?" is still showing) -- without
+    // this, `action()`'s `widget.manager!` would throw an unhelpful "Null
+    // check operator used on a null value" once the user finally confirms,
+    // instead of a clean "not connected" message.
+    if (widget.manager == null) {
+      _showSnack('Not connected.', isError: true);
+      return;
+    }
     setState(() => _mutating = true);
     try {
       await action();

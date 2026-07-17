@@ -242,7 +242,7 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
                 final message = _messages[index];
                 final resolved = _resolved.contains(message);
                 return ListTile(
-                  key: ValueKey(message.hashCode),
+                  key: ObjectKey(message),
                   title: RegexTextHighlight(
                     text: decodeMessageTextFor(message),
                     searchTerm: '',

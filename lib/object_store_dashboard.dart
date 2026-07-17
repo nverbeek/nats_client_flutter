@@ -31,16 +31,21 @@ Future<(Uint8List, String)?> _defaultPickUploadFile() async {
 /// dialog and the bytes are written out separately, mirroring the split
 /// `main.dart`'s own `pickFile()` already uses for the reverse (upload)
 /// direction.
-Future<void> _defaultSaveDownloadedFile(
+///
+/// Returns whether a file was actually written -- on desktop, cancelling the
+/// save dialog returns a `null` path with no exception thrown, which
+/// previously fell through and reported a false "Downloaded" success with
+/// nothing saved.
+Future<bool> _defaultSaveDownloadedFile(
     String suggestedName, Uint8List bytes) async {
   if (kIsWeb) {
     await FilePicker.platform.saveFile(fileName: suggestedName, bytes: bytes);
-    return;
+    return true;
   }
   final path = await FilePicker.platform.saveFile(fileName: suggestedName);
-  if (path != null) {
-    await File(path).writeAsBytes(bytes);
-  }
+  if (path == null) return false;
+  await File(path).writeAsBytes(bytes);
+  return true;
 }
 
 /// Object Store tab content: a monitor/management dashboard for Object
@@ -57,14 +62,14 @@ class ObjectStoreDashboard extends StatefulWidget {
   final ObjectStoreManager? manager;
 
   final Future<(Uint8List, String)?> Function() pickUploadFile;
-  final Future<void> Function(String suggestedName, Uint8List bytes)
+  final Future<bool> Function(String suggestedName, Uint8List bytes)
       saveDownloadedFile;
 
   const ObjectStoreDashboard({
     super.key,
     required this.manager,
     Future<(Uint8List, String)?> Function()? pickUploadFile,
-    Future<void> Function(String suggestedName, Uint8List bytes)?
+    Future<bool> Function(String suggestedName, Uint8List bytes)?
         saveDownloadedFile,
   })  : pickUploadFile = pickUploadFile ?? _defaultPickUploadFile,
         saveDownloadedFile = saveDownloadedFile ?? _defaultSaveDownloadedFile;
@@ -236,6 +241,15 @@ class ObjectStoreDashboardState extends State<ObjectStoreDashboard> {
   Future<void> _runMutation(Future<void> Function() action,
       {required String successMessage}) async {
     if (_mutating) return;
+    // A confirm dialog can be left open across a disconnect (e.g. the
+    // connection drops while "Delete Bucket?" is still showing) -- without
+    // this, `action()`'s `widget.manager!` would throw an unhelpful "Null
+    // check operator used on a null value" once the user finally confirms,
+    // instead of a clean "not connected" message.
+    if (widget.manager == null) {
+      _showSnack('Not connected.', isError: true);
+      return;
+    }
     setState(() => _mutating = true);
     try {
       await action();
@@ -247,6 +261,63 @@ class ObjectStoreDashboardState extends State<ObjectStoreDashboard> {
     } finally {
       if (mounted) setState(() => _mutating = false);
     }
+  }
+
+  /// Shows a warn-and-proceed confirmation before a transfer larger than
+  /// [largeObjectTransferWarningThreshold] -- the library buffers the whole
+  /// object in memory for both directions, so this is the app-side mitigation
+  /// noted on that constant's doc comment. Returns whether the user chose to
+  /// continue.
+  Future<bool> _confirmLargeTransfer(
+      String verb, String name, int bytes) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Large $verb?'),
+        content: Text(
+            '"$name" is ${formatBytes(bytes)}. Large objects are held fully '
+            'in memory during transfer and may be slow or use significant '
+            'RAM. Continue?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(verb),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  /// Confirms before an Upload overwrites an object name already present in
+  /// the current listing -- today this happens silently, and the underlying
+  /// library also leaves the previous object's chunks orphaned server-side
+  /// (a library-level cleanup issue tracked separately on the roadmap).
+  Future<bool> _confirmOverwrite(String name) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Overwrite Object?'),
+        content: Text(
+            'An object named "$name" already exists in this bucket. '
+            'Uploading will overwrite it.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Overwrite'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
   }
 
   void _showCreateBucketDialog() {
@@ -307,8 +378,21 @@ class ObjectStoreDashboardState extends State<ObjectStoreDashboard> {
 
   Future<void> _uploadFile(String bucket) async {
     final picked = await widget.pickUploadFile();
-    if (picked == null) return;
+    if (picked == null || !mounted) return;
     final (bytes, name) = picked;
+
+    final existing = _objects.where((o) => o.name == name);
+    if (existing.isNotEmpty) {
+      final confirmed = await _confirmOverwrite(name);
+      if (!mounted || !confirmed) return;
+    }
+
+    if (bytes.length > largeObjectTransferWarningThreshold) {
+      final confirmed =
+          await _confirmLargeTransfer('Upload', name, bytes.length);
+      if (!mounted || !confirmed) return;
+    }
+
     await _runMutation(
       () async {
         await widget.manager!.putObject(bucket, name, bytes);
@@ -322,15 +406,36 @@ class ObjectStoreDashboardState extends State<ObjectStoreDashboard> {
     final manager = widget.manager;
     if (manager == null) return;
     if (_mutating) return;
+
+    final matches = _objects.where((o) => o.name == name);
+    final info = matches.isEmpty ? null : matches.first;
+    if (info != null && info.size > largeObjectTransferWarningThreshold) {
+      final confirmed =
+          await _confirmLargeTransfer('Download', name, info.size);
+      if (!mounted || !confirmed) return;
+    }
+
     setState(() => _mutating = true);
     try {
       final bytes = await manager.getObject(bucket, name);
       if (bytes == null) {
-        if (mounted) _showSnack('"$name" is no longer available.', isError: true);
+        // The library returns `null` both when the object was deleted *and*
+        // on its own hardcoded 15s download timeout or a missing chunk
+        // (verified against `dart_nats-1.2.2`'s `object_store.dart`) -- so
+        // "no longer available" was misleading in the latter two cases.
+        if (mounted) {
+          _showSnack(
+              '"$name" could not be downloaded — it may have been deleted, '
+              'timed out, or is incomplete.',
+              isError: true);
+        }
         return;
       }
-      await widget.saveDownloadedFile(name, bytes);
-      if (mounted) _showSnack('Downloaded "$name".');
+      final saved = await widget.saveDownloadedFile(name, bytes);
+      // `saved` is false when the user cancels the save-file dialog --
+      // previously this fell through and reported success with nothing
+      // actually written to disk.
+      if (mounted && saved) _showSnack('Downloaded "$name".');
     } catch (e) {
       if (mounted) _showSnack(describeObjectStoreError(e), isError: true);
     } finally {

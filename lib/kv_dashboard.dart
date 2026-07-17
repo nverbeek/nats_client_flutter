@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:flutter/material.dart';
@@ -157,13 +159,7 @@ class KvDashboardState extends State<KvDashboard> {
 
     try {
       final keys = await manager.listKeys(bucket);
-      final entries = await Future.wait(keys.map((k) async {
-        try {
-          return await manager.getEntry(bucket, k);
-        } catch (_) {
-          return null;
-        }
-      }));
+      final entries = await _fetchEntriesBatched(manager, bucket, keys);
       if (!mounted || widget.manager != manager || _selectedBucket != bucket) {
         return;
       }
@@ -184,6 +180,28 @@ class KvDashboardState extends State<KvDashboard> {
         _loadingKeys = false;
       });
     }
+  }
+
+  /// Fetches each key's entry in bounded-concurrency batches rather than
+  /// firing every `getEntry` request at once via a single `Future.wait` --
+  /// a bucket with thousands of keys would otherwise storm the client/server
+  /// with that many simultaneous in-flight requests.
+  Future<List<KeyValueEntry?>> _fetchEntriesBatched(
+      KvManager manager, String bucket, List<String> keys,
+      {int batchSize = 16}) async {
+    final results = <KeyValueEntry?>[];
+    for (var i = 0; i < keys.length; i += batchSize) {
+      final end = (i + batchSize < keys.length) ? i + batchSize : keys.length;
+      final chunkResults = await Future.wait(keys.sublist(i, end).map((k) async {
+        try {
+          return await manager.getEntry(bucket, k);
+        } catch (_) {
+          return null;
+        }
+      }));
+      results.addAll(chunkResults);
+    }
+    return results;
   }
 
   void _startWatch(String bucket) {
@@ -209,6 +227,22 @@ class KvDashboardState extends State<KvDashboard> {
           _entries.remove(entry.key);
         }
       });
+    }, onError: (Object err) {
+      // Without this, an error on the watch stream (a parse failure, the
+      // underlying subscription erroring, or the ephemeral watch consumer
+      // failing to create) would be an uncaught zone error that silently
+      // ends the subscription -- the key list would stop reflecting live
+      // changes from other clients while still looking perfectly healthy.
+      // Surfacing it through the same `_keysError`/Retry path `_loadKeys`
+      // already uses lets the user recover the same way a load failure
+      // would.
+      _watchSub = null;
+      if (!mounted || widget.manager != manager || _selectedBucket != bucket) {
+        return;
+      }
+      setState(() {
+        _keysError = describeKvError(err);
+      });
     });
   }
 
@@ -232,6 +266,15 @@ class KvDashboardState extends State<KvDashboard> {
   Future<void> _runMutation(Future<void> Function() action,
       {required String successMessage}) async {
     if (_mutating) return;
+    // A confirm dialog can be left open across a disconnect (e.g. the
+    // connection drops while "Delete Bucket?" is still showing) -- without
+    // this, `action()`'s `widget.manager!` would throw an unhelpful "Null
+    // check operator used on a null value" once the user finally confirms,
+    // instead of a clean "not connected" message.
+    if (widget.manager == null) {
+      _showSnack('Not connected.', isError: true);
+      return;
+    }
     setState(() => _mutating = true);
     try {
       await action();
@@ -322,11 +365,28 @@ class KvDashboardState extends State<KvDashboard> {
         existingRevision: existing?.revision,
         onSave: (key, value, expectedRevision) => _runMutation(
           () async {
+            final int revision;
             if (expectedRevision != null) {
-              await widget.manager!
+              revision = await widget.manager!
                   .updateValue(bucket, key, value, expectedRevision);
             } else {
-              await widget.manager!.putValue(bucket, key, value);
+              revision = await widget.manager!.putValue(bucket, key, value);
+            }
+            // Apply the result locally rather than waiting on the watch
+            // stream to echo it back -- a Put/Edit should be reflected
+            // immediately regardless of watch latency (or a dead watch, see
+            // `_startWatch`'s `onError`), matching how Delete/Purge already
+            // update `_entries` directly below.
+            if (mounted) {
+              setState(() {
+                _entries[key] = KeyValueEntry(
+                  bucket: bucket,
+                  key: key,
+                  value: Uint8List.fromList(utf8.encode(value)),
+                  revision: revision,
+                  created: DateTime.now(),
+                );
+              });
             }
           },
           successMessage: expectedRevision != null
@@ -623,6 +683,12 @@ class KvDashboardState extends State<KvDashboard> {
               Expanded(
                 child: Text(bucket, style: Theme.of(context).textTheme.titleLarge),
               ),
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Refresh keys',
+                onPressed: _loadingKeys ? null : () => _loadKeys(bucket),
+              ),
+              const SizedBox(width: 4),
               FilledButton.icon(
                 icon: const Icon(Icons.add),
                 label: const Text('Put Value'),

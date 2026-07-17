@@ -1,6 +1,8 @@
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:flutter/material.dart';
 
+import 'format_utils.dart';
+
 /// Dialog for creating a new JetStream stream. Only exposes the handful of
 /// [StreamConfig] fields a user is likely to want to set up-front (name,
 /// subjects, max age, replicas) — everything else keeps the package's
@@ -81,9 +83,14 @@ class _CreateStreamDialogState extends State<CreateStreamDialog> {
                   border: OutlineInputBorder(),
                   labelText: 'Stream Name',
                 ),
-                validator: (v) => (v == null || v.trim().isEmpty)
-                    ? 'A stream name is required.'
-                    : null,
+                validator: (v) {
+                  final trimmed = v?.trim() ?? '';
+                  if (trimmed.isEmpty) return 'A stream name is required.';
+                  if (!isValidNatsName(trimmed)) {
+                    return 'Stream names can\'t contain ., *, >, or whitespace.';
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -94,13 +101,18 @@ class _CreateStreamDialogState extends State<CreateStreamDialog> {
                   hintText: 'orders.*, orders.>',
                 ),
                 validator: (v) {
-                  final hasSubject = (v ?? '')
+                  final subjects = (v ?? '')
                       .split(',')
                       .map((s) => s.trim())
-                      .any((s) => s.isNotEmpty);
-                  return hasSubject
-                      ? null
-                      : 'At least one subject is required.';
+                      .where((s) => s.isNotEmpty)
+                      .toList();
+                  if (subjects.isEmpty) {
+                    return 'At least one subject is required.';
+                  }
+                  if (subjects.any((s) => !isValidNatsSubjectFilter(s))) {
+                    return 'Subjects must be valid NATS subjects (e.g. orders.*, orders.>).';
+                  }
+                  return null;
                 },
               ),
               const SizedBox(height: 12),

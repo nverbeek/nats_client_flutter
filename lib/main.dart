@@ -412,6 +412,34 @@ class _MyHomePageState extends State<MyHomePage>
 
   // nats stuff
   late Client natsClient;
+  // Whether `natsClient` has ever been assigned -- guards the very first
+  // `natsConnect()` call, where there's no previous client yet to close.
+  bool _hasNatsClient = false;
+  // True for the duration of one `natsConnect()` call, including while
+  // `natsClient.connect(...)` is still retrying in the background (it only
+  // resolves on a genuine success or terminal failure). The connection's own
+  // status stream emits `Status.disconnected` between retry attempts, which
+  // re-enables the Connect button -- without this guard, clicking Connect
+  // again during that window would overwrite `natsClient` with a fresh
+  // instance while the previous one's retry loop kept running unobserved
+  // and unclosed (a leaked/phantom client).
+  bool _isConnecting = false;
+  // Whether the *current* `natsClient` has reached `Status.connected` at
+  // least once and hasn't been explicitly disconnected since. Gates the
+  // JetStream/KV/Object Store/Services dashboards' `manager:` props instead
+  // of `currentStatus == Status.connected` -- that instantaneous status also
+  // reads `disconnected` during a brief auto-reconnect blip (dart_nats
+  // retries forever, per `retryCount: -1` below), which previously nulled
+  // every dashboard's manager for that gap and reset all of their state
+  // (selected stream/bucket, an open Browse/Tail view, discovered services)
+  // even though the same underlying connection was about to resume. This
+  // flag only goes back to `false` on a real session boundary: an explicit
+  // user Disconnect, or a fresh `natsConnect()` call starting over with a
+  // new `Client` (whose new manager instances already make dashboards reset
+  // via their own `didUpdateWidget` identity check, so this just keeps that
+  // reset from *also* happening on this Client's own transient blips before
+  // its first successful connect).
+  bool _hasEverConnectedThisSession = false;
   JetStreamManager? _jetStreamManager;
   KvManager? _kvManager;
   ObjectStoreManager? _objectStoreManager;
@@ -497,6 +525,11 @@ class _MyHomePageState extends State<MyHomePage>
     _statusSub?.cancel();
     for (final info in subscriptions) {
       info.subscription?.cancel();
+    }
+    // Close the underlying socket/retry loop so it doesn't keep running
+    // (and reconnecting) after this widget is gone.
+    if (_hasNatsClient) {
+      unawaited(natsClient.forceClose());
     }
     _pendingCount.dispose();
     _filterFocusNode.dispose(); // Dispose focus nodes
@@ -873,9 +906,16 @@ class _MyHomePageState extends State<MyHomePage>
         .map((m) =>
             '${m.subject}: ${decodeMessageTextFor(m).replaceAll(_anyLineBreak, r'\n')}')
         .join('\n');
-    await Clipboard.setData(ClipboardData(text: text));
-    if (mounted) {
-      showSnackBar('Copied ${selection.length} messages to clipboard!');
+    try {
+      await Clipboard.setData(ClipboardData(text: text));
+      if (mounted) {
+        showSnackBar('Copied ${selection.length} messages to clipboard!');
+      }
+    } catch (e) {
+      debugPrint('Error copying to clipboard: $e');
+      if (mounted) {
+        showSnackBar('Could not copy to clipboard. Please try again.');
+      }
     }
   }
 
@@ -976,6 +1016,9 @@ class _MyHomePageState extends State<MyHomePage>
   }
 
   void natsConnect() async {
+    if (_isConnecting) return;
+    _isConnecting = true;
+
     // Cancel any subscriptions/status listener left over from a previous
     // `Client` before discarding it -- otherwise reconnecting stacks a new
     // listener on top of the old one, double-inserting every message.
@@ -986,7 +1029,18 @@ class _MyHomePageState extends State<MyHomePage>
       info.subscription = null;
     }
 
+    // If a previous client is still around (e.g. still retrying in the
+    // background), force it closed before replacing it so its retry loop
+    // and socket don't leak unobserved.
+    if (_hasNatsClient) {
+      await natsClient.forceClose();
+    }
+
     natsClient = Client();
+    _hasNatsClient = true;
+    // A new session starts un-connected -- only this client's own future
+    // `Status.connected` event (below) sets this back to true.
+    _hasEverConnectedThisSession = false;
     // sids are only meaningful for the lifetime of one Client instance --
     // null them all out now that we've discarded the old one.
     for (final info in subscriptions) {
@@ -1007,19 +1061,22 @@ class _MyHomePageState extends State<MyHomePage>
       }
     };
 
-    // save the user's connection properties to preferences.
-    // we can read these out at startup. these are the single "last used"
-    // values that prefill the fields next launch -- distinct from the
-    // connection history list (prefConnectionHistory), which is a deduped set
-    // recorded only on a *successful* connect (see _recordConnectionHistory).
-    await prefs.setString(constants.prefScheme, scheme);
-    await prefs.setString(constants.prefHost, host);
-    await prefs.setString(constants.prefPort, port);
-    await prefs.setString(
-        constants.prefSubscriptions, encodeSubscriptionList(subscriptions));
-
     debugPrint('About to connect to $fullUri');
     try {
+      // Save the user's connection properties to preferences (inside the
+      // guarded block: a Connect click fired before `initializePreferences`
+      // finishes loading `prefs` would otherwise throw an unhandled
+      // `LateInitializationError` here). We can read these out at startup --
+      // these are the single "last used" values that prefill the fields
+      // next launch -- distinct from the connection history list
+      // (prefConnectionHistory), which is a deduped set recorded only on a
+      // *successful* connect (see _recordConnectionHistory).
+      await prefs.setString(constants.prefScheme, scheme);
+      await prefs.setString(constants.prefHost, host);
+      await prefs.setString(constants.prefPort, port);
+      await prefs.setString(
+          constants.prefSubscriptions, encodeSubscriptionList(subscriptions));
+
       Uri uri = Uri.parse(fullUri);
       _statusSub = natsClient.statusStream.listen((Status event) {
         debugPrint('Connection status event $event');
@@ -1030,6 +1087,7 @@ class _MyHomePageState extends State<MyHomePage>
           case Status.connected:
             setStateConnected();
             _recordConnectionHistory(scheme, host, port);
+            _hasEverConnectedThisSession = true;
             stateString = constants.connected;
             if (natsClient.info?.tlsRequired == true) {
               tlsConnection = true;
@@ -1115,6 +1173,8 @@ class _MyHomePageState extends State<MyHomePage>
       showSnackBar(
           '${constants.connectionFailureGenericPrefix}: ${truncatedErrorDetail(e)}');
       setStateDisconnected();
+    } finally {
+      _isConnecting = false;
     }
   }
 
@@ -1619,47 +1679,58 @@ class _MyHomePageState extends State<MyHomePage>
       _replayTotalPasses = totalPasses;
     });
 
-    outer:
-    for (var pass = 1; pass <= totalPasses; pass++) {
-      if (mounted) setState(() => _replayCurrentPass = pass);
+    try {
+      outer:
+      for (var pass = 1; pass <= totalPasses; pass++) {
+        if (mounted) setState(() => _replayCurrentPass = pass);
 
-      for (var i = 0; i < messages.length; i++) {
-        if (!mounted || stopSignal.isCompleted) break outer;
-        if (currentStatus != Status.connected) {
-          showSnackBar('Replay stopped: connection lost.');
-          break outer;
+        for (var i = 0; i < messages.length; i++) {
+          if (!mounted || stopSignal.isCompleted) break outer;
+          if (currentStatus != Status.connected) {
+            showSnackBar('Replay stopped: connection lost.');
+            break outer;
+          }
+
+          final message = messages[i];
+          final header =
+              (message.headers != null && message.headers!.isNotEmpty)
+                  ? Header(headers: message.headers)
+                  : null;
+          try {
+            await natsClient.pub(message.subject, message.payload,
+                header: header, buffer: false);
+          } catch (e) {
+            _showErrorSnackBar(
+                'Replay stopped: ${describePublishError(e)}');
+            break outer;
+          }
+          if (mounted) setState(() => _replaySentCount++);
+
+          final isLastMessageOfPass = i == messages.length - 1;
+          if (!isLastMessageOfPass && messageInterval > Duration.zero) {
+            await Future.any(
+                [Future.delayed(messageInterval), stopSignal.future]);
+            if (stopSignal.isCompleted) break outer;
+          }
         }
 
-        final message = messages[i];
-        final header =
-            (message.headers != null && message.headers!.isNotEmpty)
-                ? Header(headers: message.headers)
-                : null;
-        await natsClient.pub(message.subject, message.payload,
-            header: header, buffer: false);
-        if (mounted) setState(() => _replaySentCount++);
-
-        final isLastMessageOfPass = i == messages.length - 1;
-        if (!isLastMessageOfPass && messageInterval > Duration.zero) {
+        final isLastPass = pass == totalPasses;
+        if (!isLastPass && repeatInterval > Duration.zero) {
           await Future.any(
-              [Future.delayed(messageInterval), stopSignal.future]);
+              [Future.delayed(repeatInterval), stopSignal.future]);
           if (stopSignal.isCompleted) break outer;
         }
       }
-
-      final isLastPass = pass == totalPasses;
-      if (!isLastPass && repeatInterval > Duration.zero) {
-        await Future.any([Future.delayed(repeatInterval), stopSignal.future]);
-        if (stopSignal.isCompleted) break outer;
-      }
+    } finally {
+      _replayStopSignal = null;
+      if (mounted) setState(() => _isReplaying = false);
     }
-
-    _replayStopSignal = null;
-    if (mounted) setState(() => _isReplaying = false);
   }
 
   void _stopReplay() {
-    _replayStopSignal?.complete();
+    if (_replayStopSignal != null && !_replayStopSignal!.isCompleted) {
+      _replayStopSignal!.complete();
+    }
   }
 
   /// Injectable so tests can supply a chosen file's bytes without automating
@@ -1710,6 +1781,11 @@ class _MyHomePageState extends State<MyHomePage>
     if (mounted) {
       setState(() {
         isConnected = false;
+        // An explicit disconnect (unlike a transient auto-reconnect blip)
+        // really does end this session -- the JetStream/KV/Object
+        // Store/Services dashboards should drop back to their
+        // not-connected state.
+        _hasEverConnectedThisSession = false;
       });
     }
   }
@@ -1909,7 +1985,7 @@ class _MyHomePageState extends State<MyHomePage>
         ),
       ],
     );
-    if (value != null) {
+    if (value != null && mounted) {
       _showExportDialog(exportAll: value == 'export_all');
     }
   }
@@ -2569,8 +2645,17 @@ class _MyHomePageState extends State<MyHomePage>
             theme.colorScheme.surface);
     // Only shown in the status bar's message-count text below when
     // something is actually selected -- an always-present "Selected: 0"
-    // would just be noise alongside Total/Showing.
-    final selectedCount = _effectiveSelection().length;
+    // would just be noise alongside Total/Showing. Counted against
+    // `filteredItems`, not the raw selection: `_multiSelected` isn't pruned
+    // when the filter text changes, so a message hidden by an active filter
+    // would otherwise still inflate this count even though Copy/Export (both
+    // of which already intersect with `filteredItems`) wouldn't touch it.
+    final rawSelection = _effectiveSelection();
+    final selectedCount = rawSelection.isEmpty
+        ? 0
+        : identical(filteredItems, items)
+            ? rawSelection.length
+            : rawSelection.where(filteredItems.contains).length;
 
     return Focus(
       focusNode: _messageListFocusNode,
@@ -2658,11 +2743,22 @@ class _MyHomePageState extends State<MyHomePage>
               // that's still selected), the two can disagree.
               final selection = _effectiveSelection();
               if (selection.length > 1) {
-                _copyMultiSelection(selection);
+                unawaited(_copyMultiSelection(selection));
               } else if (selection.isNotEmpty) {
-                Clipboard.setData(ClipboardData(
-                    text: decodeMessageTextFor(selection.first)));
-                showSnackBar('Copied to clipboard!');
+                unawaited(() async {
+                  try {
+                    await Clipboard.setData(ClipboardData(
+                        text: decodeMessageTextFor(selection.first)));
+                    if (mounted) {
+                      showSnackBar('Copied to clipboard!');
+                    }
+                  } catch (e) {
+                    debugPrint('Error copying to clipboard: $e');
+                    if (mounted) {
+                      showSnackBar('Could not copy to clipboard. Please try again.');
+                    }
+                  }
+                }());
               }
               return KeyEventResult.handled;
             }
@@ -2867,28 +2963,28 @@ class _MyHomePageState extends State<MyHomePage>
                         if (jetStreamEnabled)
                           JetStreamDashboard(
                             key: _jetStreamDashboardKey,
-                            manager: currentStatus == Status.connected
+                            manager: _hasEverConnectedThisSession
                                 ? _jetStreamManager
                                 : null,
                           ),
                         if (kvEnabled)
                           KvDashboard(
                             key: _kvDashboardKey,
-                            manager: currentStatus == Status.connected
+                            manager: _hasEverConnectedThisSession
                                 ? _kvManager
                                 : null,
                           ),
                         if (objectStoreEnabled)
                           ObjectStoreDashboard(
                             key: _objectStoreDashboardKey,
-                            manager: currentStatus == Status.connected
+                            manager: _hasEverConnectedThisSession
                                 ? _objectStoreManager
                                 : null,
                           ),
                         if (serviceDiscoveryEnabled)
                           ServiceDiscoveryDashboard(
                             key: _serviceDiscoveryDashboardKey,
-                            manager: currentStatus == Status.connected
+                            manager: _hasEverConnectedThisSession
                                 ? _serviceDiscoveryManager
                                 : null,
                           ),

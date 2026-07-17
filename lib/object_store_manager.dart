@@ -9,14 +9,26 @@ import 'jetstream_manager.dart' show describeJetStreamError;
 /// bucket. Bucket names shown in the UI have this stripped back off.
 const String objectStoreStreamPrefix = 'OBJ_';
 
+/// Above this transfer size, Upload/Download show a warn-and-proceed
+/// confirmation first -- the underlying library buffers a whole object's
+/// bytes in memory (twice, briefly) for both directions with no size limit
+/// of its own, so a very large object risks exhausting the app's memory
+/// with no warning otherwise. True streaming transfers would need a library
+/// change (see ROADMAP.md's upstream-first milestone); this is an app-side
+/// mitigation in the meantime.
+const int largeObjectTransferWarningThreshold = 100 * 1024 * 1024; // 100 MiB
+
 /// Thin, testable wrapper around a connected [Client] for Object Store
 /// bucket monitoring and management, mirroring the shape of `KvManager`.
 ///
-/// Unlike `KvManager`, bucket creation goes through the package's own
-/// `ObjectStoreConfig.toStreamConfig()` (via `createObjectStore()`) rather
-/// than building a `StreamConfig` by hand — live-server verification (see
-/// ROADMAP.md's Milestone 7) confirmed, unlike `KeyValueConfig`'s equivalent
-/// method, it does *not* drop `ttl`/replicas onto the floor.
+/// Bucket creation calls `ObjectStoreConfig.toStreamConfig()` directly
+/// (rather than the package's own `createObjectStore()`, which internally
+/// does the exact same conversion) purely so a real `timeout` can be passed
+/// through to `createStream()` -- `createObjectStore()` doesn't accept one
+/// at all. Unlike `KeyValueConfig`'s equivalent conversion, live-server
+/// verification (see ROADMAP.md's Milestone 7) confirmed
+/// `ObjectStoreConfig.toStreamConfig()` does *not* drop `ttl`/replicas onto
+/// the floor, so no other workaround is needed here.
 class ObjectStoreManager {
   final Client client;
 
@@ -49,6 +61,17 @@ class ObjectStoreManager {
   }
 
   /// Create a new Object Store bucket.
+  ///
+  /// Goes through `createStream(config.toStreamConfig(), timeout: ...)`
+  /// directly rather than the package's own `createObjectStore(config)` --
+  /// that helper takes no `timeout` parameter at all (verified against
+  /// `dart_nats-1.2.2`'s `jetstream.dart`), so calling it would silently
+  /// drop the timeout this method promises. `toStreamConfig()` is public and
+  /// is exactly what `createObjectStore()` calls internally, so this
+  /// produces an identical stream, just with the timeout actually honored --
+  /// the same bypass precedent `KvManager.createBucket` already established
+  /// for KV buckets (there for a data-dropping bug rather than a missing
+  /// parameter, but the same shape of fix).
   Future<void> createBucket(
     String bucket, {
     String storage = 'file',
@@ -57,13 +80,16 @@ class ObjectStoreManager {
     Duration? ttl,
     Duration timeout = const Duration(seconds: 5),
   }) {
-    return _js.createObjectStore(ObjectStoreConfig(
-      bucket: bucket,
-      storage: storage,
-      replicas: replicas,
-      maxBytes: maxBytes,
-      ttl: (ttl != null && ttl > Duration.zero) ? ttl : Duration.zero,
-    ));
+    return _js.createStream(
+      ObjectStoreConfig(
+        bucket: bucket,
+        storage: storage,
+        replicas: replicas,
+        maxBytes: maxBytes,
+        ttl: (ttl != null && ttl > Duration.zero) ? ttl : Duration.zero,
+      ).toStreamConfig(),
+      timeout: timeout,
+    );
   }
 
   /// Permanently delete a bucket and all of its objects.

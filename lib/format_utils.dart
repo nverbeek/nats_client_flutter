@@ -89,6 +89,50 @@ String describePublishError(Object error) {
   return 'Failed to send: ${truncatedErrorDetail(error)}';
 }
 
+/// Whether [name] is safe to use as a bare NATS identifier -- a stream name,
+/// bucket name, or consumer durable name. These ride directly inside NATS's
+/// own management subjects (e.g. `$JS.API.CONSUMER.CREATE.<stream>.<name>`),
+/// so unlike a subject they can't contain `.`, whitespace, or the wildcard
+/// characters `*`/`>` at all, and can't be empty.
+bool isValidNatsName(String name) {
+  if (name.isEmpty) return false;
+  return !name.contains(RegExp(r'[\s.*>]'));
+}
+
+/// Whether [subject] is syntactically valid as a NATS subject *filter* --
+/// non-empty, dot-separated tokens with no empty token (no leading,
+/// trailing, or consecutive dots) and no whitespace. Wildcards are allowed
+/// since this is meant for fields that legitimately use them (a stream's
+/// configured subjects, a consumer's filter subject): `*` may stand alone as
+/// a whole token, and `>` may stand alone as the final token, but neither
+/// may appear as part of a larger token (`orders.*` is valid, `ord*rs` is
+/// not).
+bool isValidNatsSubjectFilter(String subject) {
+  if (subject.isEmpty) return false;
+  if (subject.contains(RegExp(r'\s'))) return false;
+  final tokens = subject.split('.');
+  for (var i = 0; i < tokens.length; i++) {
+    final token = tokens[i];
+    if (token.isEmpty) return false;
+    if (token.contains('>') && (token != '>' || i != tokens.length - 1)) {
+      return false;
+    }
+    if (token.contains('*') && token != '*') return false;
+  }
+  return true;
+}
+
+/// Whether [subject] is a valid *literal* NATS subject -- everything
+/// [isValidNatsSubjectFilter] checks, but rejecting the wildcard characters
+/// entirely. For fields where a wildcard wouldn't mean anything: a KV key
+/// (`kv_put_dialog.dart`) or a push consumer's deliver subject
+/// (`jetstream_consumer_dialog.dart`), both of which name one concrete
+/// subject rather than filtering a set of them.
+bool isValidLiteralNatsSubject(String subject) {
+  if (subject.contains('*') || subject.contains('>')) return false;
+  return isValidNatsSubjectFilter(subject);
+}
+
 String _twoDigits(int n) => n.toString().padLeft(2, '0');
 
 /// `dt`'s hour on a 12-hour clock (`0` maps to `12`, matching civilian

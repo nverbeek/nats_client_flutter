@@ -1,6 +1,8 @@
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:flutter/material.dart';
 
+import 'format_utils.dart';
+
 /// Dialog for creating a new consumer on a stream, supporting both push
 /// (deliver subject) and pull models.
 class CreateConsumerDialog extends StatefulWidget {
@@ -77,6 +79,13 @@ class _CreateConsumerDialogState extends State<CreateConsumerDialog> {
                     labelText: 'Durable Name (optional)',
                     hintText: 'Leave blank for an ephemeral consumer',
                   ),
+                  validator: (v) {
+                    final trimmed = v?.trim() ?? '';
+                    if (trimmed.isEmpty) return null;
+                    return isValidNatsName(trimmed)
+                        ? null
+                        : 'Durable names can\'t contain ., *, >, or whitespace.';
+                  },
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -85,6 +94,13 @@ class _CreateConsumerDialogState extends State<CreateConsumerDialog> {
                     border: OutlineInputBorder(),
                     labelText: 'Filter Subject (optional)',
                   ),
+                  validator: (v) {
+                    final trimmed = v?.trim() ?? '';
+                    if (trimmed.isEmpty) return null;
+                    return isValidNatsSubjectFilter(trimmed)
+                        ? null
+                        : 'Not a valid NATS subject.';
+                  },
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -105,9 +121,16 @@ class _CreateConsumerDialogState extends State<CreateConsumerDialog> {
                       border: OutlineInputBorder(),
                       labelText: 'Deliver Subject',
                     ),
-                    validator: (v) => _isPush && (v == null || v.trim().isEmpty)
-                        ? 'A deliver subject is required for push consumers.'
-                        : null,
+                    validator: (v) {
+                      if (!_isPush) return null;
+                      final trimmed = v?.trim() ?? '';
+                      if (trimmed.isEmpty) {
+                        return 'A deliver subject is required for push consumers.';
+                      }
+                      return isValidLiteralNatsSubject(trimmed)
+                          ? null
+                          : 'Not a valid subject (no wildcards).';
+                    },
                   ),
                 ],
                 const SizedBox(height: 12),

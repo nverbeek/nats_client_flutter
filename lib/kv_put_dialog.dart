@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'format_utils.dart';
+
 class _PutIntent extends Intent {
   const _PutIntent();
 }
@@ -110,9 +112,14 @@ class _KvPutValueDialogState extends State<KvPutValueDialog> {
                       hintText: 'Key',
                       labelText: 'Key',
                     ),
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'A key is required.'
-                        : null,
+                    validator: (v) {
+                      final trimmed = v?.trim() ?? '';
+                      if (trimmed.isEmpty) return 'A key is required.';
+                      if (!isValidLiteralNatsSubject(trimmed)) {
+                        return 'Keys can\'t contain *, >, whitespace, or empty segments.';
+                      }
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 10),
                   Expanded(

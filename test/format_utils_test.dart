@@ -163,6 +163,72 @@ void main() {
     });
   });
 
+  group('isValidNatsName', () {
+    test('accepts a plain identifier', () {
+      expect(isValidNatsName('orders-processor'), isTrue);
+      expect(isValidNatsName('ORDERS_2'), isTrue);
+    });
+
+    test('rejects empty, dots, wildcards, and whitespace', () {
+      expect(isValidNatsName(''), isFalse);
+      expect(isValidNatsName('orders.processor'), isFalse);
+      expect(isValidNatsName('orders*'), isFalse);
+      expect(isValidNatsName('orders>'), isFalse);
+      expect(isValidNatsName('orders processor'), isFalse);
+      expect(isValidNatsName('orders\tprocessor'), isFalse);
+    });
+  });
+
+  group('isValidNatsSubjectFilter', () {
+    test('accepts literal and wildcard subjects', () {
+      expect(isValidNatsSubjectFilter('orders.new'), isTrue);
+      expect(isValidNatsSubjectFilter('orders.*'), isTrue);
+      expect(isValidNatsSubjectFilter('orders.>'), isTrue);
+      expect(isValidNatsSubjectFilter('*'), isTrue);
+      expect(isValidNatsSubjectFilter('>'), isTrue);
+    });
+
+    test('rejects empty segments (leading/trailing/double dots)', () {
+      expect(isValidNatsSubjectFilter(''), isFalse);
+      expect(isValidNatsSubjectFilter('.orders'), isFalse);
+      expect(isValidNatsSubjectFilter('orders.'), isFalse);
+      expect(isValidNatsSubjectFilter('orders..new'), isFalse);
+    });
+
+    test('rejects whitespace', () {
+      expect(isValidNatsSubjectFilter('orders new'), isFalse);
+    });
+
+    test('rejects a partial wildcard within a token', () {
+      expect(isValidNatsSubjectFilter('ord*rs'), isFalse);
+      expect(isValidNatsSubjectFilter('orders.new>'), isFalse);
+    });
+
+    test('rejects > anywhere but the final token', () {
+      expect(isValidNatsSubjectFilter('orders.>.new'), isFalse);
+    });
+  });
+
+  group('isValidLiteralNatsSubject', () {
+    test('accepts a literal subject', () {
+      expect(isValidLiteralNatsSubject('orders.new'), isTrue);
+    });
+
+    test('rejects wildcards even though they are valid filter syntax', () {
+      expect(isValidLiteralNatsSubject('orders.*'), isFalse);
+      expect(isValidLiteralNatsSubject('orders.>'), isFalse);
+      expect(isValidLiteralNatsSubject('*'), isFalse);
+      expect(isValidLiteralNatsSubject('>'), isFalse);
+    });
+
+    test('rejects empty segments and whitespace like the filter check does',
+        () {
+      expect(isValidLiteralNatsSubject(''), isFalse);
+      expect(isValidLiteralNatsSubject('orders..new'), isFalse);
+      expect(isValidLiteralNatsSubject('orders new'), isFalse);
+    });
+  });
+
   group('formatEstimatedDuration', () {
     test('shows <1s for a duration that rounds down to nothing', () {
       expect(formatEstimatedDuration(Duration.zero), '<1s');
