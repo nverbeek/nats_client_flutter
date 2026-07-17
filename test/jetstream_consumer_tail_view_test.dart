@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:dart_nats/dart_nats.dart' as nats show Consumer;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nats_client_flutter/jetstream_consumer_tail_view.dart';
 import 'package:nats_client_flutter/jetstream_manager.dart';
@@ -144,6 +144,48 @@ void main() {
         find.widgetWithIcon(IconButton, Icons.check_circle_outline));
     expect(ackButton.onPressed, isNotNull,
         reason: 'the button should re-enable after the revert');
+
+    await incoming.close();
+  });
+
+  testWidgets('the row menu copies the subject via Copy Subject',
+      (tester) async {
+    final incoming = StreamController<Message<dynamic>>();
+    final manager = FakeJetStreamManager();
+    manager.incomingMessages = incoming.stream;
+
+    await tester.pumpWidget(buildView(manager));
+    await tester.pump();
+
+    final message = Message<dynamic>(
+      'ORDERS.new',
+      1,
+      Uint8List.fromList(utf8.encode('payload')),
+      Client(),
+    );
+    incoming.add(message);
+    await tester.pump();
+    await tester.pump();
+
+    final copiedData = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copiedData.add(call.arguments['text'] as String);
+        }
+        return null;
+      },
+    );
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Copy Subject'));
+    await tester.pumpAndSettle();
+
+    expect(copiedData, contains('ORDERS.new'));
 
     await incoming.close();
   });

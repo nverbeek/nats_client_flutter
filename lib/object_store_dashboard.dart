@@ -369,6 +369,8 @@ class ObjectStoreDashboardState extends State<ObjectStoreDashboard> {
                 successMessage: 'Bucket "$bucket" deleted.',
               );
             },
+            style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error),
             child: const Text('Delete'),
           ),
         ],
@@ -465,6 +467,8 @@ class ObjectStoreDashboardState extends State<ObjectStoreDashboard> {
                 successMessage: 'Object "$name" deleted.',
               );
             },
+            style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error),
             child: const Text('Delete'),
           ),
         ],

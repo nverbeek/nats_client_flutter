@@ -342,6 +342,21 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
     );
   }
 
+  /// Centered icon+message, mirroring the pattern the JetStream/KV/Object
+  /// Store dashboards already use for their own empty states.
+  Widget _buildEmptyState(IconData icon, String message) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 48, color: Theme.of(context).disabledColor),
+          const SizedBox(height: 12),
+          Text(message, textAlign: TextAlign.center),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -501,12 +516,14 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
             ),
           )
         else if (_messages.isEmpty)
-          const Expanded(
-            child: Center(child: Text('Waiting for messages...')),
+          Expanded(
+            child: _buildEmptyState(
+                Icons.hourglass_empty, 'Waiting for messages...'),
           )
         else if (_filteredMessages.isEmpty)
-          const Expanded(
-            child: Center(child: Text('No messages match filter.')),
+          Expanded(
+            child: _buildEmptyState(
+                Icons.search_off, 'No messages match filter.'),
           )
         else
           Expanded(
@@ -582,9 +599,13 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
                               ),
                               PopupMenuButton<String>(
                                 padding: EdgeInsets.zero,
+                                tooltip: 'More actions',
                                 itemBuilder: (context) => const [
                                   PopupMenuItem(
                                       value: 'copy', child: Text('Copy')),
+                                  PopupMenuItem(
+                                      value: 'copy_subject',
+                                      child: Text('Copy Subject')),
                                   PopupMenuItem(
                                       value: 'detail', child: Text('Detail')),
                                 ],
@@ -593,6 +614,10 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
                                     case 'copy':
                                       Clipboard.setData(ClipboardData(
                                           text: decodeMessageTextFor(message)));
+                                      break;
+                                    case 'copy_subject':
+                                      Clipboard.setData(ClipboardData(
+                                          text: message.subject ?? ''));
                                       break;
                                     case 'detail':
                                       _showDetailDialog(message);

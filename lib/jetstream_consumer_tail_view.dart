@@ -174,6 +174,21 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
     );
   }
 
+  /// Centered icon+message, mirroring the pattern the JetStream/KV/Object
+  /// Store dashboards already use for their own empty states.
+  Widget _buildEmptyState(IconData icon, String message) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 48, color: Theme.of(context).disabledColor),
+          const SizedBox(height: 12),
+          Text(message, textAlign: TextAlign.center),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -231,8 +246,9 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
             ),
           )
         else if (_messages.isEmpty)
-          const Expanded(
-            child: Center(child: Text('Waiting for messages...')),
+          Expanded(
+            child: _buildEmptyState(
+                Icons.hourglass_empty, 'Waiting for messages...'),
           )
         else
           Expanded(
@@ -284,11 +300,26 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
                             ? () => _term(message)
                             : null,
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.copy),
-                        tooltip: 'Copy',
-                        onPressed: () => Clipboard.setData(
-                            ClipboardData(text: decodeMessageTextFor(message))),
+                      PopupMenuButton<String>(
+                        tooltip: 'More actions',
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(value: 'copy', child: Text('Copy')),
+                          PopupMenuItem(
+                              value: 'copy_subject',
+                              child: Text('Copy Subject')),
+                        ],
+                        onSelected: (value) {
+                          switch (value) {
+                            case 'copy':
+                              Clipboard.setData(ClipboardData(
+                                  text: decodeMessageTextFor(message)));
+                              break;
+                            case 'copy_subject':
+                              Clipboard.setData(
+                                  ClipboardData(text: message.subject ?? ''));
+                              break;
+                          }
+                        },
                       ),
                     ],
                   ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import 'color_tab_chip.dart';
+import 'subject_chip_style.dart';
 import 'subscription_info.dart';
 
 /// Compact chip-based replacement for the old free-text Subjects field.
@@ -47,7 +48,6 @@ class _SubjectChipsRowState extends State<SubjectChipsRow> {
   static const double _addButtonWidth = 44;
   static const double _overflowChipWidth = 96;
   static const double _chipOverhead = 64;
-  static const _labelStyle = TextStyle(fontSize: 13);
   static const double _chipGap = 10;
 
   final Map<SubscriptionInfo, double> _measuredChipWidths = {};
@@ -85,7 +85,9 @@ class _SubjectChipsRowState extends State<SubjectChipsRow> {
 
   double _estimateChipWidth(SubscriptionInfo info) {
     final painter = TextPainter(
-      text: TextSpan(text: _labelFor(info), style: _labelStyle),
+      text: TextSpan(
+          text: _labelFor(info),
+          style: const TextStyle(fontSize: SubjectChipStyle.labelFontSize)),
       textDirection: TextDirection.ltr,
     )..layout();
     final width = painter.width + _chipOverhead;
@@ -134,7 +136,6 @@ class _SubjectChipsRowState extends State<SubjectChipsRow> {
   // is required to actually suppress it: null would fall back to the
   // generic localized default instead of no tooltip.
   Widget _buildChip(SubscriptionInfo info, {bool includeDeleteTooltip = true}) {
-    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(right: _chipGap),
       child: ColorTabChip(
@@ -147,14 +148,12 @@ class _SubjectChipsRowState extends State<SubjectChipsRow> {
         // a custom Text.style bypasses that and renders visibly off-center.
         chip: InputChip(
           label: Text(_labelFor(info)),
-          labelStyle: _labelStyle.copyWith(
-            color: theme.colorScheme.onSecondaryContainer,
-          ),
-          backgroundColor: theme.colorScheme.secondaryContainer,
-          side: BorderSide.none,
+          labelStyle: SubjectChipStyle.labelStyleFor(context),
+          backgroundColor: SubjectChipStyle.backgroundColorFor(context),
+          side: SubjectChipStyle.side,
           onPressed: () => widget.onTapChip(info),
           onDeleted: () => widget.onRemoveChip(info),
-          deleteIconColor: theme.colorScheme.onSecondaryContainer,
+          deleteIconColor: SubjectChipStyle.foregroundColorFor(context),
           deleteButtonTooltipMessage:
               includeDeleteTooltip ? 'Remove subscription' : '',
         ),
@@ -163,16 +162,13 @@ class _SubjectChipsRowState extends State<SubjectChipsRow> {
   }
 
   Widget _buildOverflowChip(int count) {
-    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(right: _chipGap),
       child: ActionChip(
         label: Text('+$count more'),
-        labelStyle: _labelStyle.copyWith(
-          color: theme.colorScheme.onSecondaryContainer,
-        ),
-        backgroundColor: theme.colorScheme.secondaryContainer,
-        side: BorderSide.none,
+        labelStyle: SubjectChipStyle.labelStyleFor(context),
+        backgroundColor: SubjectChipStyle.backgroundColorFor(context),
+        side: SubjectChipStyle.side,
         onPressed: widget.onOpenManager,
       ),
     );

@@ -123,6 +123,15 @@ void main() {
     expect(find.text('Copied to clipboard!'), findsOneWidget);
     await waitForSnackBarGone(tester);
 
+    // 3b. Row popup menu: Copy Subject.
+    await tester.tap(popupMenuFor(payloadA));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Copy Subject'));
+    await tester.pumpAndSettle();
+    expect(copiedData, contains(subjectA));
+    expect(find.text('Copied subject to clipboard!'), findsOneWidget);
+    await waitForSnackBarGone(tester);
+
     // 4. Row popup menu: Detail.
     await tester.tap(popupMenuFor(payloadA));
     await tester.pumpAndSettle();

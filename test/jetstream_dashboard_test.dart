@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nats_client_flutter/jetstream_dashboard.dart';
 import 'package:nats_client_flutter/jetstream_manager.dart';
@@ -99,10 +100,11 @@ class FakeJetStreamManager extends JetStreamManager {
   }
 }
 
-StreamInfo _stream(String name, {int messages = 0, int bytes = 0}) {
+StreamInfo _stream(String name,
+    {int messages = 0, int bytes = 0, List<String>? subjects}) {
   return StreamInfo(
     type: 'io.nats.jetstream.api.v1.stream_info_response',
-    config: StreamConfig(name: name, subjects: ['$name.>']),
+    config: StreamConfig(name: name, subjects: subjects ?? ['$name.>']),
     created: DateTime.now().toIso8601String(),
     state: StreamState(
       messages: messages,
@@ -577,5 +579,136 @@ void main() {
 
     expect(manager.fetchAccountInfoCalls, 1);
     expect(find.text('0 streams'), findsOneWidget);
+  });
+
+  group('Stream detail Subjects section', () {
+    testWidgets('a short subject list renders with no collapse toggle',
+        (tester) async {
+      final manager = FakeJetStreamManager();
+      manager.listStreamsImpl = () async => [
+            _stream('orders', messages: 5, subjects: ['orders.new', 'orders.updated'])
+          ];
+
+      await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('orders'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Subjects (2):'), findsOneWidget);
+      expect(find.text('orders.new'), findsOneWidget);
+      expect(find.text('orders.updated'), findsOneWidget);
+      expect(find.textContaining('more'), findsNothing);
+    });
+
+    testWidgets(
+        'a long subject list collapses with a toggle that expands and collapses it',
+        (tester) async {
+      final manyLegit = List<String>.generate(20, (i) => 'orders.subject$i');
+      final manager = FakeJetStreamManager();
+      manager.listStreamsImpl = () async =>
+          [_stream('orders', messages: 5, subjects: manyLegit)];
+
+      await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('orders'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Subjects (20):'), findsOneWidget);
+      // Collapsed to the first 12 -- the 13th and beyond aren't rendered.
+      expect(find.text('orders.subject0'), findsOneWidget);
+      expect(find.text('orders.subject11'), findsOneWidget);
+      expect(find.text('orders.subject12'), findsNothing);
+      expect(find.text('+8 more'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('+8 more'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('+8 more'));
+      await tester.pumpAndSettle();
+
+      // Expanded: every subject renders, and the toggle now offers to
+      // collapse again.
+      expect(find.text('orders.subject12'), findsOneWidget);
+      expect(find.text('orders.subject19'), findsOneWidget);
+      expect(find.text('Show less'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('Show less'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Show less'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('orders.subject12'), findsNothing);
+      expect(find.text('+8 more'), findsOneWidget);
+    });
+
+    testWidgets('switching streams resets the expanded state', (tester) async {
+      final manyLegit = List<String>.generate(20, (i) => 'orders.subject$i');
+      final manager = FakeJetStreamManager();
+      manager.listStreamsImpl = () async => [
+            _stream('orders', messages: 5, subjects: manyLegit),
+            _stream('telemetry', messages: 2, subjects: ['telemetry.readings']),
+          ];
+
+      await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('orders'));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('+8 more'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('+8 more'));
+      await tester.pumpAndSettle();
+      expect(find.text('Show less'), findsOneWidget);
+
+      await tester.tap(find.text('telemetry'));
+      await tester.pumpAndSettle();
+      expect(find.text('telemetry.readings'), findsOneWidget);
+
+      await tester.tap(find.text('orders'));
+      await tester.pumpAndSettle();
+
+      // Back on "orders" -- collapsed again, not still expanded.
+      expect(find.text('+8 more'), findsOneWidget);
+      expect(find.text('orders.subject12'), findsNothing);
+    });
+
+    testWidgets('Copy subjects copies every subject, comma-joined',
+        (tester) async {
+      final manager = FakeJetStreamManager();
+      manager.listStreamsImpl = () async => [
+            _stream('orders', messages: 5, subjects: ['orders.new', 'orders.updated'])
+          ];
+
+      final copiedData = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copiedData.add(call.arguments['text'] as String);
+          }
+          return null;
+        },
+      );
+      addTearDown(() => tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null));
+
+      await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('orders'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Copy subjects'));
+      await tester.pumpAndSettle();
+
+      expect(copiedData, contains('orders.new, orders.updated'));
+      expect(find.textContaining('Copied 2 subjects'), findsOneWidget);
+    });
   });
 }

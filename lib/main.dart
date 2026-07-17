@@ -2434,12 +2434,8 @@ class _MyHomePageState extends State<MyHomePage>
       final ack = await manager.publish(subject, data, header: header);
       if (!mounted) return;
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              'Published to stream "${ack.stream}" at seq ${ack.sequence}.'),
-        ),
-      );
+      showSnackBar(
+          'Published to stream "${ack.stream}" at seq ${ack.sequence}.');
     } catch (e) {
       _showErrorSnackBar(describeJetStreamError(e));
     }
@@ -2483,6 +2479,7 @@ class _MyHomePageState extends State<MyHomePage>
     return PopupMenuButton<String>(
       key: ValueKey('popup_${filteredItems[index].hashCode}'),
       padding: EdgeInsets.zero,
+      tooltip: 'More actions',
       itemBuilder: (context) {
         // Add mounted check before accessing context
         if (!mounted) return [];
@@ -2497,6 +2494,10 @@ class _MyHomePageState extends State<MyHomePage>
             const PopupMenuItem(
               value: 'copy',
               child: Text('Copy'),
+            ),
+            const PopupMenuItem(
+              value: 'copy_subject',
+              child: Text('Copy Subject'),
             ),
             if (selection.length > 1)
               PopupMenuItem(
@@ -2566,6 +2567,13 @@ class _MyHomePageState extends State<MyHomePage>
                   text: decodeMessageTextFor(filteredItems[index])));
               if (mounted) {
                 showSnackBar('Copied to clipboard!');
+              }
+              break;
+            case 'copy_subject':
+              await Clipboard.setData(
+                  ClipboardData(text: filteredItems[index].subject ?? ''));
+              if (mounted) {
+                showSnackBar('Copied subject to clipboard!');
               }
               break;
             case 'copy_selected':
@@ -2803,9 +2811,18 @@ class _MyHomePageState extends State<MyHomePage>
           actions: [
             IconButton(
                 icon: const Icon(Icons.settings),
+                tooltip: 'Settings',
                 onPressed: showSettingsDialog),
             IconButton(
-                icon: const Icon(Icons.lightbulb),
+                // Shows the mode a tap switches *to*, not the current one --
+                // a sun in dark mode (tap for light), a moon in light mode
+                // (tap for dark) -- rather than a static bulb regardless of
+                // theme.
+                icon: Icon(
+                    Provider.of<ThemeModel>(context, listen: false).isDark()
+                        ? Icons.light_mode
+                        : Icons.dark_mode),
+                tooltip: 'Toggle light/dark theme',
                 onPressed: () {
                   ThemeModel themeModel =
                       Provider.of<ThemeModel>(context, listen: false);
@@ -2820,6 +2837,7 @@ class _MyHomePageState extends State<MyHomePage>
               padding: const EdgeInsets.fromLTRB(0, 0, 10, 0),
               child: IconButton(
                   icon: const Icon(Icons.question_mark),
+                  tooltip: 'Help',
                   onPressed: () => showHelpDialog()),
             )
           ],

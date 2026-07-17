@@ -212,6 +212,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(copiedData, contains(payload));
 
+    // 8b. Row menu: Copy Subject copies the subject, not the payload.
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Copy Subject'));
+    await tester.pumpAndSettle();
+    expect(copiedData, contains('$streamName.created'));
+
     // 9. Pause / Resume: a message published while paused must not appear
     // until Resume, and the badge should reflect it meanwhile. Publish via
     // a second, direct `dart_nats` client (rather than switching to the

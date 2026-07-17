@@ -348,6 +348,8 @@ class KvDashboardState extends State<KvDashboard> {
                 successMessage: 'Bucket "$bucket" deleted.',
               );
             },
+            style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error),
             child: const Text('Delete'),
           ),
         ],
@@ -419,6 +421,8 @@ class KvDashboardState extends State<KvDashboard> {
                 successMessage: 'Key "$key" deleted.',
               );
             },
+            style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error),
             child: const Text('Delete'),
           ),
         ],
@@ -449,6 +453,8 @@ class KvDashboardState extends State<KvDashboard> {
                 successMessage: 'Key "$key" purged.',
               );
             },
+            style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error),
             child: const Text('Purge'),
           ),
         ],
@@ -637,6 +643,7 @@ class KvDashboardState extends State<KvDashboard> {
       isThreeLine: true,
       trailing: PopupMenuButton<String>(
         enabled: !_mutating,
+        tooltip: 'More actions',
         onSelected: (action) {
           switch (action) {
             case 'edit':

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'color_tab_chip.dart';
+import 'subject_chip_style.dart';
 import 'subscription_info.dart';
 
 /// Ctrl+Enter (Cmd+Enter on Mac) submits [SubscriptionEditDialog] from
@@ -320,7 +321,6 @@ class _SubscriptionManagerDialogState
                       itemCount: widget.subscriptions.length,
                       itemBuilder: (context, index) {
                         final info = widget.subscriptions[index];
-                        final theme = Theme.of(context);
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 6),
                           child: Row(
@@ -346,14 +346,12 @@ class _SubscriptionManagerDialogState
                                     chip: Chip(
                                       label: Text(info.subject,
                                           overflow: TextOverflow.ellipsis),
-                                      labelStyle: const TextStyle(fontSize: 13)
-                                          .copyWith(
-                                        color: theme
-                                            .colorScheme.onSecondaryContainer,
-                                      ),
+                                      labelStyle:
+                                          SubjectChipStyle.labelStyleFor(context),
                                       backgroundColor:
-                                          theme.colorScheme.secondaryContainer,
-                                      side: BorderSide.none,
+                                          SubjectChipStyle.backgroundColorFor(
+                                              context),
+                                      side: SubjectChipStyle.side,
                                     ),
                                   ),
                                 ),

@@ -1,5 +1,6 @@
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'account_info_dialog.dart';
 import 'jetstream_consumer_dialog.dart';
@@ -7,6 +8,7 @@ import 'jetstream_consumer_tail_view.dart';
 import 'jetstream_manager.dart';
 import 'jetstream_message_view.dart';
 import 'jetstream_stream_dialog.dart';
+import 'subject_chip_style.dart';
 
 /// JetStream tab content: a monitor and management dashboard for streams and
 /// consumers, plus a live "Browse Messages" tail for a selected stream.
@@ -41,6 +43,14 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
   String? _tailingConsumerName;
   bool _tailingConsumerExplicitAck = false;
 
+  // Whether the stream detail pane's Subjects section is showing every
+  // subject (vs. collapsed to the first `_subjectsCollapsedCount`) -- reset
+  // on every stream selection so switching streams doesn't carry over a
+  // previous stream's expanded state.
+  bool _subjectsExpanded = false;
+  static const int _subjectsCollapsedCount = 12;
+  final ScrollController _subjectsScrollController = ScrollController();
+
   bool _mutating = false;
 
   /// Lets the app-wide Ctrl+F / Ctrl+Shift+F shortcut handler in `main.dart`
@@ -71,6 +81,12 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
     if (widget.manager != null) {
       _checkAvailability();
     }
+  }
+
+  @override
+  void dispose() {
+    _subjectsScrollController.dispose();
+    super.dispose();
   }
 
   @override
@@ -151,6 +167,7 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
       _tailingConsumerName = null;
       _consumers = [];
       _consumersError = null;
+      _subjectsExpanded = false;
     });
     await _loadConsumers(streamName);
   }
@@ -350,6 +367,8 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
                 successMessage: 'Stream "$streamName" deleted.',
               );
             },
+            style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error),
             child: const Text('Delete'),
           ),
         ],
@@ -381,6 +400,8 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
                 successMessage: 'Stream "$streamName" purged.',
               );
             },
+            style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error),
             child: const Text('Purge'),
           ),
         ],
@@ -429,6 +450,8 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
                 successMessage: 'Consumer "$consumerName" deleted.',
               );
             },
+            style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error),
             child: const Text('Delete'),
           ),
         ],
@@ -565,9 +588,14 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
       );
     }
     if (_consumers.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(16),
-        child: Text('No consumers on this stream yet.'),
+      // A fixed-height box rather than `_buildEmptyState()`'s bare `Center`
+      // directly -- this list sits inside `_buildStreamDetail`'s
+      // `SingleChildScrollView`, an unbounded-height context that a
+      // height-filling `Center` can't lay out in on its own.
+      return SizedBox(
+        height: 160,
+        child: _buildEmptyState(
+            Icons.subscriptions_outlined, 'No consumers on this stream yet.'),
       );
     }
     return Column(
@@ -596,6 +624,92 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
     );
   }
 
+  /// Replaces a single unbounded `Text('Subjects: ...')` line -- a stream
+  /// with hundreds of subjects (seen in the field: 600+ on one stream) would
+  /// otherwise fill the whole detail pane and bury the stats/actions/
+  /// consumer list below it. Chips wrap naturally instead of running one
+  /// giant comma-joined line; collapsed to the first
+  /// [_subjectsCollapsedCount] by default, with a "+N more" toggle. Even
+  /// fully expanded, the list is capped at a fixed scrollable height so it
+  /// still can't dominate the pane. A short list (within the collapsed
+  /// count) renders with no toggle at all -- the same footprint as before,
+  /// minus the comma-joined text.
+  Widget _buildSubjectsSection(List<String> subjects) {
+    final theme = Theme.of(context);
+    final isCollapsible = subjects.length > _subjectsCollapsedCount;
+    final showAll = !isCollapsible || _subjectsExpanded;
+    final visible =
+        showAll ? subjects : subjects.take(_subjectsCollapsedCount).toList();
+
+    // The label and copy button ride inline as the Wrap's first/last
+    // children, alongside the chips, rather than sitting on their own Row
+    // above it -- keeps a short (the common case) subject list to
+    // essentially one line, matching the old single-`Text` line's
+    // footprint instead of adding a whole extra header row.
+    final chips = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text('Subjects (${subjects.length}):',
+            style: theme.textTheme.bodyMedium),
+        for (final subject in visible)
+          // Same chip style as the subscription chips elsewhere in the app
+          // (`SubjectChipsRow`, `SubscriptionManagerDialog`) for visual
+          // consistency, minus the color-tab avatar and delete affordance --
+          // these are literal stream subjects, not per-subscription state.
+          Chip(
+            label: Text(subject),
+            labelStyle: SubjectChipStyle.labelStyleFor(context),
+            backgroundColor: SubjectChipStyle.backgroundColorFor(context),
+            side: SubjectChipStyle.side,
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        if (isCollapsible)
+          ActionChip(
+            label: Text(showAll
+                ? 'Show less'
+                : '+${subjects.length - visible.length} more'),
+            labelStyle: SubjectChipStyle.labelStyleFor(context),
+            backgroundColor: SubjectChipStyle.backgroundColorFor(context),
+            side: SubjectChipStyle.side,
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            onPressed: () =>
+                setState(() => _subjectsExpanded = !_subjectsExpanded),
+          ),
+        IconButton(
+          icon: const Icon(Icons.copy, size: 16),
+          tooltip: 'Copy subjects',
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+          onPressed: () async {
+            await Clipboard.setData(
+                ClipboardData(text: subjects.join(', ')));
+            _showSnack(
+                'Copied ${subjects.length} subject${subjects.length == 1 ? '' : 's'} to clipboard.');
+          },
+        ),
+      ],
+    );
+
+    if (isCollapsible && showAll) {
+      return ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 200),
+        child: Scrollbar(
+          controller: _subjectsScrollController,
+          child: SingleChildScrollView(
+            controller: _subjectsScrollController,
+            child: chips,
+          ),
+        ),
+      );
+    }
+    return chips;
+  }
+
   Widget _buildStreamDetail(StreamInfo stream) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -615,7 +729,7 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
             ],
           ),
           const SizedBox(height: 8),
-          Text('Subjects: ${stream.config.subjects.join(', ')}'),
+          _buildSubjectsSection(stream.config.subjects),
           const SizedBox(height: 8),
           Text(
               'Messages: ${stream.state.messages}  ·  Size: ${formatBytes(stream.state.bytes)}'),
