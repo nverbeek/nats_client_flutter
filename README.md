@@ -43,28 +43,12 @@ This application currently supports Windows, Linux, macOS and Web platforms.
 - **Update notifications** (optional, on by default): checks this repo's GitHub Releases on startup and shows a small dismissible popover with a link if a newer version is available. This app only distributes through GitHub, so nothing downloads or installs automatically — it just tells you a new build exists.
 
 # Screenshots
-<br/>
 
 ![Message View](./images/Messages.png)
-
-<br/>
-
 ![Filter & Sort](./images/Filter%20and%20Sort.png)
-
-<br/>
-
 ![Message View](./images/Message%20Detail.png)
-
-<br/>
-
 ![JetStream Dashboard](./images/JetStream.png)
-
-<br/>
-
 ![Key-Value Stores](./images/Key-Value%20Stores.png)
-
-<br/>
-
 ![Object Store](./images/Object%20Store.png)
 
 These are generated automatically — see `scripts/capture_screenshots.ps1` if you're regenerating them after a UI change.

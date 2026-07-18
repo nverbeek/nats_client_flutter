@@ -41,7 +41,7 @@ This app depends on the official mainline `dart_nats` package (`^1.2.2`), includ
 - [ ] **M29**: KV Bucket Info + Consumer Detail Depth. Not started — see below.
 - [ ] **M30**: Upstream-First `dart_nats` Round (consumer pause/resume, filtered stream purge, Object Store streaming). Not started — see below.
 - [x] **M31**: Reconnect State Restoration (remaining half) — a `reconnectSignal` fired only on a real post-bounce reconnect (not the existing blip-tolerance) lets Browse Messages/Tail auto-retry out of a stuck error state and KV auto-refresh its selected bucket's keys/watch; healthy listings still use explicit Refresh, and an explicit Disconnect still fully resets everything.
-- [ ] **M32** *(low priority, cosmetic)*: Screenshot Border/Drop-Shadow Polish. Not started — see below.
+- [x] **M32**: Screenshot Border/Drop-Shadow Polish — subtle hairline border + soft drop shadow added to `Format-Screenshot`, all six `images/*.png` reprocessed.
 
 ---
 
@@ -246,16 +246,3 @@ Small, standalone ideas noted in passing during other milestones' work — kept 
 - JetStream Browse/Tail rows show only the stream sequence chip, no arrival timestamp — Live Messages already has one (Settings' "Show Message Timestamps"); extending it to these two views is a small follow-up, distinct from Milestone 28's hex/binary payload view.
 - KV snapshot↔watch gap: `KvDashboard` lists keys, *then* starts the watch — a put/delete landing in that narrow window can be missed until a manual Refresh. This is a permanent library-semantics limitation (`watch()` has no "resume from last-seen" option) that exists on every `_loadKeys` call, not just around a reconnect — Milestone 31's reconnect-triggered re-snapshot narrows the specific *reconnect-gap* version of this race but doesn't (and can't, app-side) close the general one.
 - Offline (no-publish) browsing of a previously-exported NDJSON file — loading a file into the message list read-only, no live server needed, nothing sent. Distinct from the existing file-based Replay (which requires a connection and actually publishes); noted as a possible future addition if the need comes up.
-
----
-
-## Milestone 32: Screenshot Border/Drop-Shadow Polish (Low Priority, Cosmetic)
-
-### Objective
-README screenshots (`images/*.png`) are captured by `scripts/capture_screenshots.ps1` and post-processed by `scripts/_image_processing.ps1`'s `Format-Screenshot` (4px shave + rounded corners via ImageMagick, which is already a hard dependency of this pipeline). They currently read as flat compared to the elevation/drop-shadow macOS applies to native screenshots. ImageMagick can add a subtle border and soft drop shadow with standard primitives (`-border`/`-shadow`), no new tooling required.
-
-### Implementation Checklist
-- [ ] Extend `Format-Screenshot` in `scripts/_image_processing.ps1` to add a subtle 1px border and a soft drop shadow, applied after the rounded-corner mask (the shadow must be generated from the rounded alpha channel, not the rectangular pre-mask image, or the corners will look wrong against the shadow).
-- [ ] Account for the shadow adding transparent padding around the canvas — check README image sizing/alignment still looks right once it's in place.
-- [ ] Reprocess existing `images/*.png` (via `images/process_screenshots.ps1` or a full `capture_screenshots.ps1` re-run) so the shipped screenshots pick up the new treatment.
-- [ ] Visual pass comparing before/after in the rendered README.
