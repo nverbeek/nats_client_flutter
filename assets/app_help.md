@@ -1,10 +1,10 @@
 # NATS Client (v%APP_VERSION%)
 This NATS client is a cross-platform client intended for use with NATS servers. This client supports WebSocket and TCP NATS connection schemes, including TLS and Mutual TLS connections.
 
-This client supports Windows, macOS and Web platforms.
+This client supports Windows, Linux, macOS, and Web platforms.
 
 # Theme
-The application has two themes, **light** and **dark**. The theme may be changed by using the 💡 toggle. The last-used theme is persisted between application runs.
+The application has two themes, **light** and **dark**. The theme may be changed by using the ☀️/🌙 toggle in the toolbar — its icon shows the mode a tap will switch *to* (a sun while in dark mode, a moon while in light mode), not the current mode. The last-used theme is persisted between application runs.
 
 # Settings
 The application provides a settings dialog (⚙️ button in the toolbar) with the following options:
@@ -17,6 +17,8 @@ The application provides a settings dialog (⚙️ button in the toolbar) with t
 - **Enable Object Store**: Shows or hides the Object Store tab (see below). On by default; same "just hides the UI" behavior as the JetStream toggle.
 - **Enable Service Discovery**: Shows or hides the Services tab (see below). **Off by default**, unlike the other three toggles — discovery actively publishes requests onto the account rather than just reading passively, and not every account has any services to find.
 - **Check for Updates**: Controls whether the app checks GitHub for a newer release on startup (see Update Notifications below). On by default.
+- **Max Messages Kept**: Caps how many messages the Live Messages list holds at once (1k/5k/10k/25k/50k/100k, or **Unlimited**). Once the cap is reached, the oldest messages are dropped to make room for new ones. Defaults to 10k.
+- **Show Message Timestamps**: Shows a small arrival-time stamp on each Live Messages row. Off by default.
 
 # Connection
 ## Schemes
@@ -77,19 +79,21 @@ Each message has the following information/options:
 - On the right, a 3 dot menu button is available, with the following options:
 
     - **Copy**: Copies the message data to the clipboard
+    - **Copy Subject**: Copies just the message's subject to the clipboard.
     - **Detail**: If the message is JSON based, opens a dialog and displays a formatted view. Otherwise, the dialog will just show the original content.
     - **Replay**: Re-sends the message exactly as defined, with the same subject and data. (Not to be confused with the Tools section's file-based **Replay**, below, which re-publishes every message from a previously exported file.)
     - **Edit & Send** - Opens a dialog pre-filled with the message's subject and data, allowing you to edit prior to sending again.
     - **Reply To** - If the selected message has a replyTo subject defined, this option opens a send message box where the subject is pre-filled with the replyTo subject.
+    - When more than one row is selected (see Multi-Select, below), this menu also offers **Copy Selected (N)** and **Export Selected (N)**.
 
 # JetStream
 When **Enable JetStream** is on (the default) and you're connected to a server or account with JetStream enabled, a **JetStream** tab appears alongside **Live Messages**. It's a monitoring and management dashboard for streams and consumers.
 
 ## Streams
-The left-hand pane lists all streams on the account. Selecting a stream shows its subjects, storage type, retention policy, and message/byte counts on the right.
+The left-hand pane lists all streams on the account. Selecting a stream shows its subjects, storage type, retention policy, and message/byte counts on the right. Subjects display as chips, collapsed to the first several with a "+N more"/"Show less" toggle once a stream has a lot of them, plus a copy button that copies the full subject list (comma-separated) to the clipboard.
 
 - **Add Stream**: Opens a dialog to create a new stream (name, comma-separated subjects, optional max age in days, and replica count).
-- **Browse Messages**: Opens a live tail of the selected stream's contents. This uses a temporary, auto-cleaning consumer under the hood — no manual consumer setup required just to look at what's in a stream. Disabled when the stream has no messages yet. Includes its own Filter/Find fields, a Pause/Resume toggle, and a Clear button, working the same way as their Live Messages tab counterparts described below.
+- **Browse Messages**: Opens a live tail of the selected stream's contents. This uses a temporary, auto-cleaning consumer under the hood — no manual consumer setup required just to look at what's in a stream. Disabled when the stream has no messages yet. Includes its own Filter/Find fields, a Pause/Resume toggle, and a Clear button, working the same way as their Live Messages tab counterparts described below. Each row's own menu offers **Copy**, **Copy Subject**, and **Detail**, same as the Live Messages tab.
 - **Purge**: Deletes all messages in the stream but keeps the stream and its consumers. Asks for confirmation first.
 - **Delete Stream**: Permanently deletes the stream, its messages, and its consumers. Asks for confirmation first.
 
@@ -98,7 +102,7 @@ Each stream's consumers are listed below its details. Tapping a consumer opens a
 
 - **Create Consumer**: Opens a dialog to create a new consumer on the selected stream — durable name (leave blank for an ephemeral consumer), optional filter subject, push (with a deliver subject) or pull, ack policy, and deliver policy.
 - **Delete**: Removes the consumer. Asks for confirmation first. Only available for named (non-ephemeral) consumers.
-- **Tail**: Opens a live view of messages delivered to that specific consumer. If the consumer's ack policy is `explicit`, each message gets **Ack**, **Nak** (redeliver), and **Term** (stop redelivery) buttons; once you act on a message, its buttons disable. Consumers with any other ack policy show the same messages with those buttons disabled, since the server isn't expecting acks for them.
+- **Tail**: Opens a live view of messages delivered to that specific consumer. If the consumer's ack policy is `explicit`, each message gets **Ack**, **Nak** (redeliver), and **Term** (stop redelivery) buttons; once you act on a message, its buttons disable. Consumers with any other ack policy show the same messages with those buttons disabled, since the server isn't expecting acks for them. Each row's menu also offers **Copy** and **Copy Subject**.
 
 ## Publishing into a stream
 The regular **Send Message** dialog (see Tools, below) gets a **Publish via JetStream (get delivery ack)** checkbox whenever JetStream is available and connected. Checking it publishes through JetStream instead of a plain core NATS publish, and shows the stream name and assigned sequence number once the server acknowledges it.
@@ -116,6 +120,7 @@ The left-hand pane lists all KV buckets on the account. Selecting a bucket shows
 Once a bucket is selected, its keys are listed with their current value, revision number, and last-updated time. The list updates live as keys change, including changes made by other clients.
 
 - **Search Keys**: Narrows the list to keys whose name contains the search text (case-insensitive).
+- **Refresh keys** (refresh icon next to the bucket name): Manually reloads the key list, in addition to the automatic live updates.
 - **Put Value**: Opens a dialog to create a new key with a text/JSON value.
 - Each key's 3-dot menu (or tapping the row) offers:
     - **Edit**: Opens the same dialog pre-filled with the key's current value, using an optimistic-concurrency check — if the key changed since it was loaded, the save is rejected rather than silently overwriting someone else's change.
@@ -139,10 +144,12 @@ Once a bucket is selected, its objects are listed with their size, chunk count, 
 
 - **Search Objects**: Narrows the list to objects whose name contains the search text (case-insensitive).
 - **Refresh**: Reloads the object list from the server — there's no live watch for Object Store, so this is the only way to see objects uploaded by other clients.
-- **Upload**: Opens your OS's file picker; the selected file is uploaded under its original filename, overwriting any existing object with that name.
+- **Upload**: Opens your OS's file picker; the selected file is uploaded under its original filename. If an object with that name already exists, you're asked to confirm the overwrite first.
 - Each object row offers:
     - **Download**: Opens your OS's save-file dialog and writes the downloaded bytes there, after the client verifies the object's SHA-256 digest.
     - **Delete**: Permanently deletes the object. Asks for confirmation first.
+
+Uploads and downloads over 100 MB ask for confirmation before proceeding — the underlying library holds the whole object in memory during the transfer, so very large objects can be slow or memory-intensive.
 
 # Services
 When **Enable Service Discovery** is turned on in Settings and you're connected, a **Services** tab appears. It finds [NATS Microservices](https://docs.nats.io/using-nats/developer/services) (the ADR-32 "Services API" convention used by `nats.go`'s `micro` package and equivalents in other languages) currently running and reachable on the account — this app only *discovers* services, it doesn't host any of its own.
@@ -215,7 +222,7 @@ The status bar displays relevant information about the application, and also the
 
 The bar also shows:
 
-- **Message Count**: Displays the total number of messages currently in the list, as well as how many are displaying (if a filter is applied).
+- **Message Count**: Displays the total number of messages currently in the list, as well as how many are displaying (if a filter is applied). When one or more messages are multi-selected (see Multi-Select, above), a "Selected: N" count appears here too.
 - **URL**: The current fully-qualified URL being used. If the 🔒 icon appears, it means the connection is using TLS.
 - **Status**: Current connection status.
 

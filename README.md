@@ -22,7 +22,7 @@ This application currently supports Windows, Linux, macOS and Web platforms.
 - See message details, such as headers, subject and payload. JSON payloads are automatically formatted and syntax highlighted as well!
 - Light and Dark themes
 - Most recent connection information & theme are persisted between app runs
-- Message view settings
+- Message view settings: adjustable font size, an optional per-row arrival timestamp, and a configurable cap on how many messages are kept in memory (1k–100k, or unlimited)
 - **JetStream support** (optional, on by default — toggle it off in Settings if you don't need it):
   - Monitor streams and their consumers, including message/byte counts, retention, and ack/redelivery stats
   - Create, purge, and delete streams; create and delete consumers (push or pull, any ack policy)
