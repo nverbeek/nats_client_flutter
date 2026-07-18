@@ -660,4 +660,49 @@ void main() {
     expect(find.text('2 streams'), findsOneWidget);
     expect(manager.fetchAccountInfoCalls, 0);
   });
+
+  testWidgets(
+      'a reconnect signal re-snapshots the selected bucket\'s keys and '
+      'restarts its watch exactly once, even when nothing was erroring',
+      (tester) async {
+    final manager = FakeKvManager();
+    manager.listBucketsImpl = () async => [_bucketStream('app-config')];
+    manager.listKeysImpl = (_) async => ['db.port'];
+    manager.getEntryImpl = (_, key) async => _entry(key, '5432');
+    final reconnectSignal = ValueNotifier<int>(0);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: KvDashboard(
+              manager: manager, reconnectSignal: reconnectSignal),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('app-config'));
+    await tester.pumpAndSettle();
+
+    expect(manager.watchListenerCount('app-config'), 1);
+    final loadsBeforeReconnect = manager.listBucketsCalls;
+
+    // A put that lands entirely during the disconnect gap: `watch()`'s
+    // `deliverPolicy: 'last'` semantics mean this is otherwise invisible
+    // until a fresh snapshot -- there is no resume-from-last-seen option to
+    // backfill it, so re-fetching keys is the only way to pick it up.
+    manager.listKeysImpl = (_) async => ['db.port', 'db.host'];
+    manager.getEntryImpl = (_, key) async => _entry(key, key == 'db.host' ? '10.0.0.1' : '5432');
+
+    reconnectSignal.value++;
+    await tester.pumpAndSettle();
+
+    expect(find.text('db.host'), findsOneWidget,
+        reason: 'the key added during the gap should appear after the '
+            'reconnect-triggered re-snapshot');
+    // Bucket list wasn't reloaded (nothing was erroring there) -- only keys.
+    expect(manager.listBucketsCalls, loadsBeforeReconnect);
+    // Exactly one active watch -- the old one was cancelled before the new
+    // one started, not stacked on top of it.
+    expect(manager.watchListenerCount('app-config'), 1);
+  });
 }

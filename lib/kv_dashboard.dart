@@ -22,7 +22,14 @@ class KvDashboard extends StatefulWidget {
   /// The active KV manager, or `null` when not currently connected.
   final KvManager? manager;
 
-  const KvDashboard({super.key, required this.manager});
+  /// Fires after a real reconnect -- see `JetStreamDashboard`'s doc comment
+  /// on the same parameter for why this needs its own signal rather than a
+  /// `didUpdateWidget` check on `manager`. Optional so tests that never
+  /// disconnect don't need to plumb one through.
+  final Listenable? reconnectSignal;
+
+  const KvDashboard(
+      {super.key, required this.manager, this.reconnectSignal});
 
   @override
   State<KvDashboard> createState() => KvDashboardState();
@@ -56,6 +63,32 @@ class KvDashboardState extends State<KvDashboard> {
     if (widget.manager != null) {
       _checkAvailability();
     }
+    widget.reconnectSignal?.addListener(_onReconnect);
+  }
+
+  /// Unlike the JetStream dashboards, a KV watch's own subscription is a
+  /// plain core-NATS subscription -- `dart_nats` already resends `SUB` for
+  /// it on reconnect (see `Client._backendSubscriptAll`), so it silently
+  /// keeps working with no error and no app-side action needed. The real gap
+  /// is what happened *during* the disconnect: `watch()`'s ephemeral
+  /// consumer is `deliverPolicy: 'last'`, so a put/delete that landed while
+  /// disconnected is invisible until a fresh snapshot -- there's no
+  /// resume-from-last-seen option to backfill it otherwise. So this
+  /// unconditionally re-snapshots the selected bucket (which also restarts
+  /// the watch as `_loadKeys`'s last step) rather than only doing so when
+  /// `_keysError` happens to be set.
+  void _onReconnect() {
+    if (widget.manager == null) return;
+    if (_availabilityError != null) {
+      _checkAvailability();
+      return;
+    }
+    if (_bucketsError != null) {
+      _loadBuckets();
+    }
+    if (_selectedBucket != null) {
+      _loadKeys(_selectedBucket!);
+    }
   }
 
   @override
@@ -84,6 +117,7 @@ class KvDashboardState extends State<KvDashboard> {
 
   @override
   void dispose() {
+    widget.reconnectSignal?.removeListener(_onReconnect);
     _watchSub?.cancel();
     _searchController.dispose();
     super.dispose();

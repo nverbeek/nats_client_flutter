@@ -435,6 +435,58 @@ void main() {
     expect(find.text('billing-processor'), findsOneWidget);
   });
 
+  testWidgets(
+      'a reconnect signal auto-retries whichever list is currently showing '
+      'an error, without a manual click', (tester) async {
+    final manager = FakeJetStreamManager();
+    manager.listStreamsImpl = () async => throw Exception('stream list boom');
+    final reconnectSignal = ValueNotifier<int>(0);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: JetStreamDashboard(
+              manager: manager, reconnectSignal: reconnectSignal),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('JetStream is unavailable'), findsOneWidget);
+
+    manager.listStreamsImpl = () async => [_stream('orders', messages: 3)];
+    reconnectSignal.value++;
+    await tester.pumpAndSettle();
+
+    expect(find.text('orders'), findsOneWidget);
+  });
+
+  testWidgets(
+      'a reconnect signal is a no-op when nothing is currently erroring',
+      (tester) async {
+    final manager = FakeJetStreamManager();
+    manager.listStreamsImpl = () async => [_stream('orders', messages: 3)];
+    final reconnectSignal = ValueNotifier<int>(0);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: JetStreamDashboard(
+              manager: manager, reconnectSignal: reconnectSignal),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('orders'), findsOneWidget);
+    final callsBeforeReconnect = manager.listStreamsCalls;
+
+    reconnectSignal.value++;
+    await tester.pumpAndSettle();
+
+    // A healthy listing isn't force-refreshed -- explicit Refresh stays the
+    // model there.
+    expect(manager.listStreamsCalls, callsBeforeReconnect);
+  });
+
   testWidgets('Browse Messages is disabled when the stream has no messages',
       (tester) async {
     final manager = FakeJetStreamManager();

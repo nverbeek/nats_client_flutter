@@ -23,7 +23,7 @@ This app depends on the official mainline `dart_nats` package (`^1.2.2`), includ
 - [x] **M12**: Connection Host/Port History — remembers up to 10 previously-successful targets.
 - [ ] **M13** *(optional — may never be picked up)*: Message Direction Indicator (incoming vs. outgoing). Not started.
 - [ ] **M14**: Request/Reply Correlation Improvements. Not started — see below.
-- [ ] **M15** *(optional, cost-gated)*: Code Signing for Windows & macOS builds. Not started — research done, decision pending.
+- [ ] **M15** *(optional, cost-gated)*: Windows distribution via Microsoft Store (free MSIX signing) + unsigned GitHub Releases; Linux distribution via Snap Store; macOS code signing still decision-pending. Not started — Windows/Linux approach decided 2026-07-18, implementation not begun.
 - [x] **M16**: Material 3 standards — OS dynamic color, `FilledButton`/`IconButton` variants.
 - [ ] **M17**: NATS Server Monitoring Dashboard. Not started — see below.
 - [x] **M18**: NATS Micro-services (Services API) Discovery.
@@ -40,7 +40,7 @@ This app depends on the official mainline `dart_nats` package (`^1.2.2`), includ
 - [ ] **M28**: Hex/Binary Payload View. Not started — see below.
 - [ ] **M29**: KV Bucket Info + Consumer Detail Depth. Not started — see below.
 - [ ] **M30**: Upstream-First `dart_nats` Round (consumer pause/resume, filtered stream purge, Object Store streaming). Not started — see below.
-- [ ] **M31**: Reconnect State Restoration (remaining half — full re-establishment after a real server bounce, not just a blip). Not started — see below.
+- [x] **M31**: Reconnect State Restoration (remaining half) — a `reconnectSignal` fired only on a real post-bounce reconnect (not the existing blip-tolerance) lets Browse Messages/Tail auto-retry out of a stuck error state and KV auto-refresh its selected bucket's keys/watch; healthy listings still use explicit Refresh, and an explicit Disconnect still fully resets everything.
 - [ ] **M32** *(low priority, cosmetic)*: Screenshot Border/Drop-Shadow Polish. Not started — see below.
 
 ---
@@ -86,26 +86,39 @@ Ranked by a recent feature-gap survey as the single biggest daily-use gap in the
 
 ---
 
-## Milestone 15: Code Signing for Windows & macOS Builds (Low Priority, cost-gated, Optional)
+## Milestone 15: Windows Store + Snap Store Distribution, macOS Code Signing (Low Priority, cost-gated, Optional)
 
 ### Objective
-**Optional follow-up** — flagged by the user as something they may never get to. Windows and macOS builds are currently unsigned: users hit "Unknown Publisher"/SmartScreen warnings on Windows and Gatekeeper "unidentified developer" blocks on macOS. Both are technically straightforward to wire into `.github/workflows/build.yml`; the real blocker is cost/eligibility, not feasibility.
+**Optional follow-up** — flagged by the user as something they may never get to. Windows and macOS builds are currently unsigned: users hit "Unknown Publisher"/SmartScreen warnings on Windows and Gatekeeper "unidentified developer" blocks on macOS. Linux has no equivalent OS-level gate, but has no store presence either — direct-download ZIP only today.
 
-### Findings
-- **Windows — free option worth trying first**: [SignPath Foundation](https://signpath.org/) offers free OV-level code signing for qualifying open-source projects — worth applying before paying for anything, since this repo is public.
-- **Windows — paid fallback**: Azure Trusted Signing (now "Artifact Signing"), ~$120/yr, GA and open to self-employed individuals as of an April 2026 update, but eligibility is geographically gated — needs a direct check before committing money.
-- **macOS**: requires an Apple Developer Program membership ($99/yr), a "Developer ID Application" certificate, and notarization — no free path here.
-- Both paths need secret management in GH Actions and are additive to the existing build jobs, not a rework.
+**Decision made 2026-07-18**: pursue dual distribution for Windows — publish a signed build via the **Microsoft Store** (Microsoft signs the MSIX for free as part of Store certification, sidestepping SignPath/Azure Artifact Signing entirely) while **keeping the existing GitHub Releases EXE/ZIP unsigned** on purpose, for now — no code-signing cert spend for that path. Also publish to the **Snap Store** for Linux, fully automated the same way. macOS remains undecided/deferred (still cost-gated).
 
-### Decision Needed Before Implementation
-Whether to pursue SignPath Foundation's free-for-OSS route for Windows first; whether Azure Artifact Signing is worth ~$120/yr otherwise; and whether the $99/yr Apple Developer Program cost is worth it for macOS given Milestone 3 already flagged macOS as never having been functionally verified at all (no Mac available) — signing a platform that isn't otherwise being tested may not be the best use of the budget until that gap closes.
+### Findings — Windows
+- Individual **and** company Microsoft Store developer registration is free as of a late-2025/2026 policy change (the old ~$19/~$99 one-time fees are gone).
+- MSIX packages distributed through the Store are **signed by Microsoft for free** as part of certification — no SignPath Foundation application or Azure Artifact Signing subscription needed for that distribution channel.
+- This only covers the Store-distributed MSIX. The GitHub Releases EXE/ZIP is a separate artifact and stays unsigned deliberately (SmartScreen warning included) — this is the accepted tradeoff, not a gap to close later.
+
+### Automating Microsoft Store submission via GitHub Actions
+- Package the Windows build as MSIX using the [`msix`](https://pub.dev/packages/msix) pub package (a `msix_config:` block in `pubspec.yaml`, then `dart run msix:create` against the `flutter build windows` output) — this is the standard way Flutter Windows apps produce a Store-ready package.
+- Use Microsoft's [`msstore-cli`](https://github.com/microsoft/msstore-cli) (Microsoft Store Developer CLI) in the workflow — install via the `setup-msstore-cli` GitHub Action, authenticate with stored Partner Center credentials (Azure AD app registration: tenant ID/client ID/client secret as repo secrets), then `msstore package .` + `msstore publish` to build and submit. This is the actively-maintained tool; the older `StoreBroker` PowerShell module is Microsoft's legacy equivalent, prefer `msstore-cli`.
+- One-time manual prerequisite: the app must already exist in Partner Center with at least one completed submission (store listing, screenshots, age rating, privacy policy) and `msstore init` run once in the repo — after that, version-bump submissions on tagged releases can run unattended, added as a new job in `.github/workflows/build.yml` alongside the existing `build-windows-x64`/`build-windows-arm64` jobs.
+
+### Automating Snap Store submission via GitHub Actions
+- **Decision made 2026-07-18**: publish to the **Snap Store** for Linux — it was evaluated against Flathub and chosen for being the closer analog to the Windows Store flow above: no manual review gate on updates after one-time publisher setup, so it's fully "tag a release, it ships," same shape as this repo's other build jobs. (Flathub, by comparison, gates every update behind at least a bot-opened PR merge — considered and passed over for that reason.)
+- Add a `snapcraft.yaml` (this app has none today) wrapping the existing `flutter build linux --release` bundle (`build/linux/x64/release/bundle`) as the snap's payload.
+- Use [`snapcore/action-build`](https://github.com/snapcore/action-build) to build the `.snap` from that `snapcraft.yaml`, then [`snapcore/action-publish`](https://github.com/snapcore/action-publish) to push it to the Store's `stable` (or a staged `edge`/`beta`) channel — authenticated via a `snapcraft export-login` token generated once locally and stored as a repo secret.
+- One-time manual prerequisite: register the snap name on the Snap Store (`snapcraft register`) and complete the store listing (description, icon, screenshots) — after that, `action-build` + `action-publish` on tagged releases needs no further manual review step.
 
 ### Implementation Checklist
-- [ ] Apply to SignPath Foundation for free OSS code-signing eligibility (Windows).
-- [ ] If not eligible/practical, evaluate Azure Artifact Signing cost/eligibility for this project's account.
-- [ ] Decide whether to pursue macOS signing given the existing macOS-verification gap (Milestone 3).
-- [ ] Wire the chosen signing step(s) into `.github/workflows/build.yml` as an additive post-build step, gated behind repo secrets so forks/PRs without those secrets still build (just unsigned).
-- [ ] Document the signing setup (which secrets are needed, how to rotate/renew certs) in `AGENTS.md` or a new doc.
+- [ ] Set up a free Microsoft Store developer account; complete the one-time manual Partner Center listing pass (screenshots, listing details, age rating, privacy policy).
+- [ ] Add the `msix` pub package + `msix_config:` to `pubspec.yaml`.
+- [ ] Add a GH Actions job (using `setup-msstore-cli` + `msstore package`/`msstore publish`) that packages and submits the Store build on tagged releases, gated behind repo secrets so it's a no-op on forks/PRs without them.
+- [ ] Leave the existing Windows EXE/ZIP GitHub Release artifact unsigned, as decided.
+- [ ] Register the snap name on the Snap Store and complete its one-time store listing.
+- [ ] Add `snapcraft.yaml` packaging the `flutter build linux` bundle.
+- [ ] Add a GH Actions job (`snapcore/action-build` + `snapcore/action-publish`, `snapcraft export-login` token as a repo secret) that builds and publishes the snap on tagged releases, gated behind repo secrets so it's a no-op on forks/PRs without them.
+- [ ] Decide macOS signing (Apple Developer Program, $99/yr, no free path) separately — still open, still tied to Milestone 3's existing macOS-never-verified gap (no Mac available to test on).
+- [ ] Document the publishing/signing setup (which secrets, how to rotate/renew) in `AGENTS.md` or a new doc.
 
 ---
 
@@ -226,20 +239,12 @@ Three real feature gaps are blocked at the `dart_nats` package level, not by any
 
 ---
 
-## Milestone 31: Reconnect State Restoration (remaining half) (Low/Medium Priority)
+## Parked Notes (not milestones of their own)
 
-### Objective
-The blip-tolerance half of this problem already shipped: dashboards keep their manager reference — and therefore their selection/open views — across a transient auto-reconnect status flap, gated on whether the session has ever connected rather than the instantaneous connection status. What's left: after a *real* server bounce (not just a blip), active views don't re-establish themselves automatically — the Browse Messages tail's ephemeral consumer doesn't recreate itself, KV watches don't restart, and listings can go stale without a manual refresh.
+Small, standalone ideas noted in passing during other milestones' work — kept here for later rather than expanded into full milestone sections.
 
-### Implementation Checklist
-- [ ] Auto-recreate the Browse Messages/Tail ephemeral consumer if its underlying subscription errors out after a reconnect, rather than leaving it in its error/retry state until the user manually retries.
-- [ ] Auto-restart KV watches (and refresh the key listing) after a reconnect, rather than relying solely on the manual Refresh button.
-- [ ] Consider whether stream/bucket/object listings should auto-refresh on reconnect too, or whether an explicit Refresh stays the right model now that failures surface cleanly.
-- [ ] Decide whether this should also restore dashboard state across a full user Disconnect/reconnect (today, explicit Disconnect intentionally resets everything) — likely stays as intentional, but worth confirming rather than assuming.
-
-### Smaller deferred notes (not milestones of their own, parked here for later)
 - JetStream Browse/Tail rows show only the stream sequence chip, no arrival timestamp — Live Messages already has one (Settings' "Show Message Timestamps"); extending it to these two views is a small follow-up, distinct from Milestone 28's hex/binary payload view.
-- KV snapshot↔watch gap: `KvDashboard` lists keys, *then* starts the watch — a put/delete landing in that narrow window can be missed until a manual Refresh. Library semantics (`watch()` has no "resume from last-seen" option), not purely an app-side fix.
+- KV snapshot↔watch gap: `KvDashboard` lists keys, *then* starts the watch — a put/delete landing in that narrow window can be missed until a manual Refresh. This is a permanent library-semantics limitation (`watch()` has no "resume from last-seen" option) that exists on every `_loadKeys` call, not just around a reconnect — Milestone 31's reconnect-triggered re-snapshot narrows the specific *reconnect-gap* version of this race but doesn't (and can't, app-side) close the general one.
 - Offline (no-publish) browsing of a previously-exported NDJSON file — loading a file into the message list read-only, no live server needed, nothing sent. Distinct from the existing file-based Replay (which requires a connection and actually publishes); noted as a possible future addition if the need comes up.
 
 ---

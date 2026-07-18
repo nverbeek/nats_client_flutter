@@ -20,7 +20,20 @@ class JetStreamDashboard extends StatefulWidget {
   /// The active JetStream manager, or `null` when not currently connected.
   final JetStreamManager? manager;
 
-  const JetStreamDashboard({super.key, required this.manager});
+  /// Fires after a real reconnect (a genuine server bounce that dropped and
+  /// re-established the connection) -- as opposed to a transient
+  /// auto-reconnect blip that never dropped `manager` in the first place (see
+  /// `main.dart`'s `_hasEverConnectedThisSession` doc comment for that
+  /// distinction). `manager` itself doesn't change identity across a real
+  /// reconnect either (same `Client`, same wrapping manager), so nothing
+  /// about this widget's own props changes to hang a `didUpdateWidget` retry
+  /// off of -- this signal is the only notice a real reconnect happened.
+  /// Optional so tests that never disconnect don't need to plumb one
+  /// through.
+  final Listenable? reconnectSignal;
+
+  const JetStreamDashboard(
+      {super.key, required this.manager, this.reconnectSignal});
 
   @override
   State<JetStreamDashboard> createState() => JetStreamDashboardState();
@@ -81,12 +94,37 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
     if (widget.manager != null) {
       _checkAvailability();
     }
+    widget.reconnectSignal?.addListener(_onReconnect);
   }
 
   @override
   void dispose() {
+    widget.reconnectSignal?.removeListener(_onReconnect);
     _subjectsScrollController.dispose();
     super.dispose();
+  }
+
+  /// Retries whichever of this pane's own load states is currently showing
+  /// an error -- a stream/consumer list load that failed mid-disconnect
+  /// would otherwise sit there until the user notices and clicks Retry
+  /// themselves. Deliberately does *not* force-refresh a listing that isn't
+  /// currently erroring: those already have an explicit Refresh action, and
+  /// a listing that loaded fine before the blip is still a reasonable
+  /// snapshot -- unlike a live KV watch, nothing here depends on continuous
+  /// delivery, so there's no silent gap to backfill. The Browse Messages/Tail
+  /// child views (if open) listen to the same signal themselves.
+  void _onReconnect() {
+    if (widget.manager == null) return;
+    if (_availabilityError != null) {
+      _checkAvailability();
+      return;
+    }
+    if (_streamsError != null) {
+      _loadStreams();
+    }
+    if (_selectedStreamName != null && _consumersError != null) {
+      _loadConsumers(_selectedStreamName!);
+    }
   }
 
   @override
@@ -805,6 +843,7 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
         key: _browseViewKey,
         streamName: _selectedStreamName!,
         manager: widget.manager!,
+        reconnectSignal: widget.reconnectSignal,
         onClose: () => setState(() => _browsing = false),
       );
     }
@@ -816,6 +855,7 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
         consumerName: _tailingConsumerName!,
         explicitAck: _tailingConsumerExplicitAck,
         manager: widget.manager!,
+        reconnectSignal: widget.reconnectSignal,
         onClose: () => setState(() => _tailingConsumerName = null),
       );
     }

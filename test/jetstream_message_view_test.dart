@@ -48,12 +48,13 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  Widget buildView(FakeJetStreamManager manager) {
+  Widget buildView(FakeJetStreamManager manager, {Listenable? reconnectSignal}) {
     return MaterialApp(
       home: Scaffold(
         body: JetStreamMessageView(
           streamName: 'ORDERS',
           manager: manager,
+          reconnectSignal: reconnectSignal,
           onClose: () {},
         ),
       ),
@@ -96,5 +97,53 @@ void main() {
     expect(controller.offset, 112.0 + 2 * 56.0,
         reason: 'The scroll offset must shift by the prepended rows\' exact '
             'height so the messages on screen stay put');
+  });
+
+  testWidgets(
+      'a reconnect signal auto-recovers a view stuck showing a Retry error, '
+      'without needing a manual click', (tester) async {
+    final manager = FakeJetStreamManager();
+    final reconnectSignal = ValueNotifier<int>(0);
+
+    await tester.pumpWidget(
+        buildView(manager, reconnectSignal: reconnectSignal));
+    await tester.pump();
+
+    manager.incoming.addError(Exception('createConsumer: not connected'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byIcon(Icons.error_outline), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Retry'), findsOneWidget);
+
+    // Simulate main.dart noticing a real reconnect -- no manual Retry tap.
+    reconnectSignal.value++;
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byIcon(Icons.error_outline), findsNothing);
+    expect(find.text('Waiting for messages...'), findsOneWidget);
+  });
+
+  testWidgets(
+      'a reconnect signal is a no-op when the view is not currently erroring',
+      (tester) async {
+    final manager = FakeJetStreamManager();
+    final reconnectSignal = ValueNotifier<int>(0);
+
+    await tester.pumpWidget(
+        buildView(manager, reconnectSignal: reconnectSignal));
+    await tester.pump();
+
+    manager.incoming.add(makeMessage('orders.1', 'payload', manager.client));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+    expect(find.textContaining('1 received'), findsOneWidget);
+
+    reconnectSignal.value++;
+    await tester.pump();
+
+    // Still showing the same message -- a healthy view wasn't reset/retried.
+    expect(find.textContaining('1 received'), findsOneWidget);
+    expect(find.byIcon(Icons.error_outline), findsNothing);
   });
 }

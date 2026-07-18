@@ -25,11 +25,18 @@ class JetStreamMessageView extends StatefulWidget {
   final JetStreamManager manager;
   final VoidCallback onClose;
 
+  /// Fires after a real reconnect (not just a transient auto-reconnect
+  /// blip) -- see `JetStreamDashboard`'s doc comment on the same parameter.
+  /// Optional so existing call sites/tests that have nothing to notify this
+  /// view about don't need to plumb one through.
+  final Listenable? reconnectSignal;
+
   const JetStreamMessageView({
     super.key,
     required this.streamName,
     required this.manager,
     required this.onClose,
+    this.reconnectSignal,
   });
 
   @override
@@ -101,6 +108,24 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
     _scrollController.addListener(_updateJumpToTopVisibility);
     _loadMaxMessages();
     _startBrowsing();
+    widget.reconnectSignal?.addListener(_onReconnect);
+  }
+
+  /// The underlying [OrderedConsumer] already recreates itself on its own
+  /// after a real reconnect (it retries `createConsumer` internally, resuming
+  /// from the last sequence seen -- see its doc comment in `dart_nats`), but
+  /// this view has no way to notice that recovery happened on its own: once
+  /// `_errorMessage` is set, nothing here ever clears it again, so the Retry
+  /// banner would otherwise sit there forever hiding an already-healthy feed.
+  /// Reuse the same `_retry()` a manual click would trigger rather than just
+  /// clearing the flag, since the consumer needs recreating anyway (rather
+  /// than assuming the exact moment of reconnect lines up with the
+  /// consumer's own internal retry timing).
+  void _onReconnect() {
+    if (!mounted) return;
+    if (_errorMessage != null) {
+      _retry();
+    }
   }
 
   Future<void> _loadMaxMessages() async {
@@ -130,6 +155,7 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
 
   @override
   void dispose() {
+    widget.reconnectSignal?.removeListener(_onReconnect);
     _stopBrowsing();
     _incomingFlushTimer?.cancel();
     _pendingCount.dispose();

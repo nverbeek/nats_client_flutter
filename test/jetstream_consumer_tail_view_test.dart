@@ -37,7 +37,7 @@ class FakeJetStreamManager extends JetStreamManager {
 }
 
 void main() {
-  Widget buildView(FakeJetStreamManager manager) {
+  Widget buildView(FakeJetStreamManager manager, {Listenable? reconnectSignal}) {
     return MaterialApp(
       home: Scaffold(
         body: JetStreamConsumerTailView(
@@ -45,6 +45,7 @@ void main() {
           consumerName: 'worker-1',
           explicitAck: true,
           manager: manager,
+          reconnectSignal: reconnectSignal,
           onClose: () {},
         ),
       ),
@@ -186,6 +187,55 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(copiedData, contains('ORDERS.new'));
+
+    await incoming.close();
+  });
+
+  testWidgets(
+      'a reconnect signal auto-recovers a view stuck showing a Retry error, '
+      'without needing a manual click', (tester) async {
+    // Broadcast (not single-subscription) because auto-recovery
+    // re-subscribes to the same fake stream -- see the identical note on
+    // the manual-Retry test above.
+    final incoming = StreamController<Message<dynamic>>.broadcast();
+    final manager = FakeJetStreamManager();
+    manager.incomingMessages = incoming.stream;
+    final reconnectSignal = ValueNotifier<int>(0);
+
+    await tester.pumpWidget(
+        buildView(manager, reconnectSignal: reconnectSignal));
+    incoming.addError(Exception('consumer not found'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.widgetWithText(TextButton, 'Retry'), findsOneWidget);
+
+    // Simulate main.dart noticing a real reconnect -- no manual Retry tap.
+    reconnectSignal.value++;
+    await tester.pump();
+
+    expect(find.byIcon(Icons.error_outline), findsNothing);
+    expect(find.text('Waiting for messages...'), findsOneWidget);
+
+    await incoming.close();
+  });
+
+  testWidgets(
+      'a reconnect signal is a no-op when the view is not currently erroring',
+      (tester) async {
+    final incoming = StreamController<Message<dynamic>>();
+    final manager = FakeJetStreamManager();
+    manager.incomingMessages = incoming.stream;
+    final reconnectSignal = ValueNotifier<int>(0);
+
+    await tester.pumpWidget(
+        buildView(manager, reconnectSignal: reconnectSignal));
+    await tester.pump();
+
+    reconnectSignal.value++;
+    await tester.pump();
+
+    expect(find.text('Waiting for messages...'), findsOneWidget);
+    expect(find.byIcon(Icons.error_outline), findsNothing);
 
     await incoming.close();
   });

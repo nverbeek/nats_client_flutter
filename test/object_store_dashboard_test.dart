@@ -664,4 +664,53 @@ void main() {
     expect(manager.listObjectsCalls, callsAfterSelect + 1);
     expect(find.text('new-file.txt'), findsOneWidget);
   });
+
+  testWidgets(
+      'a reconnect signal auto-retries whichever list is currently showing '
+      'an error, without a manual click', (tester) async {
+    final manager = FakeObjectStoreManager();
+    manager.listBucketsImpl = () async => throw Exception('bucket list boom');
+    final reconnectSignal = ValueNotifier<int>(0);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ObjectStoreDashboard(
+              manager: manager, reconnectSignal: reconnectSignal),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('bucket list boom'), findsOneWidget);
+
+    manager.listBucketsImpl = () async => [_bucketStream('documents')];
+    reconnectSignal.value++;
+    await tester.pumpAndSettle();
+
+    expect(find.text('documents'), findsOneWidget);
+  });
+
+  testWidgets(
+      'a reconnect signal is a no-op when nothing is currently erroring',
+      (tester) async {
+    final manager = FakeObjectStoreManager();
+    manager.listBucketsImpl = () async => [_bucketStream('documents')];
+    final reconnectSignal = ValueNotifier<int>(0);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ObjectStoreDashboard(
+              manager: manager, reconnectSignal: reconnectSignal),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final callsBeforeReconnect = manager.listBucketsCalls;
+
+    reconnectSignal.value++;
+    await tester.pumpAndSettle();
+
+    expect(manager.listBucketsCalls, callsBeforeReconnect);
+  });
 }

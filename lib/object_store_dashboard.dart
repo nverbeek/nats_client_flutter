@@ -65,12 +65,19 @@ class ObjectStoreDashboard extends StatefulWidget {
   final Future<bool> Function(String suggestedName, Uint8List bytes)
       saveDownloadedFile;
 
+  /// Fires after a real reconnect -- see `JetStreamDashboard`'s doc comment
+  /// on the same parameter for why this needs its own signal rather than a
+  /// `didUpdateWidget` check on `manager`. Optional so tests that never
+  /// disconnect don't need to plumb one through.
+  final Listenable? reconnectSignal;
+
   const ObjectStoreDashboard({
     super.key,
     required this.manager,
     Future<(Uint8List, String)?> Function()? pickUploadFile,
     Future<bool> Function(String suggestedName, Uint8List bytes)?
         saveDownloadedFile,
+    this.reconnectSignal,
   })  : pickUploadFile = pickUploadFile ?? _defaultPickUploadFile,
         saveDownloadedFile = saveDownloadedFile ?? _defaultSaveDownloadedFile;
 
@@ -105,6 +112,25 @@ class ObjectStoreDashboardState extends State<ObjectStoreDashboard> {
     if (widget.manager != null) {
       _checkAvailability();
     }
+    widget.reconnectSignal?.addListener(_onReconnect);
+  }
+
+  /// See `KvDashboard._onReconnect`'s doc comment for the general rationale.
+  /// Object Store has no live watch to restart -- only retries whichever
+  /// load state is currently showing an error, mirroring
+  /// `JetStreamDashboard._onReconnect`.
+  void _onReconnect() {
+    if (widget.manager == null) return;
+    if (_availabilityError != null) {
+      _checkAvailability();
+      return;
+    }
+    if (_bucketsError != null) {
+      _loadBuckets();
+    }
+    if (_selectedBucket != null && _objectsError != null) {
+      _loadObjects(_selectedBucket!);
+    }
   }
 
   @override
@@ -131,6 +157,7 @@ class ObjectStoreDashboardState extends State<ObjectStoreDashboard> {
 
   @override
   void dispose() {
+    widget.reconnectSignal?.removeListener(_onReconnect);
     _searchController.dispose();
     super.dispose();
   }

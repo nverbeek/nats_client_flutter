@@ -23,6 +23,12 @@ class JetStreamConsumerTailView extends StatefulWidget {
   final JetStreamManager manager;
   final VoidCallback onClose;
 
+  /// Fires after a real reconnect (not just a transient auto-reconnect
+  /// blip) -- see `JetStreamDashboard`'s doc comment on the same parameter.
+  /// Optional so existing call sites/tests that have nothing to notify this
+  /// view about don't need to plumb one through.
+  final Listenable? reconnectSignal;
+
   const JetStreamConsumerTailView({
     super.key,
     required this.streamName,
@@ -30,6 +36,7 @@ class JetStreamConsumerTailView extends StatefulWidget {
     required this.explicitAck,
     required this.manager,
     required this.onClose,
+    this.reconnectSignal,
   });
 
   @override
@@ -53,6 +60,22 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
     super.initState();
     _loadMaxMessages();
     _startTailing();
+    widget.reconnectSignal?.addListener(_onReconnect);
+  }
+
+  /// Unlike `JetStreamMessageView`'s ephemeral browse consumer, `_startTailing`
+  /// deliberately cancels the underlying stream on its first error (see that
+  /// method's doc comment), which kills `dart_nats`'s own retry loop for
+  /// good rather than leaving it to keep erroring in the background. That's
+  /// the right call for a genuinely dead consumer, but it means a plain
+  /// disconnect/reconnect blip also leaves this view stuck showing Retry
+  /// forever unless something re-triggers it -- do that here, the same way a
+  /// manual click would.
+  void _onReconnect() {
+    if (!mounted) return;
+    if (_errorMessage != null) {
+      _retry();
+    }
   }
 
   Future<void> _loadMaxMessages() async {
@@ -65,6 +88,7 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
 
   @override
   void dispose() {
+    widget.reconnectSignal?.removeListener(_onReconnect);
     _subscription?.cancel();
     super.dispose();
   }

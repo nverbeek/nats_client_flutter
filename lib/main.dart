@@ -380,6 +380,18 @@ class _MyHomePageState extends State<MyHomePage>
   // IconButton with no way to apply that style).
   final GlobalKey _exportMenuButtonKey = GlobalKey();
 
+  // Fires after a real reconnect (a genuine server bounce, not just the
+  // auto-reconnect blip `_hasEverConnectedThisSession` already tolerates) --
+  // ticks up once per such reconnect. The JetStream/KV/Object Store
+  // dashboards (and their Browse/Tail child views) listen for this so a view
+  // left stuck in an error/retry state from the disconnect -- or a KV watch
+  // that missed activity during the gap -- recovers on its own instead of
+  // requiring the user to notice and click Retry/Refresh themselves. A plain
+  // `ValueNotifier` rather than a `Stream` since dashboards may not be
+  // mounted yet at the moment a tick fires (e.g. a background tab) and only
+  // need "did this fire since I last checked", not every individual event.
+  final ValueNotifier<int> _reconnectSignal = ValueNotifier<int>(0);
+
   // JetStream tab
   bool jetStreamEnabled = constants.defaultJetStreamEnabled;
   late TabController _tabController;
@@ -542,6 +554,7 @@ class _MyHomePageState extends State<MyHomePage>
       unawaited(natsClient.forceClose());
     }
     _pendingCount.dispose();
+    _reconnectSignal.dispose();
     _filterFocusNode.dispose(); // Dispose focus nodes
     _findFocusNode.dispose();
     _messageListFocusNode.dispose();
@@ -1101,6 +1114,12 @@ class _MyHomePageState extends State<MyHomePage>
       Uri uri = Uri.parse(fullUri);
       _statusSub = natsClient.statusStream.listen((Status event) {
         debugPrint('Connection status event $event');
+        // Captured before `currentStatus` is overwritten below -- this is
+        // what distinguishes a genuine post-bounce reconnect (reconnecting ->
+        // connected) from the very first successful connect of the session
+        // (connecting -> connected), which has nothing for
+        // `_reconnectSignal`'s listeners to recover from yet.
+        final wasReconnecting = currentStatus == Status.reconnecting;
         currentStatus = event;
         String stateString = '';
 
@@ -1114,6 +1133,9 @@ class _MyHomePageState extends State<MyHomePage>
               tlsConnection = true;
             } else {
               tlsConnection = false;
+            }
+            if (wasReconnecting) {
+              _reconnectSignal.value++;
             }
             break;
           case Status.closed:
@@ -3026,6 +3048,7 @@ class _MyHomePageState extends State<MyHomePage>
                             manager: _hasEverConnectedThisSession
                                 ? _jetStreamManager
                                 : null,
+                            reconnectSignal: _reconnectSignal,
                           ),
                         if (kvEnabled)
                           KvDashboard(
@@ -3033,6 +3056,7 @@ class _MyHomePageState extends State<MyHomePage>
                             manager: _hasEverConnectedThisSession
                                 ? _kvManager
                                 : null,
+                            reconnectSignal: _reconnectSignal,
                           ),
                         if (objectStoreEnabled)
                           ObjectStoreDashboard(
@@ -3040,6 +3064,7 @@ class _MyHomePageState extends State<MyHomePage>
                             manager: _hasEverConnectedThisSession
                                 ? _objectStoreManager
                                 : null,
+                            reconnectSignal: _reconnectSignal,
                           ),
                         if (serviceDiscoveryEnabled)
                           ServiceDiscoveryDashboard(
