@@ -184,6 +184,16 @@ KeyValueEntry _entry(String key, String value,
   );
 }
 
+/// Asserts a confirm-dialog `TextButton` is styled with the theme's error
+/// color -- the visual emphasis a destructive Delete/Purge action should
+/// carry.
+void expectErrorColoredButton(WidgetTester tester, Finder buttonFinder) {
+  final button = tester.widget<TextButton>(buttonFinder);
+  final colorScheme = Theme.of(tester.element(buttonFinder)).colorScheme;
+  expect(button.style?.foregroundColor?.resolve(<WidgetState>{}),
+      colorScheme.error);
+}
+
 void main() {
   testWidgets('shows a connect prompt when there is no active manager',
       (tester) async {
@@ -361,6 +371,7 @@ void main() {
     await tester.tap(find.byTooltip('Delete bucket'));
     await tester.pumpAndSettle();
     expect(find.text('Delete Bucket?'), findsOneWidget);
+    expectErrorColoredButton(tester, find.widgetWithText(TextButton, 'Delete'));
 
     await tester.tap(find.widgetWithText(TextButton, 'Delete'));
     await tester.pumpAndSettle();
@@ -467,6 +478,7 @@ void main() {
     await tester.tap(find.text('Delete').last);
     await tester.pumpAndSettle();
     expect(find.text('Delete Key?'), findsOneWidget);
+    expectErrorColoredButton(tester, find.widgetWithText(TextButton, 'Delete'));
 
     await tester.tap(find.widgetWithText(TextButton, 'Delete'));
     await tester.pumpAndSettle();
@@ -494,6 +506,7 @@ void main() {
     await tester.tap(find.text('Purge').last);
     await tester.pumpAndSettle();
     expect(find.text('Purge Key?'), findsOneWidget);
+    expectErrorColoredButton(tester, find.widgetWithText(TextButton, 'Purge'));
 
     await tester.tap(find.widgetWithText(TextButton, 'Purge'));
     await tester.pumpAndSettle();
@@ -528,6 +541,45 @@ void main() {
         _entry('db.port', '', revision: 6, op: KeyValueOp.delete));
     await tester.pumpAndSettle();
     expect(find.text('db.port'), findsNothing);
+  });
+
+  testWidgets(
+      'a watch stream error surfaces via the key-list error/Retry state '
+      'instead of dying silently', (tester) async {
+    final manager = FakeKvManager();
+    manager.listBucketsImpl = () async => [_bucketStream('app-config')];
+    manager.listKeysImpl = (_) async => ['db.port'];
+    manager.getEntryImpl = (_, key) async => _entry(key, '5432');
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: KvDashboard(manager: manager))),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('app-config'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('db.port'), findsOneWidget);
+    expect(manager.watchListenerCount('app-config'), 1);
+
+    manager.watchControllerFor('app-config').addError(Exception('watch boom'));
+    await tester.pumpAndSettle();
+
+    // Without the onError handler, this would be an uncaught zone error and
+    // the key list would just stop updating while looking perfectly healthy
+    // -- instead it surfaces through the same error/Retry state a load
+    // failure would.
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.textContaining('watch boom'), findsOneWidget);
+    // The errored subscription must actually be cancelled, not just have its
+    // reference dropped -- otherwise it lingers uncancelled underneath
+    // whatever Retry establishes next (a stacked/leaked subscription).
+    expect(manager.watchListenerCount('app-config'), 0);
+
+    // Retry re-establishes a fresh watch, not stacked on the dead one.
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(find.text('db.port'), findsOneWidget);
+    expect(manager.watchListenerCount('app-config'), 1);
   });
 
   testWidgets(

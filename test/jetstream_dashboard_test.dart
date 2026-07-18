@@ -132,6 +132,16 @@ ConsumerInfo _consumer(String name, {String ackPolicy = 'explicit'}) {
   );
 }
 
+/// Asserts a confirm-dialog `TextButton` is styled with the theme's error
+/// color -- the visual emphasis a destructive Delete/Purge action should
+/// carry (matching the already-error-colored in-place Delete Stream button).
+void expectErrorColoredButton(WidgetTester tester, Finder buttonFinder) {
+  final button = tester.widget<TextButton>(buttonFinder);
+  final colorScheme = Theme.of(tester.element(buttonFinder)).colorScheme;
+  expect(button.style?.foregroundColor?.resolve(<WidgetState>{}),
+      colorScheme.error);
+}
+
 void main() {
   testWidgets('shows a connect prompt when there is no active manager',
       (tester) async {
@@ -274,6 +284,7 @@ void main() {
     await tester.tap(find.widgetWithText(OutlinedButton, 'Purge'));
     await tester.pumpAndSettle();
     expect(find.text('Purge Stream?'), findsOneWidget);
+    expectErrorColoredButton(tester, find.widgetWithText(TextButton, 'Purge'));
     await tester.tap(find.widgetWithText(TextButton, 'Purge'));
     await tester.pumpAndSettle();
     expect(manager.purgeStreamCalls, 1);
@@ -281,6 +292,7 @@ void main() {
     await tester.tap(find.widgetWithText(OutlinedButton, 'Delete Stream'));
     await tester.pumpAndSettle();
     expect(find.text('Delete Stream?'), findsOneWidget);
+    expectErrorColoredButton(tester, find.widgetWithText(TextButton, 'Delete'));
     await tester.tap(find.widgetWithText(TextButton, 'Delete'));
     await tester.pumpAndSettle();
     expect(manager.deleteStreamCalls, 1);
@@ -355,6 +367,7 @@ void main() {
     await tester.tap(find.byTooltip('Delete consumer'));
     await tester.pumpAndSettle();
     expect(find.text('Delete Consumer?'), findsOneWidget);
+    expectErrorColoredButton(tester, find.widgetWithText(TextButton, 'Delete'));
 
     await tester.tap(find.widgetWithText(TextButton, 'Delete'));
     await tester.pumpAndSettle();

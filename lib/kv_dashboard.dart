@@ -235,7 +235,12 @@ class KvDashboardState extends State<KvDashboard> {
       // changes from other clients while still looking perfectly healthy.
       // Surfacing it through the same `_keysError`/Retry path `_loadKeys`
       // already uses lets the user recover the same way a load failure
-      // would.
+      // would. Explicitly cancel (not just null out the reference) so the
+      // errored subscription doesn't linger uncancelled underneath a later
+      // `_startWatch` call -- `.cancel()` from within a stream's own
+      // `onError` callback is safe; by the time this fires, `_watchSub`
+      // already points at this exact subscription.
+      _watchSub?.cancel();
       _watchSub = null;
       if (!mounted || widget.manager != manager || _selectedBucket != bucket) {
         return;

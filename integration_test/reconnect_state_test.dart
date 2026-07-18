@@ -1,0 +1,78 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:integration_test/integration_test.dart';
+import 'package:nats_client_flutter/constants.dart' as constants;
+
+import 'helpers/nats_test_app.dart';
+
+/// Verifies the JetStream dashboard keeps its selected stream (and detail
+/// view) across a transient reconnect blip, rather than resetting to its
+/// no-selection default. This is the fix for "dashboards reset state on
+/// transient reconnects": `main.dart` now gates each dashboard's `manager:`
+/// prop on whether the session has ever connected
+/// (`_hasEverConnectedThisSession`), not the instantaneous `Status`, since
+/// `dart_nats`'s auto-reconnect loop emits `Status.disconnected`/
+/// `reconnecting` during a blip the same way it does on a real disconnect.
+///
+/// Restarts the real `nats-js` Docker container (see AGENTS.md's Recipe E)
+/// to force a genuine TCP-level disconnect and `dart_nats`'s own
+/// auto-reconnect, rather than simulating it.
+void main() {
+  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets(
+      'JetStream stream selection survives a transient reconnect blip',
+      (tester) async {
+    // Shortest valid Settings dropdown option (3/5/10/30s) -- keeps the test
+    // from waiting out the full 10s default to see the reconnect land.
+    await pumpConnectedApp(tester, retryInterval: 3);
+    addTearDown(() => disconnectApp(tester));
+
+    final runId = DateTime.now().microsecondsSinceEpoch;
+    final streamName = 'it_reconnect_$runId';
+
+    // 1. Switch to the JetStream tab and create a stream through the real UI.
+    await tester.tap(find.text('JetStream'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add Stream'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Stream Name'), streamName);
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Subjects (comma-separated)'),
+        '$streamName.>');
+    await tester.tap(find.widgetWithText(TextButton, 'Create'));
+    await pumpUntil(tester,
+        () => find.text('Stream "$streamName" created.').evaluate().isNotEmpty);
+    await waitForSnackBarGone(tester);
+
+    // 2. Select it -- its detail pane (Subjects section) should be showing.
+    await tester.tap(find.text(streamName));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Subjects (1):'), findsOneWidget);
+
+    // 3. Force a genuine disconnect + dart_nats's own auto-reconnect by
+    // restarting the real server container.
+    final result = await Process.run('docker', ['restart', 'nats-js']);
+    expect(result.exitCode, 0,
+        reason: 'docker restart failed: ${result.stderr}');
+
+    // 4. Wait out the blip -- status dips to disconnected/reconnecting and
+    // should come back to Connected on its own.
+    await pumpUntil(
+      tester,
+      () => find.text('Status: ${constants.connected}').evaluate().isNotEmpty,
+      timeout: const Duration(seconds: 30),
+    );
+    // Give the post-reconnect frame(s) a moment to settle before asserting.
+    await tester.pumpAndSettle();
+
+    // 5. The stream selection and its detail pane must have survived the
+    // blip -- not reset to the no-selection default.
+    expect(find.text('Select a stream to see details.'), findsNothing);
+    expect(find.text(streamName), findsWidgets);
+    expect(find.textContaining('Subjects (1):'), findsOneWidget);
+  });
+}

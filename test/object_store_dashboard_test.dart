@@ -129,6 +129,16 @@ ObjectInfo _objectInfo(String name, int size,
   );
 }
 
+/// Asserts a confirm-dialog `TextButton` is styled with the theme's error
+/// color -- the visual emphasis a destructive Delete/Purge action should
+/// carry.
+void expectErrorColoredButton(WidgetTester tester, Finder buttonFinder) {
+  final button = tester.widget<TextButton>(buttonFinder);
+  final colorScheme = Theme.of(tester.element(buttonFinder)).colorScheme;
+  expect(button.style?.foregroundColor?.resolve(<WidgetState>{}),
+      colorScheme.error);
+}
+
 void main() {
   testWidgets('shows a connect prompt when there is no active manager',
       (tester) async {
@@ -313,6 +323,7 @@ void main() {
     await tester.tap(find.byTooltip('Delete bucket'));
     await tester.pumpAndSettle();
     expect(find.text('Delete Bucket?'), findsOneWidget);
+    expectErrorColoredButton(tester, find.widgetWithText(TextButton, 'Delete'));
 
     await tester.tap(find.widgetWithText(TextButton, 'Delete'));
     await tester.pumpAndSettle();
@@ -618,6 +629,7 @@ void main() {
     await tester.tap(find.byTooltip('Delete'));
     await tester.pumpAndSettle();
     expect(find.text('Delete Object?'), findsOneWidget);
+    expectErrorColoredButton(tester, find.widgetWithText(TextButton, 'Delete'));
 
     // After confirming, the fake's listObjectsImpl (re-fetched by the
     // dashboard, since there's no watch()) reflects the object being gone.

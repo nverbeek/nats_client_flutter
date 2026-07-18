@@ -62,6 +62,11 @@ Future<void> pumpConnectedApp(
   // clobber it before `app.main()` ever reads it.
   int maxMessages = constants.defaultMaxMessages,
   bool showTimestamps = constants.defaultShowTimestamps,
+  // Overridable for the same reason as maxMessages/showTimestamps above --
+  // a test forcing a real reconnect (e.g. restarting the server container)
+  // wants a short interval so it doesn't have to wait out the full 10s
+  // default to see the reconnect complete.
+  int retryInterval = constants.defaultRetryInterval,
 }) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setString(constants.prefScheme, constants.defaultScheme);
@@ -89,7 +94,7 @@ Future<void> pumpConnectedApp(
   // by an earlier test run (e.g. one seeding a short interval for a
   // fast-failing-connect scenario) would otherwise silently leak into and
   // crash a later, unrelated test that opens Settings.
-  await prefs.setInt(constants.prefRetryInterval, constants.defaultRetryInterval);
+  await prefs.setInt(constants.prefRetryInterval, retryInterval);
   await prefs.setInt(constants.prefMaxMessages, maxMessages);
   await prefs.setBool(constants.prefShowTimestamps, showTimestamps);
   await prefs.setString(constants.prefTrustedCertificate, '');

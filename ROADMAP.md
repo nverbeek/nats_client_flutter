@@ -237,6 +237,11 @@ The blip-tolerance half of this problem already shipped: dashboards keep their m
 - [ ] Consider whether stream/bucket/object listings should auto-refresh on reconnect too, or whether an explicit Refresh stays the right model now that failures surface cleanly.
 - [ ] Decide whether this should also restore dashboard state across a full user Disconnect/reconnect (today, explicit Disconnect intentionally resets everything) — likely stays as intentional, but worth confirming rather than assuming.
 
+### Smaller deferred notes (not milestones of their own, parked here for later)
+- JetStream Browse/Tail rows show only the stream sequence chip, no arrival timestamp — Live Messages already has one (Settings' "Show Message Timestamps"); extending it to these two views is a small follow-up, distinct from Milestone 28's hex/binary payload view.
+- KV snapshot↔watch gap: `KvDashboard` lists keys, *then* starts the watch — a put/delete landing in that narrow window can be missed until a manual Refresh. Library semantics (`watch()` has no "resume from last-seen" option), not purely an app-side fix.
+- Offline (no-publish) browsing of a previously-exported NDJSON file — loading a file into the message list read-only, no live server needed, nothing sent. Distinct from the existing file-based Replay (which requires a connection and actually publishes); noted as a possible future addition if the need comes up.
+
 ---
 
 ## Milestone 32: Screenshot Border/Drop-Shadow Polish (Low Priority, Cosmetic)
