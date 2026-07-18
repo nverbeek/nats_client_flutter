@@ -143,6 +143,13 @@ public class ScreenshotWin32 {
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hwnd, out RECT lpRect);
     [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
     [DllImport("user32.dll")] public static extern IntPtr SetProcessDpiAwarenessContext(IntPtr dpiContext);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr lpdwProcessId);
+    [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+    [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
 }
@@ -191,6 +198,45 @@ public class ScreenshotWin32 {
         return $script:_natsClientWindowHandle
     }
 
+    # PrintWindow renders whatever DWM activation state the window is
+    # actually in — if the NATS Client window isn't the real OS foreground
+    # window (e.g. this script's own terminal has focus, which is the
+    # common case since nothing else in this pipeline ever activates the
+    # app window), the capture bakes in the inactive/unfocused title bar
+    # style. Plain SetForegroundWindow from a background process is subject
+    # to Windows' foreground-lock heuristic and can silently no-op; the
+    # AttachThreadInput dance below is the standard reliable workaround —
+    # temporarily joining input queues with the current real foreground
+    # window tricks Windows into treating this process as eligible to hand
+    # off activation.
+    function Set-NatsClientWindowFocus {
+        param([Parameter(Mandatory = $true)][IntPtr]$Hwnd)
+
+        $currentForeground = [ScreenshotWin32]::GetForegroundWindow()
+        if ($currentForeground -eq $Hwnd) { return }
+
+        $foregroundThreadId = [ScreenshotWin32]::GetWindowThreadProcessId($currentForeground, [IntPtr]::Zero)
+        $targetThreadId = [ScreenshotWin32]::GetWindowThreadProcessId($Hwnd, [IntPtr]::Zero)
+        $currentThreadId = [ScreenshotWin32]::GetCurrentThreadId()
+
+        [void][ScreenshotWin32]::AttachThreadInput($currentThreadId, $foregroundThreadId, $true)
+        [void][ScreenshotWin32]::AttachThreadInput($targetThreadId, $foregroundThreadId, $true)
+        try {
+            $SW_RESTORE = 9
+            [void][ScreenshotWin32]::ShowWindow($Hwnd, $SW_RESTORE)
+            [void][ScreenshotWin32]::BringWindowToTop($Hwnd)
+            [void][ScreenshotWin32]::SetForegroundWindow($Hwnd)
+        }
+        finally {
+            [void][ScreenshotWin32]::AttachThreadInput($currentThreadId, $foregroundThreadId, $false)
+            [void][ScreenshotWin32]::AttachThreadInput($targetThreadId, $foregroundThreadId, $false)
+        }
+
+        # Give DWM a moment to repaint the title bar in its active style
+        # before PrintWindow captures it.
+        Start-Sleep -Milliseconds 200
+    }
+
     function Save-NatsClientWindowScreenshot {
         param([Parameter(Mandatory = $true)][string]$OutFile)
 
@@ -203,6 +249,8 @@ public class ScreenshotWin32 {
         if ($hwnd -eq [IntPtr]::Zero) {
             throw "Could not find a window titled 'NATS Client' — is the app still running?"
         }
+
+        Set-NatsClientWindowFocus -Hwnd $hwnd
 
         # PrintWindow paints in the window's own full coordinate space —
         # i.e. relative to GetWindowRect, which on Windows 10/11 includes a
