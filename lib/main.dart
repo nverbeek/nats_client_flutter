@@ -406,9 +406,14 @@ class _MyHomePageState extends State<MyHomePage>
   // has scrolled away from the top of the (newest-at-top) list.
   bool _showJumpToTop = false;
 
-  // Variables for handling single/double tap detection
+  // Variables for handling single/double tap detection. The last-tapped row
+  // is remembered by Message identity, not index -- messages arriving during
+  // the 300ms single/double-tap window prepend to the list and shift every
+  // row's index, so a stored index would both misdetect double-taps and land
+  // the eventual single-tap selection on whichever row slid into the tapped
+  // position.
   Timer? _tapTimer;
-  int? _lastTappedIndex;
+  Message<dynamic>? _lastTappedMessage;
 
   // nats stuff
   late Client natsClient;
@@ -470,6 +475,11 @@ class _MyHomePageState extends State<MyHomePage>
 
   // user preferences
   late SharedPreferences prefs;
+  // Guards the window-event handlers below: they can fire (e.g. the window
+  // manager applying the restored size at startup) before
+  // `initializePreferences` has finished assigning `prefs`, which would
+  // otherwise be a LateInitializationError from inside an event listener.
+  bool _prefsInitialized = false;
   double messageFontSize = 14.0;
   int retryInterval = constants.defaultRetryInterval;
   bool updateCheckEnabled = constants.defaultUpdateCheckEnabled;
@@ -542,7 +552,7 @@ class _MyHomePageState extends State<MyHomePage>
 
   @override
   void onWindowResized() {
-    if (!kIsWeb) {
+    if (!kIsWeb && _prefsInitialized) {
       windowManager.getSize().then((windowSize) => {
             prefs.setDouble(constants.prefLastWidth, windowSize.width),
             prefs.setDouble(constants.prefLastHeight, windowSize.height)
@@ -552,7 +562,7 @@ class _MyHomePageState extends State<MyHomePage>
 
   @override
   void onWindowMoved() {
-    if (!kIsWeb) {
+    if (!kIsWeb && _prefsInitialized) {
       windowManager.getPosition().then((windowPosition) => {
             prefs.setDouble(constants.prefLastPositionX, windowPosition.dx),
             prefs.setDouble(constants.prefLastPositionY, windowPosition.dy),
@@ -563,6 +573,7 @@ class _MyHomePageState extends State<MyHomePage>
   /// initialize the shared preferences instance
   Future<void> initializePreferences() async {
     prefs = await SharedPreferences.getInstance();
+    _prefsInitialized = true;
     loadMessageSettings();
   }
 
@@ -722,7 +733,9 @@ class _MyHomePageState extends State<MyHomePage>
 
     final methodName = prefs.getString(constants.prefAuthMethod);
     if (methodName != null && methodName.isNotEmpty) {
-      authMethod = AuthMethod.values.byName(methodName);
+      // Tolerate an unknown stored name (e.g. prefs written by a different
+      // app version) instead of letting byName() throw during startup.
+      authMethod = AuthMethod.values.asNameMap()[methodName] ?? AuthMethod.none;
     }
     authUsername = prefs.getString(constants.prefAuthUsername) ?? '';
     authPassword = prefs.getString(constants.prefAuthPassword) ?? '';
@@ -766,7 +779,7 @@ class _MyHomePageState extends State<MyHomePage>
       // range), so skip the single/double-tap timer entirely rather than
       // waiting 300ms to disambiguate from a double-tap-to-Detail.
       _tapTimer?.cancel();
-      _lastTappedIndex = null;
+      _lastTappedMessage = null;
       setState(() {
         _selectRange(index);
       });
@@ -778,7 +791,7 @@ class _MyHomePageState extends State<MyHomePage>
       // Ctrl+Click (Cmd+Click on Mac): same reasoning as Shift+Click above
       // -- unambiguous intent, skip the tap timer.
       _tapTimer?.cancel();
-      _lastTappedIndex = null;
+      _lastTappedMessage = null;
       setState(() {
         _toggleSelection(index);
       });
@@ -788,15 +801,18 @@ class _MyHomePageState extends State<MyHomePage>
     // Cancel any existing timer
     _tapTimer?.cancel();
 
-    if (_lastTappedIndex == index) {
+    final message = filteredItems[index];
+    if (identical(_lastTappedMessage, message)) {
       // This is a double tap on the same item
-      _lastTappedIndex = null;
-      showDetailDialog(filteredItems[index]);
+      _lastTappedMessage = null;
+      showDetailDialog(message);
     } else {
       // This might be a single tap, start a timer to check
-      _lastTappedIndex = index;
+      _lastTappedMessage = message;
       _tapTimer = Timer(const Duration(milliseconds: 300), () {
-        // Timer expired, this was a single tap
+        // Timer expired, this was a single tap. Re-locate the tapped
+        // message by identity -- arrivals during the 300ms window shift
+        // indices (see _lastTappedMessage's doc comment).
         setState(() {
           // A plain click always collapses back to single-row selection,
           // clearing any multi-select range/toggle set from a previous
@@ -804,15 +820,20 @@ class _MyHomePageState extends State<MyHomePage>
           _multiSelected.clear();
           _multiSelectActive = false;
           _selectionAnchor = null;
-          if (index == selectedIndex) {
+          final currentIndex = filteredItems.indexOf(message);
+          if (currentIndex == -1) {
+            // The tapped message was trimmed/filtered away mid-window --
+            // nothing sensible left to select.
+            selectedIndex = -1;
+          } else if (currentIndex == selectedIndex) {
             // user tapped the already-selected item.
             // un-select it
             selectedIndex = -1;
           } else {
-            selectedIndex = index;
+            selectedIndex = currentIndex;
           }
         });
-        _lastTappedIndex = null;
+        _lastTappedMessage = null;
       });
     }
   }
@@ -2474,6 +2495,23 @@ class _MyHomePageState extends State<MyHomePage>
     );
   }
 
+  /// Whether keyboard focus currently sits inside a text-editing widget
+  /// (Filter/Find, Host/Port, a dialog field, ...). The outer
+  /// `Focus(onKeyEvent: ...)` in [build] receives every key event that
+  /// bubbles up from a focused descendant — including plain letter keys
+  /// being typed into a text field — so the single-key message shortcuts
+  /// (D/R/E, Escape, Ctrl+C, Ctrl+Shift+Up/Down) must stand down while the
+  /// user is typing. Without this, typing e.g. "order" into Filter with a
+  /// row still selected would fire Detail ('d'), Replay ('r' — actually
+  /// re-publishing the message to the server!), and Edit & Send ('e'),
+  /// swallowing those characters from the field in the process.
+  bool _focusIsInTextField() {
+    final focusedContext = FocusManager.instance.primaryFocus?.context;
+    if (focusedContext == null) return false;
+    return focusedContext.widget is EditableText ||
+        focusedContext.findAncestorStateOfType<EditableTextState>() != null;
+  }
+
   /// Creates a safe PopupMenuButton that handles mounted state properly
   Widget _buildSafePopupMenuButton(int index) {
     return PopupMenuButton<String>(
@@ -2700,8 +2738,12 @@ class _MyHomePageState extends State<MyHomePage>
             }
           }
 
-          // Message-specific shortcuts (only when a message is selected)
-          if (selectedIndex >= 0 && selectedIndex < filteredItems.length) {
+          // Message-specific shortcuts (only when a message is selected, and
+          // never while the user is typing in a text field -- see
+          // _focusIsInTextField).
+          if (selectedIndex >= 0 &&
+              selectedIndex < filteredItems.length &&
+              !_focusIsInTextField()) {
             // Handle single key shortcuts
             if (event.logicalKey == LogicalKeyboardKey.keyD) {
               showDetailDialog(filteredItems[selectedIndex]);
@@ -3023,11 +3065,22 @@ class _MyHomePageState extends State<MyHomePage>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: <Widget>[
-                  Text('Total Messages: ${items.length}, '
-                      'Showing: ${filteredItems.length}'
-                      '${selectedCount > 0 ? ', Selected: $selectedCount' : ''}'
-                      '  |  '),
-                  Text('URL: $fullUri'),
+                  // The two leading segments shrink+ellipsize on a narrow
+                  // window instead of overflowing the whole status bar (the
+                  // trailing Status segment is the one that must stay fully
+                  // visible).
+                  Flexible(
+                    child: Text(
+                        'Total Messages: ${items.length}, '
+                        'Showing: ${filteredItems.length}'
+                        '${selectedCount > 0 ? ', Selected: $selectedCount' : ''}'
+                        '  |  ',
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                  Flexible(
+                    child:
+                        Text('URL: $fullUri', overflow: TextOverflow.ellipsis),
+                  ),
                   if (isConnected && tlsConnection)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(5, 2, 0, 0),

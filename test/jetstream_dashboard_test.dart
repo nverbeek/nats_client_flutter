@@ -11,10 +11,10 @@ import 'package:nats_client_flutter/jetstream_manager.dart';
 /// a concrete class backed by real socket/stream logic), but none of
 /// [JetStreamManager]'s methods are `final`, so overriding them here lets
 /// widget tests drive the dashboard's connected states without a live
-/// server. `browseStream()` is deliberately not overridable in a useful way
-/// (it returns a concrete `OrderedConsumer` bound to a real `Client`), so
-/// the "Browse Messages" tail view remains covered only by manual testing —
-/// see AGENTS.md "Recipe E: Local JetStream Testing".
+/// server. `browseStream()` can be faked too — `OrderedConsumer.messages()`/
+/// `stop()` are overridable, see `test/jetstream_message_view_test.dart`'s
+/// `_FakeOrderedConsumer` for that pattern; live-server coverage of the
+/// Browse Messages view is in `integration_test/jetstream_browse_test.dart`.
 class FakeJetStreamManager extends JetStreamManager {
   FakeJetStreamManager() : super(Client());
 

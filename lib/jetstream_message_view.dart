@@ -219,10 +219,21 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
 
     late final int addedToFiltered;
     setState(() {
+      // Whether _filteredMessages IS _messages must be checked before the
+      // insert: once no filter is active, _runFilter has aliased the two
+      // lists, so insertAll grows "both" -- reading _filteredMessages.length
+      // after the insert (as an older version did) then made
+      // addedToFiltered compute to 0 and silently skipped the scroll
+      // compensation below for every flush in the unfiltered case.
+      final filterAliased = identical(_filteredMessages, _messages);
       _messages.insertAll(0, newestFirst);
-      final oldFilteredLength = _filteredMessages.length;
-      _runFilter();
-      addedToFiltered = _filteredMessages.length - oldFilteredLength;
+      if (filterAliased) {
+        addedToFiltered = newestFirst.length;
+      } else {
+        final oldFilteredLength = _filteredMessages.length;
+        _runFilter();
+        addedToFiltered = _filteredMessages.length - oldFilteredLength;
+      }
       _trimMessagesToCap();
     });
 

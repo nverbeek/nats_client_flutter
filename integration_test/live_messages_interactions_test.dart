@@ -216,11 +216,13 @@ void main() {
     // as a double-tap) then pressing D opens its Detail dialog — proving
     // the `selectedIndex` + `Shortcuts`/`Actions` keyboard path works, not
     // just the equivalent popup-menu action already covered above. The
-    // Filter field still holds keyboard focus from step 8, and a focused
-    // `EditableText` consumes plain character keys as typed input before
-    // the app's outer `Focus(onKeyEvent: ...)` ever sees them — explicitly
-    // unfocus it first so 'D' actually reaches the shortcut handler instead
-    // of being typed into the Filter box.
+    // Filter field still holds keyboard focus from step 8, and the app's
+    // outer `Focus(onKeyEvent: ...)` deliberately ignores the single-key
+    // message shortcuts while a text field has focus (see
+    // `_focusIsInTextField` in main.dart — letter keys DO bubble up from a
+    // focused `EditableText`, and without that guard 'D' here would both
+    // open the dialog and be swallowed from the field) — explicitly unfocus
+    // it first so 'D' is treated as a shortcut again.
     FocusManager.instance.primaryFocus?.unfocus();
     await tester.pump();
     await tester.tap(messageRowText(payloadB));
