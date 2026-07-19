@@ -22,14 +22,16 @@ void main() {
 
   Color barColorFor(Finder rowPayloadFinder) {
     // The color bar is a sibling of the ListTile (not a descendant of it --
-    // see main.dart's itemBuilder), both under the row's own keyed Material.
+    // see main.dart's itemBuilder), both under the row's own keyed
+    // GestureDetector (added for the row-level right-click context menu --
+    // it wraps the row's Material, so it's the outermost per-row widget now).
     // Match on `key is ObjectKey` specifically: ListTile may have its own
     // internal Material/InkWell for tap ripples, which would otherwise be a
     // *closer* (wrong) ancestor match than the row-level one we actually want.
     final row = find.ancestor(
         of: rowPayloadFinder,
         matching: find.byWidgetPredicate(
-            (widget) => widget is Material && widget.key is ObjectKey));
+            (widget) => widget is GestureDetector && widget.key is ObjectKey));
     final bar = find.descendant(
         of: row.first,
         matching: find.byKey(const ValueKey('subscriptionColorBar')));
