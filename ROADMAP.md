@@ -42,6 +42,7 @@ This app depends on the official mainline `dart_nats` package (`^1.2.2`), includ
 - [ ] **M30**: Upstream-First `dart_nats` Round (consumer pause/resume, filtered stream purge, Object Store streaming). Not started — see below.
 - [x] **M31**: Reconnect State Restoration (remaining half) — a `reconnectSignal` fired only on a real post-bounce reconnect (not the existing blip-tolerance) lets Browse Messages/Tail auto-retry out of a stuck error state and KV auto-refresh its selected bucket's keys/watch; healthy listings still use explicit Refresh, and an explicit Disconnect still fully resets everything.
 - [x] **M32**: Screenshot Border/Drop-Shadow Polish — subtle hairline border + soft drop shadow added to `Format-Screenshot`, all six `images/*.png` reprocessed.
+- [x] **Row Right-Click Context Menu** *(small standalone addition, not numbered)*: right-clicking a message row — on the Live Messages tab, JetStream Browse Messages, or JetStream Consumer Tail — opens the same action menu as that row's trailing overflow (⋮) button, anchored at the click point instead of the row's trailing edge.
 
 ---
 

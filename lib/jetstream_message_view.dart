@@ -130,8 +130,8 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
 
   Future<void> _loadMaxMessages() async {
     final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getInt(constants.prefMaxMessages) ??
-        constants.defaultMaxMessages;
+    final value =
+        prefs.getInt(constants.prefMaxMessages) ?? constants.defaultMaxMessages;
     if (!mounted) return;
     setState(() => _maxMessages = value);
   }
@@ -350,6 +350,58 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
     }
   }
 
+  /// Row action menu items, shared by the trailing overflow button and the
+  /// row's right-click context menu -- mirrors the split done for the Live
+  /// Messages tab in `main.dart`.
+  List<PopupMenuEntry<String>> _buildRowMenuItems(BuildContext context) {
+    return const [
+      PopupMenuItem(value: 'copy', child: Text('Copy')),
+      PopupMenuItem(value: 'copy_subject', child: Text('Copy Subject')),
+      PopupMenuItem(value: 'detail', child: Text('Detail')),
+    ];
+  }
+
+  void _handleRowMenuSelection(String value, Message message) {
+    switch (value) {
+      case 'copy':
+        Clipboard.setData(ClipboardData(text: decodeMessageTextFor(message)));
+        break;
+      case 'copy_subject':
+        Clipboard.setData(ClipboardData(text: message.subject ?? ''));
+        break;
+      case 'detail':
+        _showDetailDialog(message);
+        break;
+    }
+  }
+
+  /// Opens the same row action menu as the trailing overflow button, but
+  /// anchored at [globalPosition] -- see the matching `_showRowContextMenu`
+  /// in `main.dart` for why (right-click should open at the cursor, not
+  /// jump to the row's trailing edge).
+  Future<void> _showRowContextMenu(
+      BuildContext context, Message message, Offset globalPosition) async {
+    final items = _buildRowMenuItems(context);
+    if (items.isEmpty) return;
+
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final position = RelativeRect.fromLTRB(
+      globalPosition.dx,
+      globalPosition.dy,
+      overlay.size.width - globalPosition.dx,
+      overlay.size.height - globalPosition.dy,
+    );
+
+    final selected = await showMenu<String>(
+      context: context,
+      position: position,
+      items: items,
+    );
+    if (selected != null) {
+      _handleRowMenuSelection(selected, message);
+    }
+  }
+
   Future<void> _showDetailDialog(Message message) async {
     var headerVersion = '';
     Map<String, String> headers = <String, String>{};
@@ -560,8 +612,8 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
           )
         else if (_filteredMessages.isEmpty)
           Expanded(
-            child: _buildEmptyState(
-                Icons.search_off, 'No messages match filter.'),
+            child:
+                _buildEmptyState(Icons.search_off, 'No messages match filter.'),
           )
         else
           Expanded(
@@ -581,89 +633,73 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
                     itemBuilder: (context, index) {
                       final message = _filteredMessages[index];
                       final seq = message.streamSequence;
-                      return Material(
+                      return GestureDetector(
                         key: ObjectKey(message),
-                        child: ListTile(
-                          // Tells ListTile the row's real fixed height, not
-                          // just its own natural content height — see the
-                          // matching `minTileHeight` in `main.dart` for why
-                          // this matters for centering.
-                          minTileHeight: _messageRowExtent,
-                          // Band by distance from the oldest message (always at
-                          // the bottom), not the raw index, so stripes don't
-                          // flip every time a message is prepended at the top.
-                          tileColor:
-                              (_filteredMessages.length - 1 - index) % 2 == 0
-                                  ? rowEvenColor
-                                  : rowOddColor,
-                          title: RegexTextHighlight(
-                            text: decodeMessageTextFor(message),
-                            searchTerm: _currentFind,
-                            fontSize: 14,
-                            highlightStyle: TextStyle(
-                              background: Paint()
-                                ..color = theme.colorScheme.inversePrimary,
+                        behavior: HitTestBehavior.translucent,
+                        onSecondaryTapDown: (details) => _showRowContextMenu(
+                            context, message, details.globalPosition),
+                        child: Material(
+                          child: ListTile(
+                            // Tells ListTile the row's real fixed height, not
+                            // just its own natural content height — see the
+                            // matching `minTileHeight` in `main.dart` for why
+                            // this matters for centering.
+                            minTileHeight: _messageRowExtent,
+                            // Band by distance from the oldest message (always at
+                            // the bottom), not the raw index, so stripes don't
+                            // flip every time a message is prepended at the top.
+                            tileColor:
+                                (_filteredMessages.length - 1 - index) % 2 == 0
+                                    ? rowEvenColor
+                                    : rowOddColor,
+                            title: RegexTextHighlight(
+                              text: decodeMessageTextFor(message),
+                              searchTerm: _currentFind,
                               fontSize: 14,
+                              highlightStyle: TextStyle(
+                                background: Paint()
+                                  ..color = theme.colorScheme.inversePrimary,
+                                fontSize: 14,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          onTap: () => _showDetailDialog(message),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (seq != null)
-                                Padding(
-                                  padding:
-                                      const EdgeInsets.fromLTRB(0, 0, 5, 0),
-                                  child: Chip(label: Text('#$seq')),
-                                ),
-                              ConstrainedBox(
-                                constraints:
-                                    const BoxConstraints(maxWidth: 300),
-                                child: Tooltip(
-                                  message: message.subject ?? '',
-                                  child: Padding(
+                            onTap: () => _showDetailDialog(message),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (seq != null)
+                                  Padding(
                                     padding:
                                         const EdgeInsets.fromLTRB(0, 0, 5, 0),
-                                    child: Chip(
-                                      label: Text(
-                                        message.subject ?? '',
-                                        overflow: TextOverflow.ellipsis,
+                                    child: Chip(label: Text('#$seq')),
+                                  ),
+                                ConstrainedBox(
+                                  constraints:
+                                      const BoxConstraints(maxWidth: 300),
+                                  child: Tooltip(
+                                    message: message.subject ?? '',
+                                    child: Padding(
+                                      padding:
+                                          const EdgeInsets.fromLTRB(0, 0, 5, 0),
+                                      child: Chip(
+                                        label: Text(
+                                          message.subject ?? '',
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
-                              PopupMenuButton<String>(
-                                padding: EdgeInsets.zero,
-                                tooltip: 'More actions',
-                                itemBuilder: (context) => const [
-                                  PopupMenuItem(
-                                      value: 'copy', child: Text('Copy')),
-                                  PopupMenuItem(
-                                      value: 'copy_subject',
-                                      child: Text('Copy Subject')),
-                                  PopupMenuItem(
-                                      value: 'detail', child: Text('Detail')),
-                                ],
-                                onSelected: (value) {
-                                  switch (value) {
-                                    case 'copy':
-                                      Clipboard.setData(ClipboardData(
-                                          text: decodeMessageTextFor(message)));
-                                      break;
-                                    case 'copy_subject':
-                                      Clipboard.setData(ClipboardData(
-                                          text: message.subject ?? ''));
-                                      break;
-                                    case 'detail':
-                                      _showDetailDialog(message);
-                                      break;
-                                  }
-                                },
-                              ),
-                            ],
+                                PopupMenuButton<String>(
+                                  padding: EdgeInsets.zero,
+                                  tooltip: 'More actions',
+                                  itemBuilder: _buildRowMenuItems,
+                                  onSelected: (value) =>
+                                      _handleRowMenuSelection(value, message),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       );

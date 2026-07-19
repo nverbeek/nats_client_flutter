@@ -77,6 +77,7 @@ Each message has the following information/options:
 - The data of the message is displayed on a single line, clipped with an ellipsis if it doesn't fit.
 - On the right, in a "chip" widget is the subject of the message
 - On the right, a 3 dot menu button is available, with the following options:
+- Right-clicking anywhere on a row opens the same menu at the click point, rather than at the row's trailing edge.
 
     - **Copy**: Copies the message data to the clipboard
     - **Copy Subject**: Copies just the message's subject to the clipboard.
@@ -93,7 +94,7 @@ When **Enable JetStream** is on (the default) and you're connected to a server o
 The left-hand pane lists all streams on the account. Selecting a stream shows its subjects, storage type, retention policy, and message/byte counts on the right. Subjects display as chips, collapsed to the first several with a "+N more"/"Show less" toggle once a stream has a lot of them, plus a copy button that copies the full subject list (comma-separated) to the clipboard.
 
 - **Add Stream**: Opens a dialog to create a new stream (name, comma-separated subjects, optional max age in days, and replica count).
-- **Browse Messages**: Opens a live tail of the selected stream's contents. This uses a temporary, auto-cleaning consumer under the hood — no manual consumer setup required just to look at what's in a stream. Disabled when the stream has no messages yet. Includes its own Filter/Find fields, a Pause/Resume toggle, and a Clear button, working the same way as their Live Messages tab counterparts described below. Each row's own menu offers **Copy**, **Copy Subject**, and **Detail**, same as the Live Messages tab.
+- **Browse Messages**: Opens a live tail of the selected stream's contents. This uses a temporary, auto-cleaning consumer under the hood — no manual consumer setup required just to look at what's in a stream. Disabled when the stream has no messages yet. Includes its own Filter/Find fields, a Pause/Resume toggle, and a Clear button, working the same way as their Live Messages tab counterparts described below. Each row's own menu offers **Copy**, **Copy Subject**, and **Detail**, same as the Live Messages tab — including opening via right-click at the click point.
 - **Purge**: Deletes all messages in the stream but keeps the stream and its consumers. Asks for confirmation first.
 - **Delete Stream**: Permanently deletes the stream, its messages, and its consumers. Asks for confirmation first.
 
@@ -102,7 +103,7 @@ Each stream's consumers are listed below its details. Tapping a consumer opens a
 
 - **Create Consumer**: Opens a dialog to create a new consumer on the selected stream — durable name (leave blank for an ephemeral consumer), optional filter subject, push (with a deliver subject) or pull, ack policy, and deliver policy.
 - **Delete**: Removes the consumer. Asks for confirmation first. Only available for named (non-ephemeral) consumers.
-- **Tail**: Opens a live view of messages delivered to that specific consumer. If the consumer's ack policy is `explicit`, each message gets **Ack**, **Nak** (redeliver), and **Term** (stop redelivery) buttons; once you act on a message, its buttons disable. Consumers with any other ack policy show the same messages with those buttons disabled, since the server isn't expecting acks for them. Each row's menu also offers **Copy** and **Copy Subject**.
+- **Tail**: Opens a live view of messages delivered to that specific consumer. If the consumer's ack policy is `explicit`, each message gets **Ack**, **Nak** (redeliver), and **Term** (stop redelivery) buttons; once you act on a message, its buttons disable. Consumers with any other ack policy show the same messages with those buttons disabled, since the server isn't expecting acks for them. Each row's menu also offers **Copy** and **Copy Subject**, also openable via right-click at the click point.
 
 ## Publishing into a stream
 The regular **Send Message** dialog (see Tools, below) gets a **Publish via JetStream (get delivery ack)** checkbox whenever JetStream is available and connected. Checking it publishes through JetStream instead of a plain core NATS publish, and shows the stream name and assigned sequence number once the server acknowledges it.

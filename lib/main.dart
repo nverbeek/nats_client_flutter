@@ -610,8 +610,8 @@ class _MyHomePageState extends State<MyHomePage>
       showSubscriptionColors =
           prefs.getBool(constants.prefShowSubscriptionColors) ??
               constants.defaultShowSubscriptionColors;
-      maxMessages =
-          prefs.getInt(constants.prefMaxMessages) ?? constants.defaultMaxMessages;
+      maxMessages = prefs.getInt(constants.prefMaxMessages) ??
+          constants.defaultMaxMessages;
       showTimestamps = prefs.getBool(constants.prefShowTimestamps) ??
           constants.defaultShowTimestamps;
       loadAuthSettings(prefs);
@@ -1707,8 +1707,11 @@ class _MyHomePageState extends State<MyHomePage>
   /// [messageInterval] between messages within a pass and [repeatInterval]
   /// between passes. Both waits are raced against [_replayStopSignal] so
   /// Stop is responsive mid-wait, not just between sends.
-  Future<void> _runReplay(List<ExportedMessage> messages,
-      Duration messageInterval, int repeatCount, Duration repeatInterval) async {
+  Future<void> _runReplay(
+      List<ExportedMessage> messages,
+      Duration messageInterval,
+      int repeatCount,
+      Duration repeatInterval) async {
     final totalPasses = repeatCount + 1;
     final totalCount = messages.length * totalPasses;
     final stopSignal = Completer<void>();
@@ -1743,8 +1746,7 @@ class _MyHomePageState extends State<MyHomePage>
             await natsClient.pub(message.subject, message.payload,
                 header: header, buffer: false);
           } catch (e) {
-            _showErrorSnackBar(
-                'Replay stopped: ${describePublishError(e)}');
+            _showErrorSnackBar('Replay stopped: ${describePublishError(e)}');
             break outer;
           }
           if (mounted) setState(() => _replaySentCount++);
@@ -1759,8 +1761,7 @@ class _MyHomePageState extends State<MyHomePage>
 
         final isLastPass = pass == totalPasses;
         if (!isLastPass && repeatInterval > Duration.zero) {
-          await Future.any(
-              [Future.delayed(repeatInterval), stopSignal.future]);
+          await Future.any([Future.delayed(repeatInterval), stopSignal.future]);
           if (stopSignal.isCompleted) break outer;
         }
       }
@@ -1977,8 +1978,7 @@ class _MyHomePageState extends State<MyHomePage>
   static Future<void> _defaultSaveExportedMessages(
       String suggestedName, Uint8List bytes) async {
     if (kIsWeb) {
-      await FilePicker.platform
-          .saveFile(fileName: suggestedName, bytes: bytes);
+      await FilePicker.platform.saveFile(fileName: suggestedName, bytes: bytes);
       return;
     }
     final path = await FilePicker.platform.saveFile(fileName: suggestedName);
@@ -2002,8 +2002,7 @@ class _MyHomePageState extends State<MyHomePage>
   Future<void> _showExportMenu(int selectedCount, int totalCount) async {
     final renderBox =
         _exportMenuButtonKey.currentContext!.findRenderObject() as RenderBox;
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     final position = RelativeRect.fromRect(
       Rect.fromPoints(
         renderBox.localToGlobal(Offset.zero, ancestor: overlay),
@@ -2535,154 +2534,189 @@ class _MyHomePageState extends State<MyHomePage>
         focusedContext.findAncestorStateOfType<EditableTextState>() != null;
   }
 
+  /// Row action menu items, shared by the trailing overflow button and the
+  /// row's right-click context menu so the two triggers can never drift out
+  /// of sync with each other.
+  List<PopupMenuEntry<String>> _buildRowMenuItems(
+      BuildContext context, int index) {
+    // Add mounted check before accessing context
+    if (!mounted) return [];
+
+    try {
+      // The bulk action always operates on the existing multi-selection
+      // regardless of which row's menu was opened -- opening the menu
+      // on a row outside the current range does NOT implicitly fold it
+      // in (matches Explorer/Finder/VS Code convention).
+      final selection = _effectiveSelection();
+      return [
+        const PopupMenuItem(
+          value: 'copy',
+          child: Text('Copy'),
+        ),
+        const PopupMenuItem(
+          value: 'copy_subject',
+          child: Text('Copy Subject'),
+        ),
+        if (selection.length > 1)
+          PopupMenuItem(
+            value: 'copy_selected',
+            child: Text('Copy Selected (${selection.length})'),
+          ),
+        if (selection.length > 1)
+          PopupMenuItem(
+            value: 'export_selected',
+            child: Text('Export Selected (${selection.length})'),
+          ),
+        const PopupMenuItem(
+          value: 'detail',
+          child: Text('Detail'),
+        ),
+        PopupMenuItem(
+          value: 'replay',
+          enabled: currentStatus == Status.connected,
+          child: Text(
+            'Replay',
+            style: currentStatus == Status.connected
+                ? null
+                : TextStyle(
+                    color: Theme.of(context).disabledColor,
+                  ),
+          ),
+        ),
+        PopupMenuItem(
+          value: 'edit_and_send',
+          enabled: currentStatus == Status.connected,
+          child: Text(
+            'Edit & Send',
+            style: currentStatus == Status.connected
+                ? null
+                : TextStyle(
+                    color: Theme.of(context).disabledColor,
+                  ),
+          ),
+        ),
+        PopupMenuItem(
+          value: 'reply_to',
+          enabled: currentStatus == Status.connected,
+          child: Text(
+            'Reply To',
+            style: currentStatus == Status.connected
+                ? null
+                : TextStyle(
+                    color: Theme.of(context).disabledColor,
+                  ),
+          ),
+        )
+      ];
+    } catch (e) {
+      // If there's an error accessing context, return empty list
+      debugPrint('Error building popup menu items: $e');
+      return [];
+    }
+  }
+
+  /// Handles a value chosen from [_buildRowMenuItems], regardless of whether
+  /// it was opened via the trailing overflow button or a right-click.
+  Future<void> _handleRowMenuSelection(String value, int index) async {
+    // Add mounted check before processing selection
+    if (!mounted) return;
+
+    try {
+      switch (value) {
+        case 'copy':
+          await Clipboard.setData(
+              ClipboardData(text: decodeMessageTextFor(filteredItems[index])));
+          if (mounted) {
+            showSnackBar('Copied to clipboard!');
+          }
+          break;
+        case 'copy_subject':
+          await Clipboard.setData(
+              ClipboardData(text: filteredItems[index].subject ?? ''));
+          if (mounted) {
+            showSnackBar('Copied subject to clipboard!');
+          }
+          break;
+        case 'copy_selected':
+          await _copyMultiSelection(_effectiveSelection());
+          break;
+        case 'export_selected':
+          _showExportDialog(exportAll: false);
+          break;
+        case 'detail':
+          if (mounted) {
+            showDetailDialog(filteredItems[index]);
+          }
+          break;
+        case 'replay':
+          if (mounted && currentStatus == Status.connected) {
+            await _publishReplay(filteredItems[index]);
+          }
+          break;
+        case 'edit_and_send':
+          if (mounted && currentStatus == Status.connected) {
+            showSendMessageDialog(
+                filteredItems[index].subject!,
+                null,
+                decodeMessageTextFor(filteredItems[index]),
+                filteredItems[index].header?.headers);
+          }
+          break;
+        case 'reply_to':
+          if (mounted && currentStatus == Status.connected) {
+            if (filteredItems[index].replyTo != null &&
+                filteredItems[index].replyTo!.isNotEmpty) {
+              showSendMessageDialog(filteredItems[index].replyTo, null, null);
+            } else {
+              showSnackBar('This message has no replyTo subject');
+            }
+          }
+          break;
+      }
+    } catch (e) {
+      // Log error but don't crash the app
+      debugPrint('Error handling popup menu selection: $e');
+      if (mounted) {
+        showSnackBar('An error occurred. Please try again.');
+      }
+    }
+  }
+
   /// Creates a safe PopupMenuButton that handles mounted state properly
   Widget _buildSafePopupMenuButton(int index) {
     return PopupMenuButton<String>(
       key: ValueKey('popup_${filteredItems[index].hashCode}'),
       padding: EdgeInsets.zero,
       tooltip: 'More actions',
-      itemBuilder: (context) {
-        // Add mounted check before accessing context
-        if (!mounted) return [];
-
-        try {
-          // The bulk action always operates on the existing multi-selection
-          // regardless of which row's menu was opened -- opening the menu
-          // on a row outside the current range does NOT implicitly fold it
-          // in (matches Explorer/Finder/VS Code convention).
-          final selection = _effectiveSelection();
-          return [
-            const PopupMenuItem(
-              value: 'copy',
-              child: Text('Copy'),
-            ),
-            const PopupMenuItem(
-              value: 'copy_subject',
-              child: Text('Copy Subject'),
-            ),
-            if (selection.length > 1)
-              PopupMenuItem(
-                value: 'copy_selected',
-                child: Text('Copy Selected (${selection.length})'),
-              ),
-            if (selection.length > 1)
-              PopupMenuItem(
-                value: 'export_selected',
-                child: Text('Export Selected (${selection.length})'),
-              ),
-            const PopupMenuItem(
-              value: 'detail',
-              child: Text('Detail'),
-            ),
-            PopupMenuItem(
-              value: 'replay',
-              enabled: currentStatus == Status.connected,
-              child: Text(
-                'Replay',
-                style: currentStatus == Status.connected
-                    ? null
-                    : TextStyle(
-                        color: Theme.of(context).disabledColor,
-                      ),
-              ),
-            ),
-            PopupMenuItem(
-              value: 'edit_and_send',
-              enabled: currentStatus == Status.connected,
-              child: Text(
-                'Edit & Send',
-                style: currentStatus == Status.connected
-                    ? null
-                    : TextStyle(
-                        color: Theme.of(context).disabledColor,
-                      ),
-              ),
-            ),
-            PopupMenuItem(
-              value: 'reply_to',
-              enabled: currentStatus == Status.connected,
-              child: Text(
-                'Reply To',
-                style: currentStatus == Status.connected
-                    ? null
-                    : TextStyle(
-                        color: Theme.of(context).disabledColor,
-                      ),
-              ),
-            )
-          ];
-        } catch (e) {
-          // If there's an error accessing context, return empty list
-          debugPrint('Error building popup menu items: $e');
-          return [];
-        }
-      },
-      onSelected: (String value) async {
-        // Add mounted check before processing selection
-        if (!mounted) return;
-
-        try {
-          switch (value) {
-            case 'copy':
-              await Clipboard.setData(ClipboardData(
-                  text: decodeMessageTextFor(filteredItems[index])));
-              if (mounted) {
-                showSnackBar('Copied to clipboard!');
-              }
-              break;
-            case 'copy_subject':
-              await Clipboard.setData(
-                  ClipboardData(text: filteredItems[index].subject ?? ''));
-              if (mounted) {
-                showSnackBar('Copied subject to clipboard!');
-              }
-              break;
-            case 'copy_selected':
-              await _copyMultiSelection(_effectiveSelection());
-              break;
-            case 'export_selected':
-              _showExportDialog(exportAll: false);
-              break;
-            case 'detail':
-              if (mounted) {
-                showDetailDialog(filteredItems[index]);
-              }
-              break;
-            case 'replay':
-              if (mounted && currentStatus == Status.connected) {
-                await _publishReplay(filteredItems[index]);
-              }
-              break;
-            case 'edit_and_send':
-              if (mounted && currentStatus == Status.connected) {
-                showSendMessageDialog(
-                    filteredItems[index].subject!,
-                    null,
-                    decodeMessageTextFor(filteredItems[index]),
-                    filteredItems[index].header?.headers);
-              }
-              break;
-            case 'reply_to':
-              if (mounted && currentStatus == Status.connected) {
-                if (filteredItems[index].replyTo != null &&
-                    filteredItems[index].replyTo!.isNotEmpty) {
-                  showSendMessageDialog(
-                      filteredItems[index].replyTo, null, null);
-                } else {
-                  showSnackBar('This message has no replyTo subject');
-                }
-              }
-              break;
-          }
-        } catch (e) {
-          // Log error but don't crash the app
-          debugPrint('Error handling popup menu selection: $e');
-          if (mounted) {
-            showSnackBar('An error occurred. Please try again.');
-          }
-        }
-      },
+      itemBuilder: (context) => _buildRowMenuItems(context, index),
+      onSelected: (String value) => _handleRowMenuSelection(value, index),
     );
+  }
+
+  /// Opens the same row action menu as [_buildSafePopupMenuButton], but
+  /// anchored at [globalPosition] -- used for right-click so the menu
+  /// appears at the cursor instead of jumping to the row's trailing edge.
+  Future<void> _showRowContextMenu(
+      BuildContext context, int index, Offset globalPosition) async {
+    final items = _buildRowMenuItems(context, index);
+    if (items.isEmpty) return;
+
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final position = RelativeRect.fromLTRB(
+      globalPosition.dx,
+      globalPosition.dy,
+      overlay.size.width - globalPosition.dx,
+      overlay.size.height - globalPosition.dy,
+    );
+
+    final selected = await showMenu<String>(
+      context: context,
+      position: position,
+      items: items,
+    );
+    if (selected != null) {
+      await _handleRowMenuSelection(selected, index);
+    }
   }
 
   @override
@@ -2828,7 +2862,8 @@ class _MyHomePageState extends State<MyHomePage>
                   } catch (e) {
                     debugPrint('Error copying to clipboard: $e');
                     if (mounted) {
-                      showSnackBar('Could not copy to clipboard. Please try again.');
+                      showSnackBar(
+                          'Could not copy to clipboard. Please try again.');
                     }
                   }
                 }());
@@ -3188,110 +3223,120 @@ class _MyHomePageState extends State<MyHomePage>
                   itemBuilder: (context, index) {
                     final message = filteredItems[index];
                     final subColor = _colorForMessage(message, context);
-                    return Material(
+                    return GestureDetector(
                       key: ObjectKey(message),
-                      // A full-height bar (rather than a small leading dot)
-                      // reads more clearly at a glance and doesn't compete
-                      // with ListTile's own leading/minLeadingWidth slot.
-                      // CrossAxisAlignment.stretch makes the bar span the
-                      // row's full itemExtent height.
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (showSubscriptionColors)
-                            Container(
-                              key: const ValueKey('subscriptionColorBar'),
-                              width: 4,
-                              color: subColor ?? Colors.transparent,
-                            ),
-                          Expanded(
-                            child: ListTile(
-                              // ListTile centers its title within its own
-                              // *computed natural* height, not whatever
-                              // height it's actually given -- when the 56px
-                              // floor in _messageRowExtent kicks in (small
-                              // font sizes), that natural height is smaller
-                              // than the row's real itemExtent, and without
-                              // this the leftover space silently lands
-                              // entirely below the text instead of being
-                              // split evenly. Telling it the *real* target
-                              // height makes its own centering math correct.
-                              minTileHeight: _messageRowExtent,
-                              title: RegexTextHighlight(
-                                text: decodeMessageTextFor(message),
-                                searchTerm: currentFind,
-                                fontSize: messageFontSize,
-                                highlightStyle: TextStyle(
-                                  background: Paint()
-                                    ..color = Theme.of(context)
-                                        .colorScheme
-                                        .inversePrimary,
-                                  fontSize: messageFontSize,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                      behavior: HitTestBehavior.translucent,
+                      onSecondaryTapDown: (details) => _showRowContextMenu(
+                          context, index, details.globalPosition),
+                      child: Material(
+                        // A full-height bar (rather than a small leading dot)
+                        // reads more clearly at a glance and doesn't compete
+                        // with ListTile's own leading/minLeadingWidth slot.
+                        // CrossAxisAlignment.stretch makes the bar span the
+                        // row's full itemExtent height.
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (showSubscriptionColors)
+                              Container(
+                                key: const ValueKey('subscriptionColorBar'),
+                                width: 4,
+                                color: subColor ?? Colors.transparent,
                               ),
-                              // Band by distance from the oldest message
-                              // (always at the bottom), not the raw index:
-                              // prepending new messages shifts every
-                              // existing row's index, so banding on the
-                              // index would flip every stripe as messages
-                              // arrive. Distance-from-oldest is fixed per
-                              // message, so stripes stay put.
-                              tileColor: effectiveSelection.contains(message)
-                                  ? Theme.of(context).colorScheme.inversePrimary
-                                  : (filteredItems.length - 1 - index) % 2 == 0
-                                      ? evenRowColor
-                                      : oddRowColor,
-                              onTap: () => _handleMessageTap(index),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: <Widget>[
-                                  if (showTimestamps &&
-                                      _messageCapturedAt[message] != null)
-                                    Padding(
-                                      padding: const EdgeInsets.only(right: 6),
-                                      child: Text(
-                                        formatTimeOfDay(
-                                            _messageCapturedAt[message]!),
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurface
-                                              .withValues(alpha: 0.55),
-                                          fontFeatures: const [
-                                            FontFeature.tabularFigures(),
-                                          ],
+                            Expanded(
+                              child: ListTile(
+                                // ListTile centers its title within its own
+                                // *computed natural* height, not whatever
+                                // height it's actually given -- when the 56px
+                                // floor in _messageRowExtent kicks in (small
+                                // font sizes), that natural height is smaller
+                                // than the row's real itemExtent, and without
+                                // this the leftover space silently lands
+                                // entirely below the text instead of being
+                                // split evenly. Telling it the *real* target
+                                // height makes its own centering math correct.
+                                minTileHeight: _messageRowExtent,
+                                title: RegexTextHighlight(
+                                  text: decodeMessageTextFor(message),
+                                  searchTerm: currentFind,
+                                  fontSize: messageFontSize,
+                                  highlightStyle: TextStyle(
+                                    background: Paint()
+                                      ..color = Theme.of(context)
+                                          .colorScheme
+                                          .inversePrimary,
+                                    fontSize: messageFontSize,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                // Band by distance from the oldest message
+                                // (always at the bottom), not the raw index:
+                                // prepending new messages shifts every
+                                // existing row's index, so banding on the
+                                // index would flip every stripe as messages
+                                // arrive. Distance-from-oldest is fixed per
+                                // message, so stripes stay put.
+                                tileColor: effectiveSelection.contains(message)
+                                    ? Theme.of(context)
+                                        .colorScheme
+                                        .inversePrimary
+                                    : (filteredItems.length - 1 - index) % 2 ==
+                                            0
+                                        ? evenRowColor
+                                        : oddRowColor,
+                                onTap: () => _handleMessageTap(index),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: <Widget>[
+                                    if (showTimestamps &&
+                                        _messageCapturedAt[message] != null)
+                                      Padding(
+                                        padding:
+                                            const EdgeInsets.only(right: 6),
+                                        child: Text(
+                                          formatTimeOfDay(
+                                              _messageCapturedAt[message]!),
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurface
+                                                .withValues(alpha: 0.55),
+                                            fontFeatures: const [
+                                              FontFeature.tabularFigures(),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ConstrainedBox(
+                                      constraints:
+                                          const BoxConstraints(maxWidth: 450),
+                                      child: Tooltip(
+                                        message: message.subject!,
+                                        child: Padding(
+                                          padding: const EdgeInsets.fromLTRB(
+                                              0, 0, 5, 0),
+                                          child: Chip(
+                                              label: Text(message.subject!,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                    fontSize: messageFontSize,
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .onSurface,
+                                                  ))),
                                         ),
                                       ),
                                     ),
-                                  ConstrainedBox(
-                                    constraints:
-                                        const BoxConstraints(maxWidth: 450),
-                                    child: Tooltip(
-                                      message: message.subject!,
-                                      child: Padding(
-                                        padding: const EdgeInsets.fromLTRB(
-                                            0, 0, 5, 0),
-                                        child: Chip(
-                                            label: Text(message.subject!,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: TextStyle(
-                                                  fontSize: messageFontSize,
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .onSurface,
-                                                ))),
-                                      ),
-                                    ),
-                                  ),
-                                  _buildSafePopupMenuButton(index),
-                                ],
+                                    _buildSafePopupMenuButton(index),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     );
                   },
@@ -3364,9 +3409,7 @@ class _MyHomePageState extends State<MyHomePage>
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
-                                messagesPaused
-                                    ? Icons.play_arrow
-                                    : Icons.pause,
+                                messagesPaused ? Icons.play_arrow : Icons.pause,
                                 size: 18,
                               ),
                               if (messagesPaused && pendingCount > 0)

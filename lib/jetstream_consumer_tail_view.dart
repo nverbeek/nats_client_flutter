@@ -80,8 +80,8 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
 
   Future<void> _loadMaxMessages() async {
     final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getInt(constants.prefMaxMessages) ??
-        constants.defaultMaxMessages;
+    final value =
+        prefs.getInt(constants.prefMaxMessages) ?? constants.defaultMaxMessages;
     if (!mounted) return;
     setState(() => _maxMessages = value);
   }
@@ -160,14 +160,62 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
     }
   }
 
-  void _ack(Message message) => _resolve(
-      message, () => message.ackSync(), 'Ack failed — message not acknowledged.');
+  void _ack(Message message) => _resolve(message, () => message.ackSync(),
+      'Ack failed — message not acknowledged.');
 
-  void _nak(Message message) => _resolve(
-      message, () => message.nakSync(), 'Nak failed — message not redelivered.');
+  void _nak(Message message) => _resolve(message, () => message.nakSync(),
+      'Nak failed — message not redelivered.');
 
-  void _term(Message message) => _resolve(
-      message, () => message.termSync(), 'Term failed — message not terminated.');
+  void _term(Message message) => _resolve(message, () => message.termSync(),
+      'Term failed — message not terminated.');
+
+  /// Row action menu items, shared by the trailing overflow button and the
+  /// row's right-click context menu -- mirrors the split done for the Live
+  /// Messages tab in `main.dart`.
+  List<PopupMenuEntry<String>> _buildRowMenuItems(BuildContext context) {
+    return const [
+      PopupMenuItem(value: 'copy', child: Text('Copy')),
+      PopupMenuItem(value: 'copy_subject', child: Text('Copy Subject')),
+    ];
+  }
+
+  void _handleRowMenuSelection(String value, Message message) {
+    switch (value) {
+      case 'copy':
+        Clipboard.setData(ClipboardData(text: decodeMessageTextFor(message)));
+        break;
+      case 'copy_subject':
+        Clipboard.setData(ClipboardData(text: message.subject ?? ''));
+        break;
+    }
+  }
+
+  /// Opens the same row action menu as the trailing overflow button, but
+  /// anchored at [globalPosition] -- see the matching `_showRowContextMenu`
+  /// in `main.dart` for why (right-click should open at the cursor, not
+  /// jump to the row's trailing edge).
+  Future<void> _showRowContextMenu(
+      BuildContext context, Message message, Offset globalPosition) async {
+    final items = _buildRowMenuItems(context);
+    if (items.isEmpty) return;
+
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final position = RelativeRect.fromLTRB(
+      globalPosition.dx,
+      globalPosition.dy,
+      overlay.size.width - globalPosition.dx,
+      overlay.size.height - globalPosition.dy,
+    );
+
+    final selected = await showMenu<String>(
+      context: context,
+      position: position,
+      items: items,
+    );
+    if (selected != null) {
+      _handleRowMenuSelection(selected, message);
+    }
+  }
 
   Future<void> _showDetailDialog(Message message) async {
     var headerVersion = '';
@@ -282,71 +330,61 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
               itemBuilder: (context, index) {
                 final message = _messages[index];
                 final resolved = _resolved.contains(message);
-                return ListTile(
+                return GestureDetector(
                   key: ObjectKey(message),
-                  title: RegexTextHighlight(
-                    text: decodeMessageTextFor(message),
-                    searchTerm: '',
-                    fontSize: 14,
-                    highlightStyle: TextStyle(
-                      background: Paint()
-                        ..color = theme.colorScheme.inversePrimary,
+                  behavior: HitTestBehavior.translucent,
+                  onSecondaryTapDown: (details) => _showRowContextMenu(
+                      context, message, details.globalPosition),
+                  child: ListTile(
+                    title: RegexTextHighlight(
+                      text: decodeMessageTextFor(message),
+                      searchTerm: '',
                       fontSize: 14,
+                      highlightStyle: TextStyle(
+                        background: Paint()
+                          ..color = theme.colorScheme.inversePrimary,
+                        fontSize: 14,
+                      ),
+                      maxLines: 5,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 5,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  subtitle: Text(message.subject ?? ''),
-                  onTap: () => _showDetailDialog(message),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.check_circle_outline),
-                        tooltip: 'Ack',
-                        color: Colors.green,
-                        onPressed: widget.explicitAck && !resolved
-                            ? () => _ack(message)
-                            : null,
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.replay),
-                        tooltip: 'Nak (redeliver)',
-                        color: Colors.orange,
-                        onPressed: widget.explicitAck && !resolved
-                            ? () => _nak(message)
-                            : null,
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.block),
-                        tooltip: 'Term (stop redelivery)',
-                        color: Colors.red,
-                        onPressed: widget.explicitAck && !resolved
-                            ? () => _term(message)
-                            : null,
-                      ),
-                      PopupMenuButton<String>(
-                        tooltip: 'More actions',
-                        itemBuilder: (context) => const [
-                          PopupMenuItem(value: 'copy', child: Text('Copy')),
-                          PopupMenuItem(
-                              value: 'copy_subject',
-                              child: Text('Copy Subject')),
-                        ],
-                        onSelected: (value) {
-                          switch (value) {
-                            case 'copy':
-                              Clipboard.setData(ClipboardData(
-                                  text: decodeMessageTextFor(message)));
-                              break;
-                            case 'copy_subject':
-                              Clipboard.setData(
-                                  ClipboardData(text: message.subject ?? ''));
-                              break;
-                          }
-                        },
-                      ),
-                    ],
+                    subtitle: Text(message.subject ?? ''),
+                    onTap: () => _showDetailDialog(message),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.check_circle_outline),
+                          tooltip: 'Ack',
+                          color: Colors.green,
+                          onPressed: widget.explicitAck && !resolved
+                              ? () => _ack(message)
+                              : null,
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.replay),
+                          tooltip: 'Nak (redeliver)',
+                          color: Colors.orange,
+                          onPressed: widget.explicitAck && !resolved
+                              ? () => _nak(message)
+                              : null,
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.block),
+                          tooltip: 'Term (stop redelivery)',
+                          color: Colors.red,
+                          onPressed: widget.explicitAck && !resolved
+                              ? () => _term(message)
+                              : null,
+                        ),
+                        PopupMenuButton<String>(
+                          tooltip: 'More actions',
+                          itemBuilder: _buildRowMenuItems,
+                          onSelected: (value) =>
+                              _handleRowMenuSelection(value, message),
+                        ),
+                      ],
+                    ),
                   ),
                 );
               },
