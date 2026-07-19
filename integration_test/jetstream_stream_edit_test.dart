@@ -87,11 +87,22 @@ void main() {
         find.widgetWithText(TextFormField, 'Max Age (days, optional)'), '3');
     await tester.enterText(
         find.widgetWithText(TextFormField, 'Max Messages (optional)'), '50');
-    await tester.tap(find.text('Default'));
+    // The dropdown's pre-filled label reads "Old", not "Default" -- a real
+    // server always echoes an explicit `discard: "old"` in a freshly created
+    // stream's config (confirmed via a direct `$JS.API.STREAM.CREATE`
+    // request), it never actually omits the field to mean "default".
+    await tester.tap(find.text('Old'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('New').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(SwitchListTile, 'Deny Purge'));
+    // The dialog's content area is a fixed-height scrollable -- with Max Age
+    // and Max Messages now filled in above it, Deny Purge can sit scrolled
+    // out of the test viewport, so a plain tap() misses (hit-test warning,
+    // switch silently doesn't flip) unless it's scrolled into view first.
+    final denyPurgeSwitch = find.widgetWithText(SwitchListTile, 'Deny Purge');
+    await tester.ensureVisible(denyPurgeSwitch);
+    await tester.pumpAndSettle();
+    await tester.tap(denyPurgeSwitch);
     await tester.tap(find.widgetWithText(TextButton, 'Save'));
     await pumpUntil(tester,
         () => find.text('Stream "$streamName" updated.').evaluate().isNotEmpty);
