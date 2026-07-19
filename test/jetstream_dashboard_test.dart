@@ -23,6 +23,8 @@ class FakeJetStreamManager extends JetStreamManager {
   Future<List<ConsumerInfo>> Function(String) listConsumersImpl =
       (_) async => [];
   Future<void> Function(StreamConfig)? createStreamImpl;
+  Future<void> Function(StreamConfig)? updateStreamImpl;
+  Future<StreamInfo> Function(String)? streamDetailImpl;
   Future<void> Function(String)? deleteStreamImpl;
   Future<void> Function(String)? purgeStreamImpl;
   Future<void> Function(String, ConsumerConfig)? createConsumerImpl;
@@ -38,6 +40,7 @@ class FakeJetStreamManager extends JetStreamManager {
   int deleteConsumerCalls = 0;
   int fetchAccountInfoCalls = 0;
   StreamConfig? lastCreatedStreamConfig;
+  StreamConfig? lastUpdatedStreamConfig;
   ConsumerConfig? lastCreatedConsumerConfig;
 
   @override
@@ -68,6 +71,18 @@ class FakeJetStreamManager extends JetStreamManager {
   Future<void> createStream(StreamConfig config, {Duration? timeout}) async {
     lastCreatedStreamConfig = config;
     if (createStreamImpl != null) return createStreamImpl!(config);
+  }
+
+  @override
+  Future<void> updateStream(StreamConfig config, {Duration? timeout}) async {
+    lastUpdatedStreamConfig = config;
+    if (updateStreamImpl != null) return updateStreamImpl!(config);
+  }
+
+  @override
+  Future<StreamInfo> streamDetail(String streamName, {Duration? timeout}) {
+    if (streamDetailImpl != null) return streamDetailImpl!(streamName);
+    return Future.value(_stream(streamName));
   }
 
   @override
@@ -322,6 +337,64 @@ void main() {
     await tester.pumpAndSettle();
     expect(manager.deleteStreamCalls, 1);
     expect(find.text('Select a stream to see details.'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Edit Stream fetches the full config via streamDetail then updates via the manager',
+      (tester) async {
+    final manager = FakeJetStreamManager();
+    manager.listStreamsImpl = () async => [_stream('orders', messages: 5)];
+    manager.streamDetailImpl = (name) async => StreamInfo(
+          type: 'io.nats.jetstream.api.v1.stream_info_response',
+          config: StreamConfig(
+            name: name,
+            subjects: ['orders.>'],
+            storage: 'memory',
+            retention: 'workqueue',
+            maxMsgs: 100,
+            numReplicas: 3,
+          ),
+          created: DateTime.now().toIso8601String(),
+          state: StreamState(
+            messages: 5,
+            bytes: 0,
+            firstSeq: 1,
+            firstTs: DateTime.now().toIso8601String(),
+            lastSeq: 5,
+            lastTs: DateTime.now().toIso8601String(),
+            consumerCount: 0,
+          ),
+        );
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('orders'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Edit'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Edit Stream'), findsOneWidget);
+    // Pre-filled from the manager's streamDetail() response, not the plain
+    // (partial) StreamInfo the stream list already had.
+    final storageDropdown =
+        tester.widget<DropdownButtonFormField<String>>(find.byWidgetPredicate(
+      (w) =>
+          w is DropdownButtonFormField<String> &&
+          w.initialValue == 'memory',
+    ));
+    expect(storageDropdown.initialValue, 'memory');
+
+    await tester.tap(find.widgetWithText(TextButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(manager.lastUpdatedStreamConfig?.name, 'orders');
+    expect(manager.lastUpdatedStreamConfig?.storage, 'memory');
+    expect(manager.lastUpdatedStreamConfig?.retention, 'workqueue');
+    expect(manager.lastUpdatedStreamConfig?.numReplicas, 3);
+    expect(find.text('Stream "orders" updated.'), findsOneWidget);
   });
 
   testWidgets(

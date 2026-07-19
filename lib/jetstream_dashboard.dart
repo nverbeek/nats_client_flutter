@@ -325,13 +325,49 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
   void _showCreateStreamDialog() {
     showDialog<void>(
       context: context,
-      builder: (context) => CreateStreamDialog(
-        onCreate: (config) => _runMutation(
+      builder: (context) => StreamConfigDialog(
+        onSubmit: (config) => _runMutation(
           () async {
             await widget.manager!.createStream(config);
             await _loadStreams();
           },
           successMessage: 'Stream "${config.name}" created.',
+        ),
+      ),
+    );
+  }
+
+  /// Fetches a fresh, fully-populated `StreamConfig` (via
+  /// `JetStreamManager.streamDetail`, which fills in the fields the plain
+  /// stream list's `StreamInfo.fromJson` drops) before showing the Edit
+  /// dialog, so fields the user doesn't touch round-trip unchanged instead of
+  /// silently resetting to defaults on save.
+  Future<void> _showEditStreamDialog(String streamName) async {
+    final manager = widget.manager;
+    if (manager == null) return;
+
+    setState(() => _mutating = true);
+    StreamInfo detail;
+    try {
+      detail = await manager.streamDetail(streamName);
+    } catch (e) {
+      if (mounted) setState(() => _mutating = false);
+      _showSnack(describeJetStreamError(e), isError: true);
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _mutating = false);
+
+    showDialog<void>(
+      context: context,
+      builder: (context) => StreamConfigDialog(
+        initial: detail.config,
+        onSubmit: (config) => _runMutation(
+          () async {
+            await widget.manager!.updateStream(config);
+            await _loadStreams();
+          },
+          successMessage: 'Stream "${config.name}" updated.',
         ),
       ),
     );
@@ -754,6 +790,13 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
                           _browsing = true;
                           _tailingConsumerName = null;
                         }),
+              ),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Edit'),
+                onPressed: _mutating
+                    ? null
+                    : () => _showEditStreamDialog(stream.config.name),
               ),
               OutlinedButton.icon(
                 icon: const Icon(Icons.delete_sweep_outlined),

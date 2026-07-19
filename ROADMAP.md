@@ -36,7 +36,7 @@ This app depends on the official mainline `dart_nats` package (`^1.2.2`), includ
 - [ ] **M25**: Quick-Subscribe to Exact Subject from Message Row. Not started — see below.
 - [x] **M26**: Adopted `dart_nats` JetStream/KV Bug Fixes (upstream PR #45; app now depends on the resulting `dart_nats` 1.2.2 release).
 - [x] **Connect via Ctrl+Enter** *(small standalone addition, not numbered)*: fires Connect while focus is in the Host, Port, or Subjects field.
-- [ ] **M27**: Stream Edit + richer `StreamConfig` exposure. Not started — see below.
+- [x] **M27**: Stream Edit + richer `StreamConfig` exposure — `StreamConfigDialog` (renamed from `CreateStreamDialog`) now doubles as an Edit form, pre-filled via a new `JetStreamManager.streamDetail()` that reads the fields `StreamInfo.fromJson` drops off the raw JSON (same pattern as M29's `consumerDetail()`/`bucketStatus()`), and exposes storage/retention/discard policy, size/count limits, and the allow-rollup/deny-delete/deny-purge flags at both create and edit time; edit submits via a new `JetStreamManager.updateStream()`, with any server-side rejection (e.g. an in-place storage-type change) surfacing through the existing error-SnackBar path rather than being pre-guessed client-side.
 - [x] **M28**: Hex/Binary Payload View — Text/Hex toggle in Message Detail's Payload section, auto-selecting Hex whenever the payload isn't valid UTF-8.
 - [x] **M29**: KV Bucket Info + Consumer Detail Depth — `KvManager.bucketStatus()` and `JetStreamManager.consumerDetail()` issue the same raw `$JS.API.STREAM.INFO`/`$JS.API.CONSUMER.INFO` requests `dart_nats` 1.2.3 makes internally and read TTL/replicas and ack-wait/max-deliver/max-ack-pending off the JSON directly, since the package's own typed classes don't parse those fields even though the server always sends them; Bucket Info dialog and a refreshable Consumer Detail dialog surface them.
 - [ ] **M30**: Upstream-First `dart_nats` Round (consumer pause/resume, filtered stream purge, Object Store streaming). Not started — see below.
@@ -175,22 +175,6 @@ This is a complement to the existing Filter box, not a replacement: Filter narro
 - [ ] Surface the "you may now receive this subject twice until you remove the wildcard" caveat.
 - [ ] Guard against adding a literal duplicate of a subject that's already its own exact subscription.
 - [ ] Unit/widget test coverage plus a live-server verification pass: subscribe wide, receive a message, use the shortcut, confirm the new exact subscription is active server-side, then remove the wildcard chip and confirm delivery continues uninterrupted for the exact subject.
-
----
-
-## Milestone 27: Stream Edit + Richer `StreamConfig` Exposure (Medium Priority)
-
-### Objective
-The JetStream dashboard can only Create/Purge/Delete a stream — there's no way to edit an existing one's configuration, and the Create dialog only exposes name/subjects/maxAge/replicas, a small subset of what `StreamConfig` supports. A daily NATS user routinely wants to change storage type, retention policy, or size/age limits after the fact without recreating the stream.
-
-### What `dart_nats` supports
-`JetStream.updateStream(StreamConfig)` (`jetstream.dart`) — calls `$JS.API.STREAM.UPDATE.<name>`, present in 1.2.2. `StreamConfig` already supports storage type (file/memory), retention policy (limits/interest/workqueue), maxMsgs, maxBytes, maxMsgSize, maxMsgsPerSubject, discard policy, allowRollup/denyDelete/denyPurge — all unused by today's Create dialog.
-
-### Implementation Checklist
-- [ ] Add an "Edit" action on the stream detail pane (alongside Purge/Delete) reusing the Create Stream dialog's form, pre-filled from the selected stream's current `StreamConfig`, calling `updateStream()` instead of `createStream()`.
-- [ ] Expose the additional `StreamConfig` fields above in that shared form, at both create and edit time.
-- [ ] Decide which fields are safe to change post-creation vs. which NATS itself rejects changing (e.g. storage type may not be changeable in place on some server versions) — surface the server's rejection message rather than assuming.
-- [ ] Unit/widget tests for the new fields + edit flow; live-server verification that an edited stream's new config is actually reflected server-side.
 
 ---
 

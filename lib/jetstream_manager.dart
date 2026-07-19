@@ -90,6 +90,65 @@ class JetStreamManager {
     return _js.createStream(config, timeout: timeout);
   }
 
+  /// Update an existing stream to [config]. The server treats this as a full
+  /// replacement of the stream's configuration (not a partial merge), so
+  /// [config] should normally originate from [streamDetail] (or the Edit
+  /// dialog pre-filled from it) rather than a hand-built partial config.
+  Future<void> updateStream(StreamConfig config,
+      {Duration timeout = const Duration(seconds: 5)}) {
+    return _js.updateStream(config, timeout: timeout);
+  }
+
+  /// Get up-to-date info for a single stream, plus a handful of
+  /// `StreamConfig` fields `dart_nats` 1.2.3's `StreamInfo.fromJson` doesn't
+  /// parse even though the server always sends them (`max_age`,
+  /// `num_replicas`, `discard`, `allow_rollup_hdrs`, `deny_delete`,
+  /// `deny_purge`, `max_msgs_per_subject`, `max_msg_size`, `allow_direct`).
+  /// Issues the same raw `$JS.API.STREAM.INFO.<stream>` request
+  /// [streamInfo] makes internally, reusing `StreamInfo.fromJson` for
+  /// everything it already handles and reading the missing fields off the
+  /// same JSON itself -- mirroring the raw-JSON bypass [consumerDetail] uses
+  /// for the same kind of package-side parsing gap. The returned
+  /// `StreamInfo.config` is a fully-populated `StreamConfig`, suitable for
+  /// pre-filling the Edit Stream dialog.
+  Future<StreamInfo> streamDetail(String streamName,
+      {Duration timeout = const Duration(seconds: 5)}) async {
+    final subject = '\$JS.API.STREAM.INFO.$streamName';
+    final response =
+        await client.request(subject, Uint8List(0), timeout: timeout);
+    final map = jsonDecode(response.string) as Map<String, dynamic>;
+    if (map['error'] != null) {
+      throw NatsException(map['error']['description'] as String);
+    }
+    final info = StreamInfo.fromJson(map);
+    final cfg = map['config'] as Map<String, dynamic>? ?? {};
+    final maxAgeNanos = cfg['max_age'] as int?;
+    return StreamInfo(
+      type: info.type,
+      created: info.created,
+      state: info.state,
+      config: StreamConfig(
+        name: info.config.name,
+        subjects: info.config.subjects,
+        storage: info.config.storage,
+        retention: info.config.retention,
+        maxMsgs: info.config.maxMsgs,
+        maxBytes: info.config.maxBytes,
+        allowRollup: cfg['allow_rollup_hdrs'] as bool?,
+        denyDelete: cfg['deny_delete'] as bool?,
+        denyPurge: cfg['deny_purge'] as bool?,
+        discard: cfg['discard'] as String?,
+        allowDirect: cfg['allow_direct'] as bool?,
+        maxMsgsPerSubject: cfg['max_msgs_per_subject'] as int?,
+        maxMsgSize: cfg['max_msg_size'] as int?,
+        maxAge: (maxAgeNanos != null && maxAgeNanos > 0)
+            ? Duration(microseconds: maxAgeNanos ~/ 1000)
+            : null,
+        numReplicas: cfg['num_replicas'] as int?,
+      ),
+    );
+  }
+
   /// Permanently delete a stream and all of its messages.
   Future<void> deleteStream(String streamName,
       {Duration timeout = const Duration(seconds: 5)}) {
