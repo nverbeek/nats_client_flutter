@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 
@@ -141,6 +143,63 @@ class KvManager {
   Stream<KeyValueEntry?> watch(String bucket) {
     return keyValue(bucket).watch();
   }
+
+  /// Fetches a fuller status snapshot for [bucket] than `dart_nats`
+  /// 1.2.3's `KeyValue.status()` exposes -- that method (and the
+  /// `StreamConfig.fromJson` it relies on) never parses `max_age` (TTL) or
+  /// `num_replicas` even though the server always sends them on
+  /// `$JS.API.STREAM.INFO`. This issues that same raw request itself and
+  /// reads the two missing fields off the JSON directly, mirroring the
+  /// raw-`StreamConfig` bypass [createBucket] already uses for the same kind
+  /// of package-side parsing gap.
+  Future<KvBucketStatus> bucketStatus(String bucket,
+      {Duration timeout = const Duration(seconds: 5)}) async {
+    final streamName = '$kvStreamPrefix$bucket';
+    final subject = '\$JS.API.STREAM.INFO.$streamName';
+    final response =
+        await client.request(subject, Uint8List(0), timeout: timeout);
+    final map = jsonDecode(response.string) as Map<String, dynamic>;
+    if (map['error'] != null) {
+      throw NatsException(map['error']['description'] as String);
+    }
+    final config = map['config'] as Map<String, dynamic>? ?? {};
+    final state = map['state'] as Map<String, dynamic>? ?? {};
+    final maxAgeNanos = config['max_age'] as int? ?? 0;
+    return KvBucketStatus(
+      bucket: bucket,
+      history: config['max_msgs_per_subject'] as int? ?? 1,
+      storage: config['storage'] as String? ?? 'file',
+      size: state['bytes'] as int? ?? 0,
+      values: state['messages'] as int? ?? 0,
+      ttl: maxAgeNanos > 0
+          ? Duration(microseconds: maxAgeNanos ~/ 1000)
+          : null,
+      replicas: config['num_replicas'] as int? ?? 1,
+    );
+  }
+}
+
+/// A KV bucket's history depth, storage type, live size/count, and (unlike
+/// `dart_nats`'s own `KeyValueStatus`) TTL and replica count -- see
+/// [KvManager.bucketStatus].
+class KvBucketStatus {
+  final String bucket;
+  final int history;
+  final String storage;
+  final int size;
+  final int values;
+  final Duration? ttl;
+  final int replicas;
+
+  KvBucketStatus({
+    required this.bucket,
+    required this.history,
+    required this.storage,
+    required this.size,
+    required this.values,
+    required this.ttl,
+    required this.replicas,
+  });
 }
 
 /// Strips the `KV_` stream-name prefix off, returning the bucket name a

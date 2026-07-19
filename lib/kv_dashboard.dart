@@ -501,6 +501,18 @@ class KvDashboardState extends State<KvDashboard> {
     );
   }
 
+  void _showBucketInfoDialog(String bucket) {
+    final manager = widget.manager;
+    if (manager == null) return;
+    showDialog<void>(
+      context: context,
+      builder: (context) => KvBucketStatusDialog(
+        bucket: bucket,
+        onRefresh: () => manager.bucketStatus(bucket),
+      ),
+    );
+  }
+
   void _showHistoryDialog(String bucket, String key) async {
     final manager = widget.manager;
     if (manager == null) return;
@@ -670,43 +682,92 @@ class KvDashboardState extends State<KvDashboard> {
     );
   }
 
+  /// Row action menu items, shared by the trailing overflow button and the
+  /// row's right-click context menu -- mirrors the split done for Live
+  /// Messages (`main.dart`), JetStream Browse Messages
+  /// (`jetstream_message_view.dart`), and JetStream Consumer Tail
+  /// (`jetstream_consumer_tail_view.dart`).
+  List<PopupMenuEntry<String>> _buildRowMenuItems(BuildContext context) {
+    return const [
+      PopupMenuItem(value: 'edit', child: Text('Edit')),
+      PopupMenuItem(value: 'history', child: Text('History')),
+      PopupMenuItem(value: 'delete', child: Text('Delete')),
+      PopupMenuItem(value: 'purge', child: Text('Purge')),
+    ];
+  }
+
+  void _handleRowMenuSelection(
+      String value, String bucket, KeyValueEntry entry) {
+    switch (value) {
+      case 'edit':
+        _showPutDialog(bucket, existing: entry);
+        break;
+      case 'history':
+        _showHistoryDialog(bucket, entry.key);
+        break;
+      case 'delete':
+        _confirmDeleteKey(bucket, entry.key);
+        break;
+      case 'purge':
+        _confirmPurgeKey(bucket, entry.key);
+        break;
+    }
+  }
+
+  /// Opens the same row action menu as the trailing overflow button, but
+  /// anchored at [globalPosition] -- see the matching `_showRowContextMenu`
+  /// in `main.dart` for why (right-click should open at the cursor, not
+  /// jump to the row's trailing edge). A no-op while a mutation is already
+  /// in flight, mirroring the trailing `PopupMenuButton`'s own
+  /// `enabled: !_mutating`.
+  Future<void> _showRowContextMenu(BuildContext context, String bucket,
+      KeyValueEntry entry, Offset globalPosition) async {
+    if (_mutating) return;
+    final items = _buildRowMenuItems(context);
+    if (items.isEmpty) return;
+
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final position = RelativeRect.fromLTRB(
+      globalPosition.dx,
+      globalPosition.dy,
+      overlay.size.width - globalPosition.dx,
+      overlay.size.height - globalPosition.dy,
+    );
+
+    final selected = await showMenu<String>(
+      context: context,
+      position: position,
+      items: items,
+    );
+    if (selected != null) {
+      _handleRowMenuSelection(selected, bucket, entry);
+    }
+  }
+
   Widget _buildKeyRow(String bucket, KeyValueEntry entry) {
-    return ListTile(
-      title: Text(entry.key),
-      subtitle: Text(
-        '${decodeMessageText(entry.value)}\n'
-        'Rev #${entry.revision} · ${formatRelativeTime(entry.created.toIso8601String())}',
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
+    return GestureDetector(
+      key: ValueKey('kv_row_${entry.key}'),
+      behavior: HitTestBehavior.translucent,
+      onSecondaryTapDown: (details) =>
+          _showRowContextMenu(context, bucket, entry, details.globalPosition),
+      child: ListTile(
+        title: Text(entry.key),
+        subtitle: Text(
+          '${decodeMessageText(entry.value)}\n'
+          'Rev #${entry.revision} · ${formatRelativeTime(entry.created.toIso8601String())}',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        isThreeLine: true,
+        trailing: PopupMenuButton<String>(
+          enabled: !_mutating,
+          tooltip: 'More actions',
+          onSelected: (action) => _handleRowMenuSelection(action, bucket, entry),
+          itemBuilder: _buildRowMenuItems,
+        ),
+        onTap: () => _showPutDialog(bucket, existing: entry),
       ),
-      isThreeLine: true,
-      trailing: PopupMenuButton<String>(
-        enabled: !_mutating,
-        tooltip: 'More actions',
-        onSelected: (action) {
-          switch (action) {
-            case 'edit':
-              _showPutDialog(bucket, existing: entry);
-              break;
-            case 'history':
-              _showHistoryDialog(bucket, entry.key);
-              break;
-            case 'delete':
-              _confirmDeleteKey(bucket, entry.key);
-              break;
-            case 'purge':
-              _confirmPurgeKey(bucket, entry.key);
-              break;
-          }
-        },
-        itemBuilder: (context) => const [
-          PopupMenuItem(value: 'edit', child: Text('Edit')),
-          PopupMenuItem(value: 'history', child: Text('History')),
-          PopupMenuItem(value: 'delete', child: Text('Delete')),
-          PopupMenuItem(value: 'purge', child: Text('Purge')),
-        ],
-      ),
-      onTap: () => _showPutDialog(bucket, existing: entry),
     );
   }
 
@@ -728,6 +789,11 @@ class KvDashboardState extends State<KvDashboard> {
             children: [
               Expanded(
                 child: Text(bucket, style: Theme.of(context).textTheme.titleLarge),
+              ),
+              IconButton(
+                icon: const Icon(Icons.info_outline),
+                tooltip: 'Bucket info',
+                onPressed: () => _showBucketInfoDialog(bucket),
               ),
               IconButton(
                 icon: const Icon(Icons.refresh),

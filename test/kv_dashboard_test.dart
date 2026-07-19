@@ -26,6 +26,7 @@ class FakeKvManager extends KvManager {
   Future<bool> Function(String, String)? deleteKeyImpl;
   Future<bool> Function(String, String)? purgeKeyImpl;
   Future<List<KeyValueEntry>> Function(String, String)? keyHistoryImpl;
+  Future<KvBucketStatus> Function(String)? bucketStatusImpl;
 
   Future<AccountInfo> Function()? fetchAccountInfoImpl;
 
@@ -154,6 +155,20 @@ class FakeKvManager extends KvManager {
 
   @override
   Stream<KeyValueEntry?> watch(String bucket) => watchControllerFor(bucket).stream;
+
+  @override
+  Future<KvBucketStatus> bucketStatus(String bucket, {Duration? timeout}) {
+    if (bucketStatusImpl != null) return bucketStatusImpl!(bucket);
+    return Future.value(KvBucketStatus(
+      bucket: bucket,
+      history: 1,
+      storage: 'file',
+      size: 0,
+      values: 0,
+      ttl: null,
+      replicas: 1,
+    ));
+  }
 }
 
 StreamInfo _bucketStream(String bucket, {int messages = 0, int bytes = 0}) {
@@ -659,6 +674,37 @@ void main() {
     expect(find.text('Account Info'), findsOneWidget);
     expect(find.text('2 streams'), findsOneWidget);
     expect(manager.fetchAccountInfoCalls, 0);
+  });
+
+  testWidgets('Bucket info button opens the status dialog via the manager',
+      (tester) async {
+    final manager = FakeKvManager();
+    manager.listBucketsImpl = () async => [_bucketStream('app-config')];
+    manager.bucketStatusImpl = (bucket) async => KvBucketStatus(
+          bucket: bucket,
+          history: 7,
+          storage: 'memory',
+          size: 4096,
+          values: 3,
+          ttl: const Duration(days: 14),
+          replicas: 3,
+        );
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: KvDashboard(manager: manager))),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('app-config'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Bucket info'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Bucket Info: app-config'), findsOneWidget);
+    expect(find.text('Storage: memory'), findsOneWidget);
+    expect(find.text('History Depth: 7'), findsOneWidget);
+    expect(find.text('TTL: 14 days'), findsOneWidget);
+    expect(find.text('Replicas: 3'), findsOneWidget);
   });
 
   testWidgets(

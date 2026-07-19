@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:dart_nats/dart_nats.dart' as nats show Consumer;
@@ -40,6 +42,38 @@ class JetStreamManager {
   Future<ConsumerInfo> consumerInfo(String streamName, String consumerName,
       {Duration timeout = const Duration(seconds: 5)}) {
     return _js.consumerInfo(streamName, consumerName, timeout: timeout);
+  }
+
+  /// Get up-to-date info for a single consumer, plus a handful of
+  /// `ConsumerConfig` fields `dart_nats` 1.2.3's `ConsumerInfo.fromJson`
+  /// doesn't parse even though the server always sends them (`ack_wait`,
+  /// `max_deliver`, `max_ack_pending`). Issues the same raw
+  /// `$JS.API.CONSUMER.INFO.<stream>.<consumer>` request `consumerInfo()`
+  /// makes internally, reusing `ConsumerInfo.fromJson` for everything it
+  /// already handles and reading the three missing fields off the same JSON
+  /// itself -- mirroring the raw-JSON bypass `KvManager.bucketStatus` uses
+  /// for the same kind of package-side parsing gap.
+  Future<ConsumerDetail> consumerDetail(
+      String streamName, String consumerName,
+      {Duration timeout = const Duration(seconds: 5)}) async {
+    final subject = '\$JS.API.CONSUMER.INFO.$streamName.$consumerName';
+    final response =
+        await client.request(subject, Uint8List(0), timeout: timeout);
+    final map = jsonDecode(response.string) as Map<String, dynamic>;
+    if (map['error'] != null) {
+      throw NatsException(map['error']['description'] as String);
+    }
+    final info = ConsumerInfo.fromJson(map);
+    final config = map['config'] as Map<String, dynamic>? ?? {};
+    final ackWaitNanos = config['ack_wait'] as int?;
+    return ConsumerDetail(
+      info: info,
+      ackWait: (ackWaitNanos != null && ackWaitNanos > 0)
+          ? Duration(microseconds: ackWaitNanos ~/ 1000)
+          : null,
+      maxDeliver: config['max_deliver'] as int?,
+      maxAckPending: config['max_ack_pending'] as int?,
+    );
   }
 
   /// Starts an ephemeral, auto-cleaning ordered consumer for browsing a
@@ -117,6 +151,23 @@ class JetStreamManager {
     lastAccountInfo = info;
     return info;
   }
+}
+
+/// A consumer's standard `ConsumerInfo` plus the ack-wait/max-deliver/
+/// max-ack-pending config fields `dart_nats` doesn't parse on its own -- see
+/// [JetStreamManager.consumerDetail].
+class ConsumerDetail {
+  final ConsumerInfo info;
+  final Duration? ackWait;
+  final int? maxDeliver;
+  final int? maxAckPending;
+
+  ConsumerDetail({
+    required this.info,
+    required this.ackWait,
+    required this.maxDeliver,
+    required this.maxAckPending,
+  });
 }
 
 /// Turns an error raised by a JetStream API call into a short, user-facing

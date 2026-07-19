@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'account_info_dialog.dart';
+import 'jetstream_consumer_detail_dialog.dart';
 import 'jetstream_consumer_dialog.dart';
 import 'jetstream_consumer_tail_view.dart';
 import 'jetstream_manager.dart';
@@ -256,51 +257,15 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
   }
 
   void _showConsumerDetail(ConsumerInfo info) {
-    final isPush = (info.config.deliverSubject ?? '').isNotEmpty;
+    final manager = widget.manager;
+    if (manager == null) return;
     showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(info.name.isEmpty ? '(ephemeral consumer)' : info.name),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Type: ${isPush ? 'Push' : 'Pull'}'),
-            Text('Ack Policy: ${info.config.ackPolicy}'),
-            Text('Deliver Policy: ${info.config.deliverPolicy}'),
-            if ((info.config.filterSubject ?? '').isNotEmpty)
-              Text('Filter Subject: ${info.config.filterSubject}'),
-            const SizedBox(height: 8),
-            Text('Pending: ${info.numPending}'),
-            Text('Waiting: ${info.numWaiting}'),
-            Text('Ack Pending: ${info.numAckPending}'),
-            Text('Redelivered: ${info.numRedelivered}'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: info.name.isEmpty
-                ? null
-                : () {
-                    Navigator.of(context).pop();
-                    _confirmDeleteConsumer(info.streamName, info.name);
-                  },
-            child: const Text('Delete'),
-          ),
-          TextButton(
-            onPressed: info.name.isEmpty
-                ? null
-                : () {
-                    Navigator.of(context).pop();
-                    _tailConsumer(info);
-                  },
-            child: const Text('Tail'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
+      builder: (context) => ConsumerDetailDialog(
+        initial: info,
+        onRefresh: () => manager.consumerDetail(info.streamName, info.name),
+        onDelete: () => _confirmDeleteConsumer(info.streamName, info.name),
+        onTail: () => _tailConsumer(info),
       ),
     );
   }

@@ -99,7 +99,7 @@ The left-hand pane lists all streams on the account. Selecting a stream shows it
 - **Delete Stream**: Permanently deletes the stream, its messages, and its consumers. Asks for confirmation first.
 
 ## Consumers
-Each stream's consumers are listed below its details. Tapping a consumer opens a detail dialog (type, ack policy, deliver policy, pending/redelivered counts) with **Delete** and **Tail** actions.
+Each stream's consumers are listed below its details. Tapping a consumer opens a detail dialog (type, ack policy, deliver policy, created time, ack-wait, max-deliver, max-ack-pending, and pending/waiting/ack-pending/redelivered counts) with its own manual Refresh, plus **Delete** and **Tail** actions.
 
 - **Create Consumer**: Opens a dialog to create a new consumer on the selected stream — durable name (leave blank for an ephemeral consumer), optional filter subject, push (with a deliver subject) or pull, ack policy, and deliver policy.
 - **Delete**: Removes the consumer. Asks for confirmation first. Only available for named (non-ephemeral) consumers.
@@ -120,6 +120,7 @@ The left-hand pane lists all KV buckets on the account. Selecting a bucket shows
 ## Keys
 Once a bucket is selected, its keys are listed with their current value, revision number, and last-updated time. The list updates live as keys change, including changes made by other clients.
 
+- **Bucket info** (info icon next to the bucket name): Shows the bucket's storage type, history depth, TTL, replica count, live value count, and size, with its own manual Refresh.
 - **Search Keys**: Narrows the list to keys whose name contains the search text (case-insensitive).
 - **Refresh keys** (refresh icon next to the bucket name): Manually reloads the key list, in addition to the automatic live updates.
 - **Put Value**: Opens a dialog to create a new key with a text/JSON value.
@@ -128,6 +129,7 @@ Once a bucket is selected, its keys are listed with their current value, revisio
     - **History**: Shows every past revision of the key (value and operation), newest first.
     - **Delete**: Adds a deletion tombstone. Past revisions are kept and still visible in History. Asks for confirmation first.
     - **Purge**: Permanently removes all history for the key, not just the current value. Asks for confirmation first.
+  - Right-clicking anywhere on a key row opens the same menu at the click point, rather than at the row's trailing edge.
 
 # Object Store
 When **Enable Object Store** is on (the default) and you're connected to a server or account with JetStream enabled (Object Store buckets are themselves backed by JetStream streams), an **Object Store** tab appears. It's a monitoring and management dashboard for Object Store buckets and the objects (blobs/files) inside them.

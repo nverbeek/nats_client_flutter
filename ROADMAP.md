@@ -38,11 +38,11 @@ This app depends on the official mainline `dart_nats` package (`^1.2.2`), includ
 - [x] **Connect via Ctrl+Enter** *(small standalone addition, not numbered)*: fires Connect while focus is in the Host, Port, or Subjects field.
 - [ ] **M27**: Stream Edit + richer `StreamConfig` exposure. Not started — see below.
 - [x] **M28**: Hex/Binary Payload View — Text/Hex toggle in Message Detail's Payload section, auto-selecting Hex whenever the payload isn't valid UTF-8.
-- [ ] **M29**: KV Bucket Info + Consumer Detail Depth. Not started — see below.
+- [x] **M29**: KV Bucket Info + Consumer Detail Depth — `KvManager.bucketStatus()` and `JetStreamManager.consumerDetail()` issue the same raw `$JS.API.STREAM.INFO`/`$JS.API.CONSUMER.INFO` requests `dart_nats` 1.2.3 makes internally and read TTL/replicas and ack-wait/max-deliver/max-ack-pending off the JSON directly, since the package's own typed classes don't parse those fields even though the server always sends them; Bucket Info dialog and a refreshable Consumer Detail dialog surface them.
 - [ ] **M30**: Upstream-First `dart_nats` Round (consumer pause/resume, filtered stream purge, Object Store streaming). Not started — see below.
 - [x] **M31**: Reconnect State Restoration (remaining half) — a `reconnectSignal` fired only on a real post-bounce reconnect (not the existing blip-tolerance) lets Browse Messages/Tail auto-retry out of a stuck error state and KV auto-refresh its selected bucket's keys/watch; healthy listings still use explicit Refresh, and an explicit Disconnect still fully resets everything.
 - [x] **M32**: Screenshot Border/Drop-Shadow Polish — subtle hairline border + soft drop shadow added to `Format-Screenshot`, all six `images/*.png` reprocessed.
-- [x] **Row Right-Click Context Menu** *(small standalone addition, not numbered)*: right-clicking a message row — on the Live Messages tab, JetStream Browse Messages, or JetStream Consumer Tail — opens the same action menu as that row's trailing overflow (⋮) button, anchored at the click point instead of the row's trailing edge.
+- [x] **Row Right-Click Context Menu** *(small standalone addition, not numbered)*: right-clicking a row — on the Live Messages tab, JetStream Browse Messages, JetStream Consumer Tail, or KV Store keys — opens the same action menu as that row's trailing overflow (⋮) button, anchored at the click point instead of the row's trailing edge.
 
 ---
 
@@ -191,22 +191,6 @@ The JetStream dashboard can only Create/Purge/Delete a stream — there's no way
 - [ ] Expose the additional `StreamConfig` fields above in that shared form, at both create and edit time.
 - [ ] Decide which fields are safe to change post-creation vs. which NATS itself rejects changing (e.g. storage type may not be changeable in place on some server versions) — surface the server's rejection message rather than assuming.
 - [ ] Unit/widget tests for the new fields + edit flow; live-server verification that an edited stream's new config is actually reflected server-side.
-
----
-
-## Milestone 29: KV Bucket Info + Consumer Detail Depth (Low/Medium Priority)
-
-### Objective
-Two related "show more of what the server already tracks" gaps. KV bucket rows show only ops count and byte size — no history depth, TTL, or storage type. The JetStream consumer detail dialog is a static snapshot with no Refresh and only parses a handful of `ConsumerConfig` fields (durable, deliverSubject, filterSubject, ackPolicy, deliverPolicy) — ackWait, maxDeliver, maxAckPending, and created time aren't surfaced even though the server returns them.
-
-### What `dart_nats` supports
-`KeyValue.status()` returns a `KeyValueStatus` with bucket config (`kv.dart`) — cheap addition to the bucket list/detail. Deeper `ConsumerInfo`/`ConsumerConfig` parsing may need `ConsumerInfo.fromJson` extended to read fields the server already sends — check whether this is an app-side parsing gap (fix it here, mirroring the Milestone 10 `accountInfo` bypass) or genuinely missing from the wire response before assuming an upstream fix is needed.
-
-### Implementation Checklist
-- [ ] Add a bucket-info affordance (icon button or expanded row) to the KV dashboard using `KeyValue.status()` — history, TTL, storage, replicas.
-- [ ] Add a Refresh button to the consumer detail dialog.
-- [ ] Extend consumer detail to show ackWait, maxDeliver, maxAckPending, and created time — extending `ConsumerConfig.fromJson`/`ConsumerInfo.fromJson` parsing app-side first; only pursue an upstream fix if the fields turn out to be missing from the wire response entirely, not just unparsed.
-- [ ] Unit/widget tests; live-server verification against a consumer with non-default ackWait/maxDeliver/maxAckPending.
 
 ---
 

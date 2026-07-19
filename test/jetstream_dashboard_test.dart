@@ -27,6 +27,7 @@ class FakeJetStreamManager extends JetStreamManager {
   Future<void> Function(String)? purgeStreamImpl;
   Future<void> Function(String, ConsumerConfig)? createConsumerImpl;
   Future<void> Function(String, String)? deleteConsumerImpl;
+  Future<ConsumerDetail> Function(String, String)? consumerDetailImpl;
 
   Future<AccountInfo> Function()? fetchAccountInfoImpl;
 
@@ -97,6 +98,30 @@ class FakeJetStreamManager extends JetStreamManager {
     if (deleteConsumerImpl != null) {
       return deleteConsumerImpl!(streamName, consumerName);
     }
+  }
+
+  @override
+  Future<ConsumerDetail> consumerDetail(String streamName, String consumerName,
+      {Duration? timeout}) {
+    if (consumerDetailImpl != null) {
+      return consumerDetailImpl!(streamName, consumerName);
+    }
+    return Future.value(ConsumerDetail(
+      info: ConsumerInfo(
+        type: '',
+        streamName: streamName,
+        name: consumerName,
+        created: '',
+        config: ConsumerConfig(ackPolicy: 'explicit', deliverPolicy: 'all'),
+        numPending: 0,
+        numWaiting: 0,
+        numAckPending: 0,
+        numRedelivered: 0,
+      ),
+      ackWait: null,
+      maxDeliver: null,
+      maxAckPending: null,
+    ));
   }
 }
 
@@ -529,6 +554,39 @@ void main() {
         tester.widget<TextButton>(find.widgetWithText(TextButton, 'Tail'));
     expect(deleteButton.onPressed, isNull);
     expect(tailButton.onPressed, isNull);
+  });
+
+  testWidgets(
+      'opening Consumer Detail fetches ack-wait/max-deliver/max-ack-pending via the manager',
+      (tester) async {
+    final manager = FakeJetStreamManager();
+    manager.listStreamsImpl = () async => [_stream('orders', messages: 3)];
+    final consumer = _consumer('billing-processor');
+    manager.listConsumersImpl = (_) async => [consumer];
+    manager.consumerDetailImpl = (streamName, consumerName) async {
+      expect(streamName, 'orders');
+      expect(consumerName, 'billing-processor');
+      return ConsumerDetail(
+        info: consumer,
+        ackWait: const Duration(seconds: 45),
+        maxDeliver: 5,
+        maxAckPending: 200,
+      );
+    };
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('orders'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('billing-processor'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ack Wait: 45s'), findsOneWidget);
+    expect(find.text('Max Deliver: 5'), findsOneWidget);
+    expect(find.text('Max Ack Pending: 200'), findsOneWidget);
   });
 
   testWidgets(
