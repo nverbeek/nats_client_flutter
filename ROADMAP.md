@@ -33,7 +33,7 @@ This app depends on the official mainline `dart_nats` package (`^1.2.2`), includ
 - [x] **M22**: Export & Replay Captured Messages to/from File.
 - [x] **M23**: Reconnect-Buffer Overflow Handling (`maxReconnectBuffer`).
 - [x] **M24**: Heartbeat Ping/Pong for Faster Dead-Connection Detection.
-- [ ] **M25**: Quick-Subscribe to Exact Subject from Message Row. Not started — see below.
+- [x] **M25**: Quick-Subscribe to Exact Subject from Message Row — a "Subscribe to This Subject" entry in the Live Messages row menu (`_buildRowMenuItems`/`_handleRowMenuSelection` in `lib/main.dart`) calls a new `_subscribeToExactSubject()`, which goes through the existing `_addSubscription()` live-subscribe path with the row's literal `message.subject` and no queue group, leaving any wider subscription that delivered the row untouched and surfacing a SnackBar noting the possible double-delivery; the menu entry itself is hidden once an exact subscription for that subject already exists.
 - [x] **M26**: Adopted `dart_nats` JetStream/KV Bug Fixes (upstream PR #45; app now depends on the resulting `dart_nats` 1.2.2 release).
 - [x] **Connect via Ctrl+Enter** *(small standalone addition, not numbered)*: fires Connect while focus is in the Host, Port, or Subjects field.
 - [x] **M27**: Stream Edit + richer `StreamConfig` exposure — `StreamConfigDialog` (renamed from `CreateStreamDialog`) now doubles as an Edit form, pre-filled via a new `JetStreamManager.streamDetail()` that reads the fields `StreamInfo.fromJson` drops off the raw JSON (same pattern as M29's `consumerDetail()`/`bucketStatus()`), and exposes storage/retention/discard policy, size/count limits, and the allow-rollup/deny-delete/deny-purge flags at both create and edit time; edit submits via a new `JetStreamManager.updateStream()`, with any server-side rejection (e.g. an in-place storage-type change) surfacing through the existing error-SnackBar path rather than being pre-guessed client-side.
@@ -154,27 +154,6 @@ Milestone 11 already tags every message with its originating subscription's colo
 - [ ] Compute a rolling rate per `sid` from existing arrival timestamps — no new `dart_nats` data needed, this is purely a local aggregation over what's already tagged.
 - [ ] If implemented inside the chip row itself, confirm it doesn't reintroduce the offstage-measurement/`OverflowBox`/`Tooltip` pitfalls that `subject_chips_row.dart`'s own doc comments describe from building its overflow-collapse logic.
 - [ ] Unit tests for the rate computation (fake clock) + widget/live-server verification that the displayed rate roughly tracks a known publish rate from a second test client.
-
----
-
-## Milestone 25: Quick-Subscribe to Exact Subject from Message Row (Low/Medium Priority)
-
-### Objective
-A common exploration pattern: the user subscribes to a wide wildcard subject (e.g. `orders.>`) because they don't yet know the exact subject taxonomy, then wants to narrow down to just one or two specific subjects they've spotted going by. Today that means opening the Subscription Manager dialog and typing the exact subject out by hand. This milestone adds a shortcut directly on a Live Messages row — "Subscribe to this exact subject" — that adds `message.subject` as its own new subscription via the existing add-subscription path, with the user then free to remove the original wildcard chip to shrink down to just what they care about, live, with no reconnect.
-
-This is a complement to the existing Filter box, not a replacement: Filter narrows what's already been received and rendered (client-side only); this feature narrows what the app actually subscribes to and receives from the server in the first place.
-
-### Desired Behavior
-- New row-menu entry (e.g. "Subscribe to This Subject"), using the row's literal `message.subject` — not a pattern/wildcard guess.
-- Adding it goes through the same live-subscribe path Milestone 11 already built, so it takes effect without needing to reconnect or open the full manager dialog.
-- No auto-removal of the wider subscription that originally delivered the message — surface a brief SnackBar noting the new subscription was added and that the existing wildcard subscription still applies, rather than let duplicate delivery look like a bug.
-- Disabled/hidden for a row whose subject is already covered by an existing *exact* subscription.
-
-### Implementation Checklist
-- [ ] Add the row-menu entry in `lib/main.dart`'s message popup menu, reusing `_addSubscription`/`SubscriptionInfo` with the row's exact subject and no queue group.
-- [ ] Surface the "you may now receive this subject twice until you remove the wildcard" caveat.
-- [ ] Guard against adding a literal duplicate of a subject that's already its own exact subscription.
-- [ ] Unit/widget test coverage plus a live-server verification pass: subscribe wide, receive a message, use the shortcut, confirm the new exact subscription is active server-side, then remove the wildcard chip and confirm delivery continues uninterrupted for the exact subject.
 
 ---
 

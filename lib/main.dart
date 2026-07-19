@@ -1436,6 +1436,25 @@ class _MyHomePageState extends State<MyHomePage>
     }
   }
 
+  /// Milestone 25: adds an exact-subject subscription for [subject] from a
+  /// Live Messages row's "Subscribe to This Subject" menu entry, going
+  /// through the same live-subscribe path [_addSubscription] already gives
+  /// the chip row's "+" and the manager dialog. Unlike those, this always
+  /// leaves whatever wider subscription originally delivered the row's
+  /// message in place -- the caller doesn't know (and shouldn't guess)
+  /// whether removing it is wanted, so a SnackBar spells out the resulting
+  /// possible-double-delivery rather than letting it look like a bug.
+  void _subscribeToExactSubject(String subject) {
+    final alreadyExact =
+        subscriptions.any((info) => info.subject == subject);
+    _addSubscription(subject, null);
+    if (mounted && !alreadyExact) {
+      showSnackBar('Subscribed to "$subject" -- any existing wider '
+          'subscription covering it is still active, so you may see it '
+          'twice until removed.');
+    }
+  }
+
   /// Removes a subscription, live-unsubscribing immediately if connected.
   /// This is what a chip's delete icon (x) calls directly -- no confirmation,
   /// matching how the rest of this toolbar behaves.
@@ -2606,7 +2625,20 @@ class _MyHomePageState extends State<MyHomePage>
                     color: Theme.of(context).disabledColor,
                   ),
           ),
-        )
+        ),
+        // Milestone 25: lets the user narrow a wide/wildcard subscription
+        // down to one exact subject they've spotted going by, without
+        // opening the full Subscription Manager. Hidden (not just disabled)
+        // once an exact subscription for this subject already exists --
+        // re-adding it would just hit _addSubscription's own "Already
+        // subscribed" guard for no benefit.
+        if (filteredItems[index].subject != null &&
+            !subscriptions
+                .any((info) => info.subject == filteredItems[index].subject))
+          const PopupMenuItem(
+            value: 'subscribe_to_subject',
+            child: Text('Subscribe to This Subject'),
+          ),
       ];
     } catch (e) {
       // If there's an error accessing context, return empty list
@@ -2670,6 +2702,12 @@ class _MyHomePageState extends State<MyHomePage>
             } else {
               showSnackBar('This message has no replyTo subject');
             }
+          }
+          break;
+        case 'subscribe_to_subject':
+          final subject = filteredItems[index].subject;
+          if (subject != null) {
+            _subscribeToExactSubject(subject);
           }
           break;
       }
