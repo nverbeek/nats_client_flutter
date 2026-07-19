@@ -37,7 +37,7 @@ This app depends on the official mainline `dart_nats` package (`^1.2.2`), includ
 - [x] **M26**: Adopted `dart_nats` JetStream/KV Bug Fixes (upstream PR #45; app now depends on the resulting `dart_nats` 1.2.2 release).
 - [x] **Connect via Ctrl+Enter** *(small standalone addition, not numbered)*: fires Connect while focus is in the Host, Port, or Subjects field.
 - [ ] **M27**: Stream Edit + richer `StreamConfig` exposure. Not started — see below.
-- [ ] **M28**: Hex/Binary Payload View. Not started — see below.
+- [x] **M28**: Hex/Binary Payload View — Text/Hex toggle in Message Detail's Payload section, auto-selecting Hex whenever the payload isn't valid UTF-8.
 - [ ] **M29**: KV Bucket Info + Consumer Detail Depth. Not started — see below.
 - [ ] **M30**: Upstream-First `dart_nats` Round (consumer pause/resume, filtered stream purge, Object Store streaming). Not started — see below.
 - [x] **M31**: Reconnect State Restoration (remaining half) — a `reconnectSignal` fired only on a real post-bounce reconnect (not the existing blip-tolerance) lets Browse Messages/Tail auto-retry out of a stuck error state and KV auto-refresh its selected bucket's keys/watch; healthy listings still use explicit Refresh, and an explicit Disconnect still fully resets everything.
@@ -190,18 +190,6 @@ The JetStream dashboard can only Create/Purge/Delete a stream — there's no way
 - [ ] Expose the additional `StreamConfig` fields above in that shared form, at both create and edit time.
 - [ ] Decide which fields are safe to change post-creation vs. which NATS itself rejects changing (e.g. storage type may not be changeable in place on some server versions) — surface the server's rejection message rather than assuming.
 - [ ] Unit/widget tests for the new fields + edit flow; live-server verification that an edited stream's new config is actually reflected server-side.
-
----
-
-## Milestone 28: Hex/Binary Payload View (Low/Medium Priority)
-
-### Objective
-Invalid UTF-8 payloads (protobuf, compressed data, arbitrary binary) currently render as replacement characters (U+FFFD) in the Message Detail dialog with no way to see the actual bytes — a real gap for testers inspecting binary wire formats.
-
-### Implementation Checklist
-- [ ] Add a hex+ASCII toggle to the Message Detail dialog's Payload section (`message.byte` is already available; no new data needed).
-- [ ] Decide layout (side-by-side hex/ASCII columns vs. a toggle between text and hex views) and whether it should auto-detect (payload isn't valid UTF-8) or always be available as a manual option.
-- [ ] Unit/widget tests for the hex rendering; visual verification with a real binary payload (e.g. protobuf) published from a second client.
 
 ---
 

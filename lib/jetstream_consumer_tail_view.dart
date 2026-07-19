@@ -194,6 +194,7 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
         headerVersion: headerVersion,
         headers: headers,
         formattedJson: formattedJson,
+        payloadBytes: message.byte,
       ),
     );
   }

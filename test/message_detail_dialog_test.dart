@@ -115,6 +115,132 @@ void main() {
     expect(find.textContaining('no payload'), findsNothing);
   });
 
+  testWidgets('no Text/Hex toggle when payloadBytes is not provided',
+      (tester) async {
+    await tester.pumpWidget(withThemeModel(
+      const MaterialApp(
+        home: Scaffold(
+          body: MessageDetailDialog(
+            headerVersion: '',
+            headers: {},
+            formattedJson: '{"a":1}',
+          ),
+        ),
+      ),
+    ));
+
+    expect(find.byType(SegmentedButton<bool>), findsNothing);
+  });
+
+  testWidgets(
+      'defaults to Text view and shows a manual Hex toggle for a valid UTF-8 payload',
+      (tester) async {
+    await tester.pumpWidget(withThemeModel(
+      MaterialApp(
+        home: Scaffold(
+          body: MessageDetailDialog(
+            headerVersion: '',
+            headers: const {},
+            formattedJson: '{\n    "a": 1\n}',
+            payloadBytes: Uint8List.fromList('{"a":1}'.codeUnits),
+          ),
+        ),
+      ),
+    ));
+
+    expect(find.byType(SegmentedButton<bool>), findsOneWidget);
+    expect(find.textContaining('"a": 1', findRichText: true), findsOneWidget);
+
+    await tester.tap(find.text('Hex'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('7b 22 61'), findsOneWidget); // `{"a`
+  });
+
+  testWidgets('auto-selects Hex view for a payload that is not valid UTF-8',
+      (tester) async {
+    await tester.pumpWidget(withThemeModel(
+      MaterialApp(
+        home: Scaffold(
+          body: MessageDetailDialog(
+            headerVersion: '',
+            headers: const {},
+            formattedJson: '��',
+            payloadBytes: Uint8List.fromList([0xFF, 0xFE]),
+          ),
+        ),
+      ),
+    ));
+
+    expect(find.textContaining('ff fe'), findsOneWidget);
+
+    await tester.tap(find.text('Text'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('ff fe'), findsNothing);
+  });
+
+  testWidgets(
+      'Hex view background matches the Text/JSON view background (HighlightView\'s theme paints colorScheme.surface behind the code, so a bare/transparent Hex view would look inconsistent)',
+      (tester) async {
+    await tester.pumpWidget(withThemeModel(
+      MaterialApp(
+        home: Scaffold(
+          body: MessageDetailDialog(
+            headerVersion: '',
+            headers: const {},
+            formattedJson: '��',
+            payloadBytes: Uint8List.fromList([0xFF, 0xFE]),
+          ),
+        ),
+      ),
+    ));
+
+    final context = tester.element(find.byType(MessageDetailDialog));
+    final expectedBackground = Theme.of(context).colorScheme.surface;
+
+    final container = tester
+        .widget<Container>(find.byKey(const Key('hexPayloadBackground')));
+
+    expect(container.color, expectedBackground);
+  });
+
+  testWidgets('copy button copies the hex dump while the Hex view is active',
+      (tester) async {
+    final copiedData = <ClipboardData>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copiedData.add(ClipboardData(text: call.arguments['text'] as String));
+        }
+        return null;
+      },
+    );
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+
+    await tester.pumpWidget(withThemeModel(
+      MaterialApp(
+        home: Scaffold(
+          body: MessageDetailDialog(
+            headerVersion: '',
+            headers: const {},
+            formattedJson: 'Hi!',
+            payloadBytes: Uint8List.fromList('Hi!'.codeUnits),
+          ),
+        ),
+      ),
+    ));
+
+    await tester.tap(find.text('Hex'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.copy));
+    await tester.pump();
+
+    expect(copiedData.single.text, contains('48 69 21'));
+  });
+
   testWidgets('tapping copy copies the payload and shows "Copied!" feedback',
       (tester) async {
     final copiedData = <ClipboardData>[];

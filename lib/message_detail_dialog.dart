@@ -16,6 +16,11 @@ class MessageDetailDialog extends StatefulWidget {
   // this row is shown here whenever the data is available, regardless of
   // that toggle.
   final DateTime? capturedAt;
+  // Raw payload bytes, if available -- `null` for the handful of existing
+  // call sites/tests that only ever had [formattedJson]. When present, the
+  // Payload section gains a Text/Hex toggle, defaulting to Hex whenever the
+  // payload isn't valid UTF-8 (e.g. protobuf, compressed data).
+  final Uint8List? payloadBytes;
 
   const MessageDetailDialog({
     super.key,
@@ -23,6 +28,7 @@ class MessageDetailDialog extends StatefulWidget {
     required this.headers,
     required this.formattedJson,
     this.capturedAt,
+    this.payloadBytes,
   });
 
   @override
@@ -36,6 +42,13 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
   _CopiedSection? _copiedSection;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
+  late bool _showHex;
+
+  // Computed lazily (only if the Hex view is actually opened) and only once
+  // per dialog, since `payloadBytes` never changes for the lifetime of this
+  // dialog instance.
+  late final String _hexDump =
+      widget.payloadBytes != null ? formatHexDump(widget.payloadBytes!) : '';
 
   @override
   void initState() {
@@ -51,6 +64,11 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
       parent: _animationController,
       curve: Curves.easeInOut,
     ));
+    // Auto-detect: default to the Hex view whenever the payload isn't valid
+    // UTF-8 (protobuf, compressed data, etc). Always a manual toggle either
+    // way once the dialog is open.
+    _showHex = widget.payloadBytes != null &&
+        !isValidUtf8(widget.payloadBytes!);
   }
 
   @override
@@ -270,11 +288,36 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
                 ),
               ),
             if (widget.formattedJson.isNotEmpty) ...[
-              const Padding(
-                padding: EdgeInsets.fromLTRB(0, 10, 0, 0),
-                child: Text(
-                  'Payload',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Payload',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    if (widget.payloadBytes != null)
+                      SegmentedButton<bool>(
+                        segments: const [
+                          ButtonSegment(
+                            value: false,
+                            label: Text('Text'),
+                          ),
+                          ButtonSegment(
+                            value: true,
+                            label: Text('Hex'),
+                          ),
+                        ],
+                        selected: {_showHex},
+                        showSelectedIcon: false,
+                        style: const ButtonStyle(
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onSelectionChanged: (selection) =>
+                            setState(() => _showHex = selection.first),
+                      ),
+                  ],
                 ),
               ),
               Padding(
@@ -283,21 +326,44 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
                   children: [
                     SizedBox(
                       width: double.infinity,
-                      child: HighlightView(
-                        widget.formattedJson,
-                        language: 'json',
-                        theme: getCustomHighlightTheme(
-                          context,
-                          isDark:
-                              Provider.of<ThemeModel>(context, listen: false)
-                                  .isDark(),
-                        ),
-                        padding: const EdgeInsets.all(10),
-                        textStyle: const TextStyle(
-                            fontSize: 14,
-                            fontFamily:
-                                'SFMono-Regular,Consolas,Liberation Mono,Menlo,monospace'),
-                      ),
+                      child: _showHex
+                          ? Container(
+                              key: const Key('hexPayloadBackground'),
+                              width: double.infinity,
+                              color: Theme.of(context).colorScheme.surface,
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(10),
+                                  child: SelectableText(
+                                    _hexDump,
+                                    style: TextStyle(
+                                        fontSize: 14,
+                                        color: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium
+                                            ?.color,
+                                        fontFamily:
+                                            'SFMono-Regular,Consolas,Liberation Mono,Menlo,monospace'),
+                                  ),
+                                ),
+                              ),
+                            )
+                          : HighlightView(
+                              widget.formattedJson,
+                              language: 'json',
+                              theme: getCustomHighlightTheme(
+                                context,
+                                isDark: Provider.of<ThemeModel>(context,
+                                        listen: false)
+                                    .isDark(),
+                              ),
+                              padding: const EdgeInsets.all(10),
+                              textStyle: const TextStyle(
+                                  fontSize: 14,
+                                  fontFamily:
+                                      'SFMono-Regular,Consolas,Liberation Mono,Menlo,monospace'),
+                            ),
                     ),
                     Positioned(
                       top: 8,
@@ -309,8 +375,9 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
                             _copiedBadge(),
                           _copyButton(
                             onTap: () {
-                              Clipboard.setData(
-                                  ClipboardData(text: widget.formattedJson));
+                              Clipboard.setData(ClipboardData(
+                                  text:
+                                      _showHex ? _hexDump : widget.formattedJson));
                               _showCopiedFeedback(_CopiedSection.payload);
                             },
                           ),

@@ -26,6 +26,49 @@ final Expando<String> _decodedMessageText = Expando<String>();
 String decodeMessageTextFor(Message<dynamic> message) =>
     _decodedMessageText[message] ??= decodeMessageText(message.byte);
 
+/// Whether [bytes] is complete, strictly-valid UTF-8 (no invalid sequences,
+/// no truncated multi-byte tail). Only called once, when a user opens
+/// Message Detail for a single message -- not on the per-message ingest/
+/// render path -- so a strict decode-and-catch here is fine even though
+/// [decodeMessageText] deliberately avoids throwing for that hotter path.
+bool isValidUtf8(Uint8List bytes) {
+  try {
+    utf8.decode(bytes, allowMalformed: false);
+    return true;
+  } on FormatException {
+    return false;
+  }
+}
+
+/// Renders [bytes] as a classic hex + ASCII dump ([bytesPerRow] bytes per
+/// line): an 8-digit hex offset, each byte in hex with a mid-row gap, then
+/// the same bytes as ASCII (non-printable bytes shown as `.`).
+String formatHexDump(Uint8List bytes, {int bytesPerRow = 16}) {
+  final buffer = StringBuffer();
+  for (var offset = 0; offset < bytes.length; offset += bytesPerRow) {
+    final end =
+        (offset + bytesPerRow < bytes.length) ? offset + bytesPerRow : bytes.length;
+    final row = bytes.sublist(offset, end);
+
+    buffer.write(offset.toRadixString(16).padLeft(8, '0'));
+    buffer.write(' ');
+
+    for (var i = 0; i < bytesPerRow; i++) {
+      if (i % 8 == 0) buffer.write(' ');
+      buffer.write(
+          i < row.length ? row[i].toRadixString(16).padLeft(2, '0') : '  ');
+      buffer.write(' ');
+    }
+
+    buffer.write(' ');
+    for (final byte in row) {
+      buffer.write(byte >= 0x20 && byte < 0x7f ? String.fromCharCode(byte) : '.');
+    }
+    if (end < bytes.length) buffer.write('\n');
+  }
+  return buffer.toString();
+}
+
 /// Compact rendering of a count for tight UI spots like the Pause button's
 /// buffered-message badge: `999` -> `"999"`, `1000` -> `"1k"`,
 /// `1100` -> `"1.1k"`, `12345` -> `"12k"` — short enough to stay readable

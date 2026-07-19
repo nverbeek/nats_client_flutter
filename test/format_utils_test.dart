@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
@@ -226,6 +227,55 @@ void main() {
       expect(isValidLiteralNatsSubject(''), isFalse);
       expect(isValidLiteralNatsSubject('orders..new'), isFalse);
       expect(isValidLiteralNatsSubject('orders new'), isFalse);
+    });
+  });
+
+  group('isValidUtf8', () {
+    test('accepts plain ASCII and multi-byte UTF-8', () {
+      expect(isValidUtf8(Uint8List.fromList('hello'.codeUnits)), isTrue);
+      expect(isValidUtf8(Uint8List.fromList(utf8.encode('héllo 🎉'))), isTrue);
+    });
+
+    test('accepts an empty payload', () {
+      expect(isValidUtf8(Uint8List(0)), isTrue);
+    });
+
+    test('rejects an invalid byte sequence', () {
+      expect(isValidUtf8(Uint8List.fromList([0xFF, 0xFE, 0x00, 0x01])),
+          isFalse);
+    });
+
+    test('rejects a truncated multi-byte sequence', () {
+      // 0xC3 alone starts a 2-byte UTF-8 sequence with no continuation byte.
+      expect(isValidUtf8(Uint8List.fromList([0xC3])), isFalse);
+    });
+  });
+
+  group('formatHexDump', () {
+    test('renders a short payload as one row with offset/hex/ascii', () {
+      final dump =
+          formatHexDump(Uint8List.fromList('Hi!'.codeUnits));
+      expect(dump, startsWith('00000000'));
+      expect(dump, contains('48 69 21'));
+      expect(dump, endsWith('Hi!'));
+    });
+
+    test('renders non-printable bytes as dots in the ASCII column', () {
+      final dump = formatHexDump(Uint8List.fromList([0x00, 0xFF, 0x41]));
+      expect(dump, contains('00 ff 41'));
+      expect(dump, endsWith('..A'));
+    });
+
+    test('wraps to a second row past bytesPerRow bytes', () {
+      final bytes = Uint8List.fromList(List.generate(17, (i) => i));
+      final dump = formatHexDump(bytes, bytesPerRow: 16);
+      final lines = dump.split('\n');
+      expect(lines, hasLength(2));
+      expect(lines[1], startsWith('00000010'));
+    });
+
+    test('handles an empty payload as an empty string', () {
+      expect(formatHexDump(Uint8List(0)), isEmpty);
     });
   });
 

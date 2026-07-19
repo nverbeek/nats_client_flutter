@@ -1917,6 +1917,7 @@ class _MyHomePageState extends State<MyHomePage>
           headers: headers,
           formattedJson: formattedJson,
           capturedAt: _capturedAtFor(message),
+          payloadBytes: message.byte,
         );
       },
     );

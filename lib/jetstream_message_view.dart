@@ -375,6 +375,7 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
         headerVersion: headerVersion,
         headers: headers,
         formattedJson: formattedJson,
+        payloadBytes: message.byte,
       ),
     );
   }
