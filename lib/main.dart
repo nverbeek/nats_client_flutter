@@ -1455,8 +1455,7 @@ class _MyHomePageState extends State<MyHomePage>
   /// whether removing it is wanted, so a SnackBar spells out the resulting
   /// possible-double-delivery rather than letting it look like a bug.
   void _subscribeToExactSubject(String subject) {
-    final alreadyExact =
-        subscriptions.any((info) => info.subject == subject);
+    final alreadyExact = subscriptions.any((info) => info.subject == subject);
     _addSubscription(subject, null);
     if (mounted && !alreadyExact) {
       showSnackBar('Subscribed to "$subject" -- any existing wider '

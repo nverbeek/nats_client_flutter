@@ -19,7 +19,8 @@ void main() {
     // the label and hint use the same "Key" text and both remain in the
     // tree (same issue noted in send_message_dialog_test.dart). The Key
     // field is the first of the two, so target it positionally instead.
-    final keyField = tester.widget<TextFormField>(find.byType(TextFormField).at(0));
+    final keyField =
+        tester.widget<TextFormField>(find.byType(TextFormField).at(0));
     expect(keyField.enabled, isTrue);
     expect(find.textContaining('Revision #'), findsNothing);
     expect(find.text('Put Value'), findsOneWidget);
@@ -65,8 +66,7 @@ void main() {
 
     await tester.enterText(
         find.widgetWithText(TextFormField, 'Key'), 'db.port');
-    await tester.enterText(
-        find.widgetWithText(TextFormField, 'Value'), '5432');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Value'), '5432');
     await tester.tap(find.widgetWithText(TextButton, 'Put'));
     await tester.pump();
 
@@ -90,7 +90,8 @@ void main() {
       ),
     ));
 
-    final keyField = tester.widget<TextFormField>(find.byType(TextFormField).at(0));
+    final keyField =
+        tester.widget<TextFormField>(find.byType(TextFormField).at(0));
     expect(keyField.enabled, isFalse);
     expect(keyField.controller?.text, 'db.port');
     expect(find.text('Edit Value'), findsOneWidget);
@@ -117,8 +118,7 @@ void main() {
       ),
     ));
 
-    await tester.enterText(
-        find.widgetWithText(TextFormField, 'Value'), '5433');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Value'), '5433');
     await tester.tap(find.widgetWithText(TextButton, 'Save'));
     await tester.pump();
 

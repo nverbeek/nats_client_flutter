@@ -119,8 +119,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('2 message(s) parsed.'), findsOneWidget);
-    expect(
-        find.text('1 line(s) could not be parsed and will be skipped.'),
+    expect(find.text('1 line(s) could not be parsed and will be skipped.'),
         findsOneWidget);
 
     final startButton = tester

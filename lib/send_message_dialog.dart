@@ -146,7 +146,8 @@ class _SendMessageDialogState extends State<SendMessageDialog> {
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    Text('Headers', style: Theme.of(context).textTheme.labelLarge),
+                    Text('Headers',
+                        style: Theme.of(context).textTheme.labelLarge),
                     const Spacer(),
                     TextButton.icon(
                       onPressed: _addHeaderRow,
@@ -168,16 +169,14 @@ class _SendMessageDialogState extends State<SendMessageDialog> {
                           alignment: Alignment.centerLeft,
                           child: Text(
                             'No headers',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(
-                                  color: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall
-                                      ?.color
-                                      ?.withValues(alpha: 0.6),
-                                ),
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.color
+                                          ?.withValues(alpha: 0.6),
+                                    ),
                           ),
                         )
                       : ListView.builder(

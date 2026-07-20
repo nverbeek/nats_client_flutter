@@ -126,8 +126,7 @@ void main() {
     // native save-file dialog) and verify the bytes match exactly,
     // confirming chunk reassembly and the SHA-256 digest check both work
     // end-to-end against a real server.
-    final downloaded =
-        await directManager.getObject(bucketName, objectName);
+    final downloaded = await directManager.getObject(bucketName, objectName);
     expect(downloaded, isNotNull);
     expect(downloaded, orderedEquals(uploadedBytes));
 

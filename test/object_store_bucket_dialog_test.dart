@@ -6,8 +6,7 @@ void main() {
   Widget buildDialog(
       void Function(String, String, int, int, Duration?) onCreate) {
     return MaterialApp(
-      home: Scaffold(
-          body: CreateObjectStoreBucketDialog(onCreate: onCreate)),
+      home: Scaffold(body: CreateObjectStoreBucketDialog(onCreate: onCreate)),
     );
   }
 

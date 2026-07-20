@@ -725,8 +725,7 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(),
           onPressed: () async {
-            await Clipboard.setData(
-                ClipboardData(text: subjects.join(', ')));
+            await Clipboard.setData(ClipboardData(text: subjects.join(', ')));
             _showSnack(
                 'Copied ${subjects.length} subject${subjects.length == 1 ? '' : 's'} to clipboard.');
           },

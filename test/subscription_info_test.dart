@@ -5,7 +5,8 @@ void main() {
   group('encodeSubscriptionList / decodeSubscriptionList', () {
     test('round-trips subject and queue group', () {
       final original = [
-        SubscriptionInfo(subject: 'orders.*', queueGroup: 'workers', colorIndex: 0),
+        SubscriptionInfo(
+            subject: 'orders.*', queueGroup: 'workers', colorIndex: 0),
         SubscriptionInfo(subject: 'alerts', colorIndex: 1),
       ];
 
@@ -32,15 +33,16 @@ void main() {
       expect(decoded.single.sid, isNull);
     });
 
-    test('assigns sequential colorIndex from startColorIndex in list order', () {
+    test('assigns sequential colorIndex from startColorIndex in list order',
+        () {
       final original = [
         SubscriptionInfo(subject: 'a', colorIndex: 0),
         SubscriptionInfo(subject: 'b', colorIndex: 0),
         SubscriptionInfo(subject: 'c', colorIndex: 0),
       ];
 
-      final decoded =
-          decodeSubscriptionList(encodeSubscriptionList(original), startColorIndex: 7);
+      final decoded = decodeSubscriptionList(encodeSubscriptionList(original),
+          startColorIndex: 7);
 
       expect(decoded.map((s) => s.colorIndex).toList(), [7, 8, 9]);
     });
@@ -59,8 +61,7 @@ void main() {
     });
 
     test('assigns sequential colorIndex starting at startColorIndex', () {
-      final migrated =
-          migrateFromLegacySubject('a,b,c', startColorIndex: 2);
+      final migrated = migrateFromLegacySubject('a,b,c', startColorIndex: 2);
 
       expect(migrated.map((s) => s.colorIndex).toList(), [2, 3, 4]);
     });
@@ -75,7 +76,8 @@ void main() {
   group('resolveSubscriptionColor', () {
     test('cycles the palette when colorIndex exceeds palette length', () {
       final colorAtZero = resolveSubscriptionColor(0, true);
-      final colorWrapped = resolveSubscriptionColor(8, true); // dark palette has 8 entries
+      final colorWrapped =
+          resolveSubscriptionColor(8, true); // dark palette has 8 entries
       expect(colorWrapped, colorAtZero);
     });
 

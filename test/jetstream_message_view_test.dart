@@ -48,7 +48,8 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  Widget buildView(FakeJetStreamManager manager, {Listenable? reconnectSignal}) {
+  Widget buildView(FakeJetStreamManager manager,
+      {Listenable? reconnectSignal}) {
     return MaterialApp(
       home: Scaffold(
         body: JetStreamMessageView(
@@ -71,8 +72,8 @@ void main() {
     // Fill well past one viewport (rows are a fixed 56px; the 600px test
     // surface shows ~10).
     for (var i = 0; i < 30; i++) {
-      manager.incoming.add(makeMessage('orders.$i', 'payload $i',
-          manager.client));
+      manager.incoming
+          .add(makeMessage('orders.$i', 'payload $i', manager.client));
     }
     // One flush interval + a frame for the insert.
     await tester.pump(const Duration(milliseconds: 50));
@@ -105,8 +106,8 @@ void main() {
     final manager = FakeJetStreamManager();
     final reconnectSignal = ValueNotifier<int>(0);
 
-    await tester.pumpWidget(
-        buildView(manager, reconnectSignal: reconnectSignal));
+    await tester
+        .pumpWidget(buildView(manager, reconnectSignal: reconnectSignal));
     await tester.pump();
 
     manager.incoming.addError(Exception('createConsumer: not connected'));
@@ -130,8 +131,8 @@ void main() {
     final manager = FakeJetStreamManager();
     final reconnectSignal = ValueNotifier<int>(0);
 
-    await tester.pumpWidget(
-        buildView(manager, reconnectSignal: reconnectSignal));
+    await tester
+        .pumpWidget(buildView(manager, reconnectSignal: reconnectSignal));
     await tester.pump();
 
     manager.incoming.add(makeMessage('orders.1', 'payload', manager.client));

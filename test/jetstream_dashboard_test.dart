@@ -381,9 +381,7 @@ void main() {
     // (partial) StreamInfo the stream list already had.
     final storageDropdown =
         tester.widget<DropdownButtonFormField<String>>(find.byWidgetPredicate(
-      (w) =>
-          w is DropdownButtonFormField<String> &&
-          w.initialValue == 'memory',
+      (w) => w is DropdownButtonFormField<String> && w.initialValue == 'memory',
     ));
     expect(storageDropdown.initialValue, 'memory');
 
@@ -417,7 +415,8 @@ void main() {
     await tester.pumpAndSettle();
 
     final snackBar = tester.widget<SnackBar>(find.byType(SnackBar));
-    final colorScheme = Theme.of(tester.element(find.byType(SnackBar))).colorScheme;
+    final colorScheme =
+        Theme.of(tester.element(find.byType(SnackBar))).colorScheme;
     expect(snackBar.backgroundColor, colorScheme.error);
     final content = snackBar.content as Text;
     expect(content.style?.color, colorScheme.onError);
@@ -525,8 +524,7 @@ void main() {
 
     expect(find.textContaining('JetStream is unavailable'), findsOneWidget);
 
-    manager.listConsumersImpl =
-        (_) async => [_consumer('billing-processor')];
+    manager.listConsumersImpl = (_) async => [_consumer('billing-processor')];
     await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
 
@@ -602,7 +600,8 @@ void main() {
     expect(browseButton.onPressed, isNull);
   });
 
-  testWidgets('an ephemeral consumer hides its row delete icon and disables '
+  testWidgets(
+      'an ephemeral consumer hides its row delete icon and disables '
       'Delete/Tail in its detail dialog', (tester) async {
     final manager = FakeJetStreamManager();
     manager.listStreamsImpl = () async => [_stream('orders', messages: 3)];
@@ -667,8 +666,7 @@ void main() {
       (tester) async {
     final manager = FakeJetStreamManager();
     manager.listStreamsImpl = () async => [_stream('orders', messages: 3)];
-    manager.listConsumersImpl =
-        (_) async => [_consumer('billing-processor')];
+    manager.listConsumersImpl = (_) async => [_consumer('billing-processor')];
 
     await tester.pumpWidget(
       MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
@@ -694,8 +692,7 @@ void main() {
       (tester) async {
     final manager = FakeJetStreamManager();
     manager.listStreamsImpl = () async => [_stream('orders', messages: 3)];
-    manager.listConsumersImpl =
-        (_) async => [_consumer('billing-processor')];
+    manager.listConsumersImpl = (_) async => [_consumer('billing-processor')];
 
     await tester.pumpWidget(
       MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
@@ -782,7 +779,8 @@ void main() {
         (tester) async {
       final manager = FakeJetStreamManager();
       manager.listStreamsImpl = () async => [
-            _stream('orders', messages: 5, subjects: ['orders.new', 'orders.updated'])
+            _stream('orders',
+                messages: 5, subjects: ['orders.new', 'orders.updated'])
           ];
 
       await tester.pumpWidget(
@@ -803,8 +801,8 @@ void main() {
         (tester) async {
       final manyLegit = List<String>.generate(20, (i) => 'orders.subject$i');
       final manager = FakeJetStreamManager();
-      manager.listStreamsImpl = () async =>
-          [_stream('orders', messages: 5, subjects: manyLegit)];
+      manager.listStreamsImpl =
+          () async => [_stream('orders', messages: 5, subjects: manyLegit)];
 
       await tester.pumpWidget(
         MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
@@ -877,7 +875,8 @@ void main() {
         (tester) async {
       final manager = FakeJetStreamManager();
       manager.listStreamsImpl = () async => [
-            _stream('orders', messages: 5, subjects: ['orders.new', 'orders.updated'])
+            _stream('orders',
+                messages: 5, subjects: ['orders.new', 'orders.updated'])
           ];
 
       final copiedData = <String>[];

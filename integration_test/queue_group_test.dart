@@ -84,7 +84,9 @@ void main() {
     final appReceivedIndices = <int>{};
     var missing = {for (var i = 0; i < messageCount; i++) i};
     const maxAttempts = 5;
-    for (var attempt = 1; attempt <= maxAttempts && missing.isNotEmpty; attempt++) {
+    for (var attempt = 1;
+        attempt <= maxAttempts && missing.isNotEmpty;
+        attempt++) {
       for (final i in missing) {
         publisher.pub(uniqueSubject, utf8.encode('queue-group-test-$i'));
       }
@@ -100,7 +102,9 @@ void main() {
           appReceivedIndices.add(i);
         }
       }
-      missing = missing.difference(appReceivedIndices).difference(secondReceivedIndices);
+      missing = missing
+          .difference(appReceivedIndices)
+          .difference(secondReceivedIndices);
     }
 
     // Give up loudly rather than silently passing/hanging: if messages are
@@ -119,7 +123,8 @@ void main() {
     // round's window closed) can legitimately land on both members once
     // retried -- checking the intersection directly still catches a true
     // fan-out bug without being tripped up by that.
-    final deliveredToBoth = appReceivedIndices.intersection(secondReceivedIndices);
+    final deliveredToBoth =
+        appReceivedIndices.intersection(secondReceivedIndices);
     expect(deliveredToBoth, isEmpty,
         reason: 'these indices were delivered to both queue members, which '
             'means the subscription is fanning out rather than '

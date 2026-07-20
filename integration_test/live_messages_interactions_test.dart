@@ -768,7 +768,6 @@ void main() {
       expect(messageRowText(payloads[i]), findsOneWidget);
     }
     expect(find.textContaining('Selected:'), findsNothing,
-        reason:
-            'the selection should be cleared once its message is trimmed');
+        reason: 'the selection should be cleared once its message is trimmed');
   });
 }

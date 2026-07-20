@@ -103,8 +103,8 @@ void main() {
     await _pump(
       tester,
       AccountInfoDialog(
-        initial: _accountInfo(
-            storage: 2048, reservedStorage: 9223372036854775807),
+        initial:
+            _accountInfo(storage: 2048, reservedStorage: 9223372036854775807),
         onRefresh: () async => _accountInfo(),
       ),
     );

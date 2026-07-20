@@ -228,8 +228,8 @@ void main() {
       expect(find.widgetWithText(TextFormField, 'Password'), findsNothing);
       expect(find.widgetWithText(TextFormField, 'Token'), findsNothing);
       expect(find.widgetWithText(TextFormField, 'NKey Seed'), findsNothing);
-      expect(find.widgetWithText(TextFormField, 'Credentials File'),
-          findsNothing);
+      expect(
+          find.widgetWithText(TextFormField, 'Credentials File'), findsNothing);
       expect(find.text('Remember credentials on this device'), findsNothing);
     });
 
@@ -239,11 +239,13 @@ void main() {
       AuthMethod? reportedMethod;
       var username = '';
       var password = '';
-      await pumpTall(tester, buildDialog(
-        onAuthMethodChanged: (m) => reportedMethod = m,
-        onUsernameChanged: (v) => username = v,
-        onPasswordChanged: (v) => password = v,
-      ));
+      await pumpTall(
+          tester,
+          buildDialog(
+            onAuthMethodChanged: (m) => reportedMethod = m,
+            onUsernameChanged: (v) => username = v,
+            onPasswordChanged: (v) => password = v,
+          ));
 
       await tester.tap(find.text('None'));
       await tester.pumpAndSettle();
@@ -264,12 +266,13 @@ void main() {
       expect(password, 'hunter2');
     });
 
-    testWidgets('selecting Token reveals only the token field',
-        (tester) async {
+    testWidgets('selecting Token reveals only the token field', (tester) async {
       var token = '';
-      await pumpTall(tester, buildDialog(
-        onTokenChanged: (v) => token = v,
-      ));
+      await pumpTall(
+          tester,
+          buildDialog(
+            onTokenChanged: (v) => token = v,
+          ));
 
       await tester.tap(find.text('None'));
       await tester.pumpAndSettle();
@@ -286,12 +289,12 @@ void main() {
 
     testWidgets('NKey Seed field starts obscured and can be revealed',
         (tester) async {
-      await pumpTall(tester, buildDialog(initialAuthMethod: AuthMethod.nkeySeed));
+      await pumpTall(
+          tester, buildDialog(initialAuthMethod: AuthMethod.nkeySeed));
 
-      TextField textField() =>
-          tester.widget<TextField>(find.descendant(
-              of: find.widgetWithText(TextFormField, 'NKey Seed'),
-              matching: find.byType(TextField)));
+      TextField textField() => tester.widget<TextField>(find.descendant(
+          of: find.widgetWithText(TextFormField, 'NKey Seed'),
+          matching: find.byType(TextField)));
 
       expect(textField().obscureText, isTrue);
       expect(find.byIcon(Icons.visibility), findsOneWidget);
@@ -306,11 +309,13 @@ void main() {
     testWidgets('selecting Credentials File reveals the file picker row',
         (tester) async {
       var cleared = false;
-      await pumpTall(tester, buildDialog(
-        initialAuthMethod: AuthMethod.credentialsFile,
-        credsFileController: TextEditingController(text: 'ngs-user.creds'),
-        onClearCredsFile: () => cleared = true,
-      ));
+      await pumpTall(
+          tester,
+          buildDialog(
+            initialAuthMethod: AuthMethod.credentialsFile,
+            credsFileController: TextEditingController(text: 'ngs-user.creds'),
+            onClearCredsFile: () => cleared = true,
+          ));
 
       // The field's hintText and labelText are both 'Credentials File', and
       // InputDecorator always builds both Text widgets (fading the hint via
@@ -329,10 +334,12 @@ void main() {
     testWidgets('toggling Remember credentials reports its new value',
         (tester) async {
       bool? remembered;
-      await pumpTall(tester, buildDialog(
-        initialAuthMethod: AuthMethod.token,
-        onRememberCredentialsChanged: (v) => remembered = v,
-      ));
+      await pumpTall(
+          tester,
+          buildDialog(
+            initialAuthMethod: AuthMethod.token,
+            onRememberCredentialsChanged: (v) => remembered = v,
+          ));
 
       await tester.tap(find.text('Remember credentials on this device'));
       await tester.pump();

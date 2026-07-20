@@ -27,8 +27,8 @@ void main() {
     test('falls back to describeJetStreamError for other NatsExceptions', () {
       final message =
           describeObjectStoreError(NatsException('stream not found'));
-      expect(message,
-          describeJetStreamError(NatsException('stream not found')));
+      expect(
+          message, describeJetStreamError(NatsException('stream not found')));
     });
 
     test('gives a friendly message for timeouts', () {

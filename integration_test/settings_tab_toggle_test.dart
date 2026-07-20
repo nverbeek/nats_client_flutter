@@ -100,7 +100,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('toggling just one of JetStream/Key-Value/Object Store off and on works',
+  testWidgets(
+      'toggling just one of JetStream/Key-Value/Object Store off and on works',
       (tester) async {
     await pumpDisconnectedApp(tester);
 

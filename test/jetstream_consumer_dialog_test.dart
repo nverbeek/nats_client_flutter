@@ -49,13 +49,12 @@ void main() {
     var created = false;
     await tester.pumpWidget(buildDialog((_) => created = true));
 
-    expect(find.widgetWithText(TextFormField, 'Deliver Subject'),
-        findsNothing);
+    expect(find.widgetWithText(TextFormField, 'Deliver Subject'), findsNothing);
 
     await tester.tap(find.byType(Switch));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(TextFormField, 'Deliver Subject'),
-        findsOneWidget);
+    expect(
+        find.widgetWithText(TextFormField, 'Deliver Subject'), findsOneWidget);
 
     // Leaving it blank should block submit with a validation error.
     await tester.tap(find.widgetWithText(TextButton, 'Create'));
@@ -65,7 +64,8 @@ void main() {
         findsOneWidget);
   });
 
-  testWidgets('a filled-in Deliver Subject is passed through for push consumers',
+  testWidgets(
+      'a filled-in Deliver Subject is passed through for push consumers',
       (tester) async {
     ConsumerConfig? config;
     await tester.pumpWidget(buildDialog((c) => config = c));

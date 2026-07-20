@@ -28,8 +28,7 @@ class KvDashboard extends StatefulWidget {
   /// disconnect don't need to plumb one through.
   final Listenable? reconnectSignal;
 
-  const KvDashboard(
-      {super.key, required this.manager, this.reconnectSignal});
+  const KvDashboard({super.key, required this.manager, this.reconnectSignal});
 
   @override
   State<KvDashboard> createState() => KvDashboardState();
@@ -104,7 +103,9 @@ class KvDashboardState extends State<KvDashboard> {
     if (_keysError == null && _entries.isNotEmpty) {
       try {
         final status = await manager.bucketStatus(bucket);
-        if (!mounted || widget.manager != manager || _selectedBucket != bucket) {
+        if (!mounted ||
+            widget.manager != manager ||
+            _selectedBucket != bucket) {
           return;
         }
         final highestHeld = _entries.values
@@ -256,7 +257,8 @@ class KvDashboardState extends State<KvDashboard> {
     final results = <KeyValueEntry?>[];
     for (var i = 0; i < keys.length; i += batchSize) {
       final end = (i + batchSize < keys.length) ? i + batchSize : keys.length;
-      final chunkResults = await Future.wait(keys.sublist(i, end).map((k) async {
+      final chunkResults =
+          await Future.wait(keys.sublist(i, end).map((k) async {
         try {
           return await manager.getEntry(bucket, k);
         } catch (_) {
@@ -390,8 +392,7 @@ class KvDashboardState extends State<KvDashboard> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Bucket?'),
-        content: Text(
-            'This permanently deletes "$bucket" and all of its keys. '
+        content: Text('This permanently deletes "$bucket" and all of its keys. '
             'This cannot be undone.'),
         actions: [
           TextButton(
@@ -432,7 +433,8 @@ class KvDashboardState extends State<KvDashboard> {
       builder: (context) => KvPutValueDialog(
         bucket: bucket,
         initialKey: existing?.key,
-        initialValue: existing == null ? null : decodeMessageText(existing.value),
+        initialValue:
+            existing == null ? null : decodeMessageText(existing.value),
         existingRevision: existing?.revision,
         onSave: (key, value, expectedRevision) => _runMutation(
           () async {
@@ -573,7 +575,8 @@ class KvDashboardState extends State<KvDashboard> {
                         final entry = history[index];
                         return ListTile(
                           dense: true,
-                          title: Text('Rev #${entry.revision} — ${entry.op.name}'),
+                          title:
+                              Text('Rev #${entry.revision} — ${entry.op.name}'),
                           subtitle: Text(
                             entry.op == KeyValueOp.put
                                 ? decodeMessageText(entry.value)
@@ -698,9 +701,8 @@ class KvDashboardState extends State<KvDashboard> {
                     trailing: IconButton(
                       icon: const Icon(Icons.delete_outline),
                       tooltip: 'Delete bucket',
-                      onPressed: _mutating
-                          ? null
-                          : () => _confirmDeleteBucket(bucket),
+                      onPressed:
+                          _mutating ? null : () => _confirmDeleteBucket(bucket),
                     ),
                     onTap: () => _selectBucket(bucket),
                   ),
@@ -756,8 +758,7 @@ class KvDashboardState extends State<KvDashboard> {
     final items = _buildRowMenuItems(context);
     if (items.isEmpty) return;
 
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     final position = RelativeRect.fromLTRB(
       globalPosition.dx,
       globalPosition.dy,
@@ -793,7 +794,8 @@ class KvDashboardState extends State<KvDashboard> {
         trailing: PopupMenuButton<String>(
           enabled: !_mutating,
           tooltip: 'More actions',
-          onSelected: (action) => _handleRowMenuSelection(action, bucket, entry),
+          onSelected: (action) =>
+              _handleRowMenuSelection(action, bucket, entry),
           itemBuilder: _buildRowMenuItems,
         ),
         onTap: () => _showPutDialog(bucket, existing: entry),
@@ -806,8 +808,7 @@ class KvDashboardState extends State<KvDashboard> {
     final filteredKeys = _searchTerm.isEmpty
         ? sortedKeys
         : sortedKeys
-            .where((k) =>
-                k.toLowerCase().contains(_searchTerm.toLowerCase()))
+            .where((k) => k.toLowerCase().contains(_searchTerm.toLowerCase()))
             .toList();
 
     return Column(
@@ -818,7 +819,8 @@ class KvDashboardState extends State<KvDashboard> {
           child: Row(
             children: [
               Expanded(
-                child: Text(bucket, style: Theme.of(context).textTheme.titleLarge),
+                child:
+                    Text(bucket, style: Theme.of(context).textTheme.titleLarge),
               ),
               IconButton(
                 icon: const Icon(Icons.info_outline),

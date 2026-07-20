@@ -31,7 +31,8 @@ void main() {
   // wrong field. Scope to the dialog explicitly instead.
   Finder putDialogField(int index) => find
       .descendant(
-          of: find.byType(KvPutValueDialog), matching: find.byType(TextFormField))
+          of: find.byType(KvPutValueDialog),
+          matching: find.byType(TextFormField))
       .at(index);
 
   // A prior run's failed cleanup (or an unrelated bucket on the shared
@@ -149,7 +150,8 @@ void main() {
     await waitForSnackBarGone(tester);
     // The external client's write (5555) should still have reached the UI
     // live, since watch() doesn't care who made the change.
-    await pumpUntil(tester, () => find.textContaining('5555').evaluate().isNotEmpty);
+    await pumpUntil(
+        tester, () => find.textContaining('5555').evaluate().isNotEmpty);
 
     // 7. History shows both past revisions.
     await tester.tap(find.byType(PopupMenuButton<String>).first);
@@ -171,8 +173,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Delete Key?'), findsOneWidget);
     await tester.tap(find.widgetWithText(TextButton, 'Delete'));
-    await pumpUntil(tester,
-        () => find.text('Key "feature.enabled" deleted.').evaluate().isNotEmpty);
+    await pumpUntil(
+        tester,
+        () =>
+            find.text('Key "feature.enabled" deleted.').evaluate().isNotEmpty);
     await tester.pumpAndSettle();
     expect(find.text('feature.enabled'), findsNothing);
     await waitForSnackBarGone(tester);
@@ -187,8 +191,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Purge Key?'), findsOneWidget);
     await tester.tap(find.widgetWithText(TextButton, 'Purge'));
-    await pumpUntil(tester,
-        () => find.text('Key "db.port" purged.').evaluate().isNotEmpty);
+    await pumpUntil(
+        tester, () => find.text('Key "db.port" purged.').evaluate().isNotEmpty);
     await tester.pumpAndSettle();
     expect(find.text('db.port'), findsNothing);
     await waitForSnackBarGone(tester);

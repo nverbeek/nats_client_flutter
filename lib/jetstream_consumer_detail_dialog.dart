@@ -80,7 +80,8 @@ class _ConsumerDetailDialogState extends State<ConsumerDetailDialog> {
       title: Row(
         children: [
           Expanded(
-            child: Text(_info.name.isEmpty ? '(ephemeral consumer)' : _info.name),
+            child:
+                Text(_info.name.isEmpty ? '(ephemeral consumer)' : _info.name),
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -104,9 +105,11 @@ class _ConsumerDetailDialogState extends State<ConsumerDetailDialog> {
             if (detail?.ackWait != null)
               Text('Ack Wait: ${formatConfiguredDuration(detail!.ackWait!)}'),
             if (detail?.maxDeliver != null)
-              Text('Max Deliver: ${detail!.maxDeliver == -1 ? 'unlimited' : detail.maxDeliver}'),
+              Text(
+                  'Max Deliver: ${detail!.maxDeliver == -1 ? 'unlimited' : detail.maxDeliver}'),
             if (detail?.maxAckPending != null)
-              Text('Max Ack Pending: ${detail!.maxAckPending == -1 ? 'unlimited' : detail.maxAckPending}'),
+              Text(
+                  'Max Ack Pending: ${detail!.maxAckPending == -1 ? 'unlimited' : detail.maxAckPending}'),
             const SizedBox(height: 8),
             Text('Pending: ${_info.numPending}'),
             Text('Waiting: ${_info.numWaiting}'),
@@ -114,7 +117,8 @@ class _ConsumerDetailDialogState extends State<ConsumerDetailDialog> {
             Text('Redelivered: ${_info.numRedelivered}'),
             if (_error != null) ...[
               const SizedBox(height: 8),
-              Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              Text(_error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error)),
             ],
           ],
         ),

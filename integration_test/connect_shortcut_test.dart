@@ -20,8 +20,7 @@ import 'helpers/nats_test_app.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets(
-      'Ctrl+Enter in the Host field connects while disconnected',
+  testWidgets('Ctrl+Enter in the Host field connects while disconnected',
       (tester) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(constants.prefScheme, constants.defaultScheme);
@@ -63,8 +62,7 @@ void main() {
     );
   });
 
-  testWidgets(
-      'Ctrl+Enter in the Subjects chip row connects while disconnected',
+  testWidgets('Ctrl+Enter in the Subjects chip row connects while disconnected',
       (tester) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(constants.prefScheme, constants.defaultScheme);
@@ -101,8 +99,7 @@ void main() {
     // subscriptions are -- unlike the row's center, which a single long
     // subject's chip can end up covering.
     final chipsRowRect = tester.getRect(find.byType(SubjectChipsRow));
-    await tester.tapAt(
-        Offset(chipsRowRect.right - 8, chipsRowRect.center.dy));
+    await tester.tapAt(Offset(chipsRowRect.right - 8, chipsRowRect.center.dy));
     await tester.pump();
     await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);

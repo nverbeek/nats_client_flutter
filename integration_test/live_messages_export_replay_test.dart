@@ -94,8 +94,7 @@ void main() {
     await tester.tap(find.text('Export Selected (2)'));
     await tester.pumpAndSettle();
 
-    expect(
-        find.textContaining('Export 2 selected message(s) to a file?'),
+    expect(find.textContaining('Export 2 selected message(s) to a file?'),
         findsOneWidget);
     await tester.tap(find.widgetWithText(TextButton, 'Export'));
     await tester.pumpAndSettle();
@@ -127,7 +126,8 @@ void main() {
     expect(find.text('2 message(s) parsed.'), findsOneWidget);
 
     final fields = find.descendant(
-        of: find.byType(ReplayConfigDialog), matching: find.byType(TextFormField));
+        of: find.byType(ReplayConfigDialog),
+        matching: find.byType(TextFormField));
     await tester.enterText(fields.at(0), '0'); // message interval
     await tester.enterText(fields.at(1), '1'); // repeat count
     await tester.enterText(fields.at(2), '500'); // repeat interval
@@ -163,8 +163,7 @@ void main() {
         timeout: const Duration(seconds: 10));
   });
 
-  testWidgets('Stop halts a running replay before it finishes',
-      (tester) async {
+  testWidgets('Stop halts a running replay before it finishes', (tester) async {
     await pumpConnectedApp(tester);
     addTearDown(() => disconnectApp(tester));
 
@@ -194,7 +193,8 @@ void main() {
     expect(find.text('6 message(s) parsed.'), findsOneWidget);
 
     final fields = find.descendant(
-        of: find.byType(ReplayConfigDialog), matching: find.byType(TextFormField));
+        of: find.byType(ReplayConfigDialog),
+        matching: find.byType(TextFormField));
     // A large enough per-message interval that Stop has time to land
     // mid-run rather than the whole replay finishing before it's tapped.
     await tester.enterText(fields.at(0), '2000');
@@ -206,8 +206,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(ReplayBanner), findsOneWidget);
 
-    await pumpUntil(tester,
-        () => find.textContaining('cancel-payload-0-$runId').evaluate().isNotEmpty,
+    await pumpUntil(
+        tester,
+        () => find
+            .textContaining('cancel-payload-0-$runId')
+            .evaluate()
+            .isNotEmpty,
         timeout: const Duration(seconds: 10));
 
     await tester.tap(find.widgetWithText(TextButton, 'Stop'));
@@ -216,8 +220,8 @@ void main() {
     final countAfterStop =
         find.textContaining('cancel-payload').evaluate().length;
     await pumpBriefly(tester, duration: const Duration(seconds: 3));
-    expect(find.textContaining('cancel-payload').evaluate().length,
-        countAfterStop,
+    expect(
+        find.textContaining('cancel-payload').evaluate().length, countAfterStop,
         reason: 'no further replayed messages should arrive after Stop');
     expect(find.byType(ReplayBanner), findsNothing);
   });

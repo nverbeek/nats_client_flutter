@@ -67,8 +67,8 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
     // Auto-detect: default to the Hex view whenever the payload isn't valid
     // UTF-8 (protobuf, compressed data, etc). Always a manual toggle either
     // way once the dialog is open.
-    _showHex = widget.payloadBytes != null &&
-        !isValidUtf8(widget.payloadBytes!);
+    _showHex =
+        widget.payloadBytes != null && !isValidUtf8(widget.payloadBytes!);
   }
 
   @override
@@ -191,8 +191,7 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
-                child: SelectableText(
-                    formatFullTimestamp(widget.capturedAt!)),
+                child: SelectableText(formatFullTimestamp(widget.capturedAt!)),
               ),
             ],
             if (widget.headerVersion.isNotEmpty)
@@ -245,9 +244,8 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
                     color: Theme.of(context).colorScheme.surfaceContainerHigh,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: Theme.of(context)
-                          .dividerColor
-                          .withValues(alpha: 0.3),
+                      color:
+                          Theme.of(context).dividerColor.withValues(alpha: 0.3),
                       width: 1,
                     ),
                   ),
@@ -272,8 +270,8 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
                                   horizontal: 10, vertical: 6),
                               child: SelectableText(
                                 entry.key,
-                                style:
-                                    const TextStyle(fontWeight: FontWeight.w600),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600),
                               ),
                             ),
                             Padding(
@@ -376,8 +374,9 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
                           _copyButton(
                             onTap: () {
                               Clipboard.setData(ClipboardData(
-                                  text:
-                                      _showHex ? _hexDump : widget.formattedJson));
+                                  text: _showHex
+                                      ? _hexDump
+                                      : widget.formattedJson));
                               _showCopiedFeedback(_CopiedSection.payload);
                             },
                           ),

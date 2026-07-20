@@ -5,12 +5,13 @@ import 'package:nats_client_flutter/service_discovery_manager.dart';
 void main() {
   group('describeServiceDiscoveryError', () {
     test('uses a NatsException\'s own message', () {
-      final message =
-          describeServiceDiscoveryError(NatsException('request error: client not connected'));
+      final message = describeServiceDiscoveryError(
+          NatsException('request error: client not connected'));
       expect(message, 'request error: client not connected');
     });
 
-    test('falls back to a generic message for a NatsException with no message', () {
+    test('falls back to a generic message for a NatsException with no message',
+        () {
       final message = describeServiceDiscoveryError(NatsException(null));
       expect(message, 'Service discovery failed.');
     });

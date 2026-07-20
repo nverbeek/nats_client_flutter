@@ -80,8 +80,8 @@ void main() {
     expect(subscriptions.any((s) => s.subject == 'orders.>'), isTrue,
         reason: 'The original wildcard subscription must not be removed');
 
-    expect(find.textContaining('Subscribed to "orders.created"'),
-        findsOneWidget,
+    expect(
+        find.textContaining('Subscribed to "orders.created"'), findsOneWidget,
         reason: 'A SnackBar should note the new subscription and that the '
             'wider one is still active');
   });

@@ -78,7 +78,8 @@ class FakeObjectStoreManager extends ObjectStoreManager {
   }
 
   @override
-  Future<ObjectInfo> putObject(String bucket, String name, Uint8List data) async {
+  Future<ObjectInfo> putObject(
+      String bucket, String name, Uint8List data) async {
     lastPutName = name;
     lastPutBytes = data;
     if (putObjectImpl != null) return putObjectImpl!(bucket, name, data);
@@ -208,12 +209,10 @@ void main() {
     expect(find.text('backups'), findsOneWidget);
     expect(find.textContaining('2 msgs'), findsOneWidget);
     expect(find.text('Select a bucket to see its objects.'), findsOneWidget);
-    expect(
-        find.textContaining('EXPERIMENTAL feature'), findsOneWidget);
+    expect(find.textContaining('EXPERIMENTAL feature'), findsOneWidget);
   });
 
-  testWidgets('shows an empty state when there are no buckets',
-      (tester) async {
+  testWidgets('shows an empty state when there are no buckets', (tester) async {
     final manager = FakeObjectStoreManager();
 
     await tester.pumpWidget(
@@ -310,8 +309,7 @@ void main() {
     expect(find.text('Bucket "documents" created.'), findsOneWidget);
   });
 
-  testWidgets('Delete bucket confirms then calls the manager',
-      (tester) async {
+  testWidgets('Delete bucket confirms then calls the manager', (tester) async {
     final manager = FakeObjectStoreManager();
     manager.listBucketsImpl = () async => [_bucketStream('documents')];
 
@@ -350,7 +348,8 @@ void main() {
     await tester.pumpAndSettle();
 
     final snackBar = tester.widget<SnackBar>(find.byType(SnackBar));
-    final colorScheme = Theme.of(tester.element(find.byType(SnackBar))).colorScheme;
+    final colorScheme =
+        Theme.of(tester.element(find.byType(SnackBar))).colorScheme;
     expect(snackBar.backgroundColor, colorScheme.error);
     final content = snackBar.content as Text;
     expect(content.style?.color, colorScheme.onError);
@@ -501,13 +500,13 @@ void main() {
     expect(find.textContaining('is no longer available'), findsNothing);
   });
 
-  testWidgets('Download over the large-transfer threshold asks for confirmation',
+  testWidgets(
+      'Download over the large-transfer threshold asks for confirmation',
       (tester) async {
     final manager = FakeObjectStoreManager();
     manager.listBucketsImpl = () async => [_bucketStream('documents')];
-    manager.listObjectsImpl = (_) async => [
-          _objectInfo('huge.bin', largeObjectTransferWarningThreshold + 1)
-        ];
+    manager.listObjectsImpl = (_) async =>
+        [_objectInfo('huge.bin', largeObjectTransferWarningThreshold + 1)];
     var getObjectCalls = 0;
     manager.getObjectImpl = (_, __) async {
       getObjectCalls++;
@@ -613,7 +612,8 @@ void main() {
     expect(manager.lastPutName, 'report.pdf');
   });
 
-  testWidgets('Delete object confirms then calls the manager and removes the row',
+  testWidgets(
+      'Delete object confirms then calls the manager and removes the row',
       (tester) async {
     final manager = FakeObjectStoreManager();
     manager.listBucketsImpl = () async => [_bucketStream('documents')];

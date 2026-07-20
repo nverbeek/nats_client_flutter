@@ -329,8 +329,7 @@ class ObjectStoreDashboardState extends State<ObjectStoreDashboard> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Overwrite Object?'),
-        content: Text(
-            'An object named "$name" already exists in this bucket. '
+        content: Text('An object named "$name" already exists in this bucket. '
             'Uploading will overwrite it.'),
         actions: [
           TextButton(
@@ -371,9 +370,9 @@ class ObjectStoreDashboardState extends State<ObjectStoreDashboard> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Bucket?'),
-        content: Text(
-            'This permanently deletes "$bucket" and all of its objects. '
-            'This cannot be undone.'),
+        content:
+            Text('This permanently deletes "$bucket" and all of its objects. '
+                'This cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -477,7 +476,8 @@ class ObjectStoreDashboardState extends State<ObjectStoreDashboard> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Object?'),
-        content: Text('This permanently deletes "$name". This cannot be undone.'),
+        content:
+            Text('This permanently deletes "$name". This cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -613,9 +613,8 @@ class ObjectStoreDashboardState extends State<ObjectStoreDashboard> {
                     trailing: IconButton(
                       icon: const Icon(Icons.delete_outline),
                       tooltip: 'Delete bucket',
-                      onPressed: _mutating
-                          ? null
-                          : () => _confirmDeleteBucket(bucket),
+                      onPressed:
+                          _mutating ? null : () => _confirmDeleteBucket(bucket),
                     ),
                     onTap: () => _selectBucket(bucket),
                   ),
@@ -647,13 +646,15 @@ class ObjectStoreDashboardState extends State<ObjectStoreDashboard> {
           IconButton(
             icon: const Icon(Icons.download_outlined),
             tooltip: 'Download',
-            onPressed: _mutating ? null : () => _downloadObject(bucket, object.name),
+            onPressed:
+                _mutating ? null : () => _downloadObject(bucket, object.name),
           ),
           IconButton(
             icon: const Icon(Icons.delete_outline),
             tooltip: 'Delete',
-            onPressed:
-                _mutating ? null : () => _confirmDeleteObject(bucket, object.name),
+            onPressed: _mutating
+                ? null
+                : () => _confirmDeleteObject(bucket, object.name),
           ),
         ],
       ),
@@ -661,11 +662,13 @@ class ObjectStoreDashboardState extends State<ObjectStoreDashboard> {
   }
 
   Widget _buildObjectList(String bucket) {
-    final sortedObjects = [..._objects]..sort((a, b) => a.name.compareTo(b.name));
+    final sortedObjects = [..._objects]
+      ..sort((a, b) => a.name.compareTo(b.name));
     final filteredObjects = _searchTerm.isEmpty
         ? sortedObjects
         : sortedObjects
-            .where((o) => o.name.toLowerCase().contains(_searchTerm.toLowerCase()))
+            .where(
+                (o) => o.name.toLowerCase().contains(_searchTerm.toLowerCase()))
             .toList();
 
     return Column(
@@ -676,7 +679,8 @@ class ObjectStoreDashboardState extends State<ObjectStoreDashboard> {
           child: Row(
             children: [
               Expanded(
-                child: Text(bucket, style: Theme.of(context).textTheme.titleLarge),
+                child:
+                    Text(bucket, style: Theme.of(context).textTheme.titleLarge),
               ),
               IconButton(
                 icon: const Icon(Icons.refresh),

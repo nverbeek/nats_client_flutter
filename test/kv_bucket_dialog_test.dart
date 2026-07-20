@@ -5,8 +5,7 @@ import 'package:nats_client_flutter/kv_bucket_dialog.dart';
 import 'package:nats_client_flutter/kv_manager.dart';
 
 void main() {
-  Widget buildDialog(
-      void Function(String, int, Duration?, int) onCreate) {
+  Widget buildDialog(void Function(String, int, Duration?, int) onCreate) {
     return MaterialApp(
       home: Scaffold(body: CreateBucketDialog(onCreate: onCreate)),
     );
@@ -65,8 +64,7 @@ void main() {
     expect(replicas, 1);
   });
 
-  testWidgets('a TTL value is converted to a Duration in days',
-      (tester) async {
+  testWidgets('a TTL value is converted to a Duration in days', (tester) async {
     Duration? ttl;
     await tester.pumpWidget(buildDialog((_, __, t, ____) => ttl = t));
 
@@ -132,8 +130,8 @@ void main() {
   });
 
   group('KvBucketStatusDialog', () {
-    Future<void> pumpStatusDialog(
-        WidgetTester tester, Future<KvBucketStatus> Function() onRefresh) async {
+    Future<void> pumpStatusDialog(WidgetTester tester,
+        Future<KvBucketStatus> Function() onRefresh) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(

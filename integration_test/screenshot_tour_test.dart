@@ -141,8 +141,8 @@ void main() {
     await pumpUntil(tester, () => find.text('documents').evaluate().isNotEmpty);
     await tester.tap(find.text('documents'));
     await tester.pumpAndSettle();
-    await pumpUntil(
-        tester, () => find.text('diagnostics-bundle.tar.gz').evaluate().isNotEmpty);
+    await pumpUntil(tester,
+        () => find.text('diagnostics-bundle.tar.gz').evaluate().isNotEmpty);
     await signaler.capture(tester, 'Object Store');
   });
 }

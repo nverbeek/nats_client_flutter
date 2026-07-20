@@ -46,7 +46,8 @@ void main() {
     // fields, so index positions must be scoped to the dialog itself. See
     // the identical gotcha noted for KV dialog tests.
     final dialogFields = find.descendant(
-        of: find.byType(SendMessageDialog), matching: find.byType(TextFormField));
+        of: find.byType(SendMessageDialog),
+        matching: find.byType(TextFormField));
     // Field order within the dialog is subject, data, header key, header
     // value (see send_message_dialog_test.dart for the same convention).
     await tester.enterText(dialogFields.at(2), headerKey);

@@ -37,7 +37,8 @@ class FakeJetStreamManager extends JetStreamManager {
 }
 
 void main() {
-  Widget buildView(FakeJetStreamManager manager, {Listenable? reconnectSignal}) {
+  Widget buildView(FakeJetStreamManager manager,
+      {Listenable? reconnectSignal}) {
     return MaterialApp(
       home: Scaffold(
         body: JetStreamConsumerTailView(
@@ -202,8 +203,8 @@ void main() {
     manager.incomingMessages = incoming.stream;
     final reconnectSignal = ValueNotifier<int>(0);
 
-    await tester.pumpWidget(
-        buildView(manager, reconnectSignal: reconnectSignal));
+    await tester
+        .pumpWidget(buildView(manager, reconnectSignal: reconnectSignal));
     incoming.addError(Exception('consumer not found'));
     await tester.pump();
     await tester.pump();
@@ -227,8 +228,8 @@ void main() {
     manager.incomingMessages = incoming.stream;
     final reconnectSignal = ValueNotifier<int>(0);
 
-    await tester.pumpWidget(
-        buildView(manager, reconnectSignal: reconnectSignal));
+    await tester
+        .pumpWidget(buildView(manager, reconnectSignal: reconnectSignal));
     await tester.pump();
 
     reconnectSignal.value++;

@@ -46,8 +46,8 @@ class PausedBanner extends StatelessWidget {
                       : 'no new messages yet';
                   return Text(
                     'Paused — $countLabel',
-                    style:
-                        TextStyle(color: theme.colorScheme.onSecondaryContainer),
+                    style: TextStyle(
+                        color: theme.colorScheme.onSecondaryContainer),
                   );
                 },
               ),

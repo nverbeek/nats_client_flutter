@@ -53,8 +53,7 @@ class JetStreamManager {
   /// already handles and reading the three missing fields off the same JSON
   /// itself -- mirroring the raw-JSON bypass `KvManager.bucketStatus` uses
   /// for the same kind of package-side parsing gap.
-  Future<ConsumerDetail> consumerDetail(
-      String streamName, String consumerName,
+  Future<ConsumerDetail> consumerDetail(String streamName, String consumerName,
       {Duration timeout = const Duration(seconds: 5)}) async {
     final subject = '\$JS.API.CONSUMER.INFO.$streamName.$consumerName';
     final map = await jsApiRequest(client, subject, timeout: timeout);
@@ -236,7 +235,8 @@ Future<Map<String, dynamic>> jsApiRequest(
   String subject, {
   Duration timeout = const Duration(seconds: 5),
 }) async {
-  final response = await client.request(subject, Uint8List(0), timeout: timeout);
+  final response =
+      await client.request(subject, Uint8List(0), timeout: timeout);
   final map = jsonDecode(response.string) as Map<String, dynamic>;
   final error = map['error'];
   if (error != null) {

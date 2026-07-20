@@ -56,8 +56,7 @@ void main() {
     // invisible offstage width-measurement pass (see subject_chips_row.dart)
     // -- and generic finders match both copies since Offstage only affects
     // painting/hit-testing, not the widget tree finders walk.
-    await tester
-        .tap(find.byKey(const ValueKey('subjectChipsAddButton')));
+    await tester.tap(find.byKey(const ValueKey('subjectChipsAddButton')));
     await tester.pumpAndSettle();
     await tester.enterText(
         find.widgetWithText(TextFormField, 'Subject'), subjectB);
@@ -95,8 +94,8 @@ void main() {
     final directChipB = find.ancestor(
         of: find.text(subjectB), matching: find.byType(InputChip));
     if (directChipB.evaluate().isNotEmpty) {
-      await tester.tap(find.descendant(
-          of: directChipB, matching: find.byIcon(Icons.clear)));
+      await tester.tap(
+          find.descendant(of: directChipB, matching: find.byIcon(Icons.clear)));
     } else {
       await tester.tap(find.textContaining('more'));
       await tester.pumpAndSettle();
@@ -106,8 +105,8 @@ void main() {
           of: managerRow, matching: find.byTooltip('Remove subscription'));
       // Tap the ancestor IconButton, not the Tooltip wrapper itself -- see
       // the comment on the "Add subscription" tap above.
-      await tester.tap(find.ancestor(
-          of: removeTooltip, matching: find.byType(IconButton)));
+      await tester.tap(
+          find.ancestor(of: removeTooltip, matching: find.byType(IconButton)));
     }
     await tester.pumpAndSettle();
 

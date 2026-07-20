@@ -56,8 +56,8 @@ class _KvPutValueDialogState extends State<KvPutValueDialog> {
 
   void _save() {
     if (!_formKey.currentState!.validate()) return;
-    widget.onSave(
-        _keyController.text.trim(), _valueController.text, widget.existingRevision);
+    widget.onSave(_keyController.text.trim(), _valueController.text,
+        widget.existingRevision);
     Navigator.of(context).pop();
   }
 

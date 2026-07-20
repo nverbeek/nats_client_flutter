@@ -91,8 +91,7 @@ class _ReplayConfigDialogState extends State<ReplayConfigDialog> {
   int? get _messageIntervalMs =>
       _nonNegativeInt(_messageIntervalController.text);
   int? get _repeatCount => _nonNegativeInt(_repeatCountController.text);
-  int? get _repeatIntervalMs =>
-      _nonNegativeInt(_repeatIntervalController.text);
+  int? get _repeatIntervalMs => _nonNegativeInt(_repeatIntervalController.text);
 
   Future<void> _chooseFile() async {
     setState(() => _picking = true);
@@ -202,8 +201,7 @@ class _ReplayConfigDialogState extends State<ReplayConfigDialog> {
               if (_parseErrorCount > 0)
                 Text(
                   '$_parseErrorCount line(s) could not be parsed and will be skipped.',
-                  style:
-                      TextStyle(color: Theme.of(context).colorScheme.error),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               const SizedBox(height: 12),
               TextFormField(

@@ -124,8 +124,8 @@ void main() {
       tester,
       ConsumerDetailDialog(
         initial: info,
-        onRefresh: () async => _consumerDetail(
-            _consumerInfo(numPending: numPending++)),
+        onRefresh: () async =>
+            _consumerDetail(_consumerInfo(numPending: numPending++)),
       ),
     );
 
@@ -159,15 +159,21 @@ void main() {
     expect(refreshCalls, 0);
     expect(find.text('(ephemeral consumer)'), findsOneWidget);
     expect(
-      tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.refresh)).onPressed,
+      tester
+          .widget<IconButton>(find.widgetWithIcon(IconButton, Icons.refresh))
+          .onPressed,
       isNull,
     );
     expect(
-      tester.widget<TextButton>(find.widgetWithText(TextButton, 'Delete')).onPressed,
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Delete'))
+          .onPressed,
       isNull,
     );
     expect(
-      tester.widget<TextButton>(find.widgetWithText(TextButton, 'Tail')).onPressed,
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Tail'))
+          .onPressed,
       isNull,
     );
   });
@@ -218,8 +224,7 @@ void main() {
       tester,
       ConsumerDetailDialog(
         initial: info,
-        onRefresh: () async =>
-            throw NatsException('consumer not found'),
+        onRefresh: () async => throw NatsException('consumer not found'),
       ),
     );
 

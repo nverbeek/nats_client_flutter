@@ -58,8 +58,7 @@ class SecuritySettingsDialog extends StatefulWidget {
   });
 
   @override
-  State<SecuritySettingsDialog> createState() =>
-      _SecuritySettingsDialogState();
+  State<SecuritySettingsDialog> createState() => _SecuritySettingsDialogState();
 }
 
 class _SecuritySettingsDialogState extends State<SecuritySettingsDialog> {
@@ -205,8 +204,7 @@ class _SecuritySettingsDialogState extends State<SecuritySettingsDialog> {
                   border: OutlineInputBorder(),
                 ),
                 items: const [
-                  DropdownMenuItem(
-                      value: AuthMethod.none, child: Text('None')),
+                  DropdownMenuItem(value: AuthMethod.none, child: Text('None')),
                   DropdownMenuItem(
                       value: AuthMethod.usernamePassword,
                       child: Text('Username & Password')),

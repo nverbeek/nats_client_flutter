@@ -36,18 +36,16 @@ void main() {
       expect(second, same(first));
     });
 
-    test('two distinct messages with the same bytes decode independently',
-        () {
+    test('two distinct messages with the same bytes decode independently', () {
       final a = Message<dynamic>(
-        'a', 1, Uint8List.fromList('same'.codeUnits), Client());
+          'a', 1, Uint8List.fromList('same'.codeUnits), Client());
       final b = Message<dynamic>(
-        'b', 2, Uint8List.fromList('same'.codeUnits), Client());
+          'b', 2, Uint8List.fromList('same'.codeUnits), Client());
 
       expect(decodeMessageTextFor(a), 'same');
       expect(decodeMessageTextFor(b), 'same');
     });
   });
-
 
   group('formatCompactCount', () {
     test('renders small counts verbatim', () {
@@ -86,15 +84,13 @@ void main() {
   });
 
   group('formatTimeOfDay', () {
-    test('pads hours, minutes, seconds, and millis, with an AM/PM suffix',
-        () {
-      expect(formatTimeOfDay(DateTime(2026, 1, 1, 1, 2, 3, 4)),
-          '01:02:03.004 AM');
+    test('pads hours, minutes, seconds, and millis, with an AM/PM suffix', () {
+      expect(
+          formatTimeOfDay(DateTime(2026, 1, 1, 1, 2, 3, 4)), '01:02:03.004 AM');
     });
 
     test('renders midnight and noon as 12, not 0', () {
-      expect(
-          formatTimeOfDay(DateTime(2026, 1, 1, 0, 0, 0)), '12:00:00.000 AM');
+      expect(formatTimeOfDay(DateTime(2026, 1, 1, 0, 0, 0)), '12:00:00.000 AM');
       expect(
           formatTimeOfDay(DateTime(2026, 1, 1, 12, 0, 0)), '12:00:00.000 PM');
     });
@@ -159,8 +155,8 @@ void main() {
 
     test('handles a non-NatsException error the same generic way', () {
       final error = Exception('socket closed');
-      expect(
-          describePublishError(error), 'Failed to send: Exception: socket closed');
+      expect(describePublishError(error),
+          'Failed to send: Exception: socket closed');
     });
   });
 
@@ -241,8 +237,8 @@ void main() {
     });
 
     test('rejects an invalid byte sequence', () {
-      expect(isValidUtf8(Uint8List.fromList([0xFF, 0xFE, 0x00, 0x01])),
-          isFalse);
+      expect(
+          isValidUtf8(Uint8List.fromList([0xFF, 0xFE, 0x00, 0x01])), isFalse);
     });
 
     test('rejects a truncated multi-byte sequence', () {
@@ -253,8 +249,7 @@ void main() {
 
   group('formatHexDump', () {
     test('renders a short payload as one row with offset/hex/ascii', () {
-      final dump =
-          formatHexDump(Uint8List.fromList('Hi!'.codeUnits));
+      final dump = formatHexDump(Uint8List.fromList('Hi!'.codeUnits));
       expect(dump, startsWith('00000000'));
       expect(dump, contains('48 69 21'));
       expect(dump, endsWith('Hi!'));
@@ -344,8 +339,8 @@ void main() {
     });
 
     test('shows exact milliseconds under a second', () {
-      expect(formatEstimatedDuration(const Duration(milliseconds: 450)),
-          '~450ms');
+      expect(
+          formatEstimatedDuration(const Duration(milliseconds: 450)), '~450ms');
     });
 
     test('shows seconds only when under a minute', () {
@@ -353,9 +348,7 @@ void main() {
     });
 
     test('shows minutes and seconds for a minute or more', () {
-      expect(
-          formatEstimatedDuration(
-              const Duration(minutes: 2, seconds: 15)),
+      expect(formatEstimatedDuration(const Duration(minutes: 2, seconds: 15)),
           '~2m 15s');
     });
   });

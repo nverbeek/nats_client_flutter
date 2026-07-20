@@ -4,22 +4,22 @@ import 'package:nats_client_flutter/connection_history.dart';
 void main() {
   group('ConnectionHistoryEntry', () {
     test('fullUri concatenates scheme, host, and port', () {
-      const entry =
-          ConnectionHistoryEntry(scheme: 'nats://', host: '127.0.0.1', port: '4222');
+      const entry = ConnectionHistoryEntry(
+          scheme: 'nats://', host: '127.0.0.1', port: '4222');
       expect(entry.fullUri, 'nats://127.0.0.1:4222');
     });
 
     test('sameTarget compares scheme, host, and port, not object identity', () {
-      const a =
-          ConnectionHistoryEntry(scheme: 'nats://', host: '127.0.0.1', port: '4222');
-      const b =
-          ConnectionHistoryEntry(scheme: 'nats://', host: '127.0.0.1', port: '4222');
-      const differentPort =
-          ConnectionHistoryEntry(scheme: 'nats://', host: '127.0.0.1', port: '4223');
-      const differentHost =
-          ConnectionHistoryEntry(scheme: 'nats://', host: '127.0.0.2', port: '4222');
-      const differentScheme =
-          ConnectionHistoryEntry(scheme: 'ws://', host: '127.0.0.1', port: '4222');
+      const a = ConnectionHistoryEntry(
+          scheme: 'nats://', host: '127.0.0.1', port: '4222');
+      const b = ConnectionHistoryEntry(
+          scheme: 'nats://', host: '127.0.0.1', port: '4222');
+      const differentPort = ConnectionHistoryEntry(
+          scheme: 'nats://', host: '127.0.0.1', port: '4223');
+      const differentHost = ConnectionHistoryEntry(
+          scheme: 'nats://', host: '127.0.0.2', port: '4222');
+      const differentScheme = ConnectionHistoryEntry(
+          scheme: 'ws://', host: '127.0.0.1', port: '4222');
 
       expect(a.sameTarget(b), isTrue);
       expect(a.sameTarget(differentPort), isFalse);
@@ -37,7 +37,8 @@ void main() {
             scheme: 'ws://', host: 'demo.nats.io', port: '8080'),
       ];
 
-      final decoded = decodeConnectionHistory(encodeConnectionHistory(original));
+      final decoded =
+          decodeConnectionHistory(encodeConnectionHistory(original));
 
       expect(decoded.length, 2);
       expect(decoded[0].scheme, 'nats://');
@@ -59,7 +60,8 @@ void main() {
         const ConnectionHistoryEntry(scheme: 'nats://', host: 'c', port: '3'),
       ];
 
-      final decoded = decodeConnectionHistory(encodeConnectionHistory(original));
+      final decoded =
+          decodeConnectionHistory(encodeConnectionHistory(original));
 
       expect(decoded.map((e) => e.host).toList(), ['a', 'b', 'c']);
     });
@@ -78,21 +80,26 @@ void main() {
       expect(result.map((e) => e.host).toList(), ['b', 'a']);
     });
 
-    test('reconnecting to an existing target moves it to the front instead of duplicating', () {
+    test(
+        'reconnecting to an existing target moves it to the front instead of duplicating',
+        () {
       final result =
           recordConnection([entryA, entryB, entryC], 'nats://', 'c', '4222');
       expect(result.map((e) => e.host).toList(), ['c', 'a', 'b']);
       expect(result.length, 3);
     });
 
-    test('a different port for the same host is treated as a distinct target', () {
+    test('a different port for the same host is treated as a distinct target',
+        () {
       final result = recordConnection([entryA], 'nats://', 'a', '4223');
       expect(result.length, 2);
       expect(result[0].port, '4223');
       expect(result[1].port, '4222');
     });
 
-    test('a different scheme for the same host/port is treated as a distinct target', () {
+    test(
+        'a different scheme for the same host/port is treated as a distinct target',
+        () {
       final result = recordConnection([entryA], 'ws://', 'a', '4222');
       expect(result.length, 2);
       expect(result[0].scheme, 'ws://');
@@ -113,14 +120,15 @@ void main() {
       expect(result.length, maxConnectionHistory);
       expect(result.first.host, 'new-host');
       // The oldest entry (last in most-recent-first order) fell off the cap.
-      expect(
-          result.any((e) => e.host == 'host${maxConnectionHistory - 1}'),
+      expect(result.any((e) => e.host == 'host${maxConnectionHistory - 1}'),
           isFalse);
       // The previously most-recent entry survives, just shifted back one.
       expect(result.any((e) => e.host == 'host0'), isTrue);
     });
 
-    test('moving an existing entry to the front does not shrink the list under the cap', () {
+    test(
+        'moving an existing entry to the front does not shrink the list under the cap',
+        () {
       final full = List.generate(
         maxConnectionHistory,
         (i) => ConnectionHistoryEntry(

@@ -93,9 +93,8 @@ void main() {
   testWidgets('credentials file connects to its fixture server',
       (tester) async {
     await seedCommonPrefs(4303);
-    final credsBytes =
-        File('integration_test/fixtures/auth/test-user.creds')
-            .readAsBytesSync();
+    final credsBytes = File('integration_test/fixtures/auth/test-user.creds')
+        .readAsBytesSync();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(constants.prefAuthMethod, 'credentialsFile');
     await prefs.setString(

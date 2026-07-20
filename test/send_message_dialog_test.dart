@@ -173,7 +173,8 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'Add'));
     await tester.pump();
 
-    expect(find.byType(TextFormField), findsNWidgets(4)); // subject, data, key, value
+    expect(find.byType(TextFormField),
+        findsNWidgets(4)); // subject, data, key, value
 
     // Field order is subject(0), data(1), header key(2), header value(3).
     await tester.enterText(find.byType(TextFormField).at(2), 'X-Trace-Id');
@@ -249,10 +250,16 @@ void main() {
     expect(find.text('No headers'), findsNothing);
     // Field order is subject(0), data(1), header key(2), header value(3).
     expect(
-        tester.widget<TextFormField>(find.byType(TextFormField).at(2)).controller?.text,
+        tester
+            .widget<TextFormField>(find.byType(TextFormField).at(2))
+            .controller
+            ?.text,
         'Content-Type');
     expect(
-        tester.widget<TextFormField>(find.byType(TextFormField).at(3)).controller?.text,
+        tester
+            .widget<TextFormField>(find.byType(TextFormField).at(3))
+            .controller
+            ?.text,
         'application/json');
   });
 }

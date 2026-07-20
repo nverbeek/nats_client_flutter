@@ -144,7 +144,8 @@ Future<void> pumpDisconnectedApp(
   // by an earlier test run (e.g. one seeding a short interval for a
   // fast-failing-connect scenario) would otherwise silently leak into and
   // crash a later, unrelated test that opens Settings.
-  await prefs.setInt(constants.prefRetryInterval, constants.defaultRetryInterval);
+  await prefs.setInt(
+      constants.prefRetryInterval, constants.defaultRetryInterval);
   // Same reasoning as every other reset in this function -- a cap/toggle a
   // test seeds directly (bypassing the Settings dropdown's options) would
   // otherwise leak into and silently change what a later, unrelated test is
@@ -196,7 +197,6 @@ Future<void> disconnectApp(WidgetTester tester) async {
   await tester.tap(disconnectButton);
   await pumpUntil(
     tester,
-    () =>
-        find.text('Status: ${constants.disconnected}').evaluate().isNotEmpty,
+    () => find.text('Status: ${constants.disconnected}').evaluate().isNotEmpty,
   );
 }

@@ -98,8 +98,10 @@ void main() {
     await tester.pumpAndSettle();
 
     publisher.pubString(subject, payload);
-    await pumpUntil(tester,
-        () => find.text('Paused — 1 new message buffered').evaluate().isNotEmpty);
+    await pumpUntil(
+        tester,
+        () =>
+            find.text('Paused — 1 new message buffered').evaluate().isNotEmpty);
     expect(messageRowText(payload), findsNothing);
 
     // Resuming via the banner's own button (rather than the toolbar's

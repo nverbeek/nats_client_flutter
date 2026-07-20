@@ -83,8 +83,8 @@ class _StreamConfigDialogState extends State<StreamConfigDialog> {
   // `-1` is the server's "unlimited" sentinel for these two just as it is
   // for maxMsgs/maxBytes above, so it belongs in a blank field rather than
   // shown literally next to a "Leave blank for unlimited" hint.
-  late final _maxMsgSizeController =
-      TextEditingController(text: _optionalLimitText(widget.initial?.maxMsgSize));
+  late final _maxMsgSizeController = TextEditingController(
+      text: _optionalLimitText(widget.initial?.maxMsgSize));
   late final _maxMsgsPerSubjectController = TextEditingController(
       text: _optionalLimitText(widget.initial?.maxMsgsPerSubject));
 

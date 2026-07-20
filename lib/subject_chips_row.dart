@@ -274,8 +274,7 @@ class _SubjectChipsRowState extends State<SubjectChipsRow> {
                           children: [
                             if (subscriptions.isEmpty)
                               Padding(
-                                padding:
-                                    const EdgeInsets.only(right: _chipGap),
+                                padding: const EdgeInsets.only(right: _chipGap),
                                 child: Text(
                                   'No subscriptions',
                                   style: theme.textTheme.bodyMedium?.copyWith(
@@ -356,8 +355,8 @@ class _SubjectChipsRowState extends State<SubjectChipsRow> {
                                 _MeasureSize(
                                   onChange: (size) =>
                                       _recordOverflowWidth(size.width),
-                                  child: _buildOverflowChip(
-                                      subscriptions.length),
+                                  child:
+                                      _buildOverflowChip(subscriptions.length),
                                 ),
                               ],
                             ),

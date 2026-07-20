@@ -31,8 +31,7 @@ class SubscriptionEditDialog extends StatefulWidget {
   });
 
   @override
-  State<SubscriptionEditDialog> createState() =>
-      _SubscriptionEditDialogState();
+  State<SubscriptionEditDialog> createState() => _SubscriptionEditDialogState();
 }
 
 class _SubscriptionEditDialogState extends State<SubscriptionEditDialog> {
@@ -84,8 +83,7 @@ class _SubscriptionEditDialogState extends State<SubscriptionEditDialog> {
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
-          _SubscriptionSubmitIntent:
-              CallbackAction<_SubscriptionSubmitIntent>(
+          _SubscriptionSubmitIntent: CallbackAction<_SubscriptionSubmitIntent>(
             onInvoke: (_SubscriptionSubmitIntent intent) {
               _submit();
               return null;
@@ -195,8 +193,7 @@ class SubscriptionManagerDialog extends StatefulWidget {
       _SubscriptionManagerDialogState();
 }
 
-class _SubscriptionManagerDialogState
-    extends State<SubscriptionManagerDialog> {
+class _SubscriptionManagerDialogState extends State<SubscriptionManagerDialog> {
   final Map<SubscriptionInfo, TextEditingController> _controllers = {};
   final Map<SubscriptionInfo, FocusNode> _focusNodes = {};
 
@@ -347,7 +344,8 @@ class _SubscriptionManagerDialogState
                                       label: Text(info.subject,
                                           overflow: TextOverflow.ellipsis),
                                       labelStyle:
-                                          SubjectChipStyle.labelStyleFor(context),
+                                          SubjectChipStyle.labelStyleFor(
+                                              context),
                                       backgroundColor:
                                           SubjectChipStyle.backgroundColorFor(
                                               context),

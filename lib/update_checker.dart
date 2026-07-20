@@ -29,12 +29,10 @@ class ReleaseInfo {
 Future<ReleaseInfo?> fetchLatestRelease({http.Client? client}) async {
   final httpClient = client ?? http.Client();
   try {
-    final response = await httpClient
-        .get(
-          Uri.parse(_latestReleaseUrl),
-          headers: {'Accept': 'application/vnd.github+json'},
-        )
-        .timeout(const Duration(seconds: 5));
+    final response = await httpClient.get(
+      Uri.parse(_latestReleaseUrl),
+      headers: {'Accept': 'application/vnd.github+json'},
+    ).timeout(const Duration(seconds: 5));
 
     if (response.statusCode != 200) {
       return null;

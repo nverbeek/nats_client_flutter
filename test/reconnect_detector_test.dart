@@ -68,10 +68,10 @@ void main() {
       final detector = ReconnectDetector();
       detector.onStatus(Status.connected);
 
-      final first = firedOn(
-          detector, [Status.disconnected, Status.reconnecting, Status.connected]);
-      final second = firedOn(
-          detector, [Status.disconnected, Status.reconnecting, Status.connected]);
+      final first = firedOn(detector,
+          [Status.disconnected, Status.reconnecting, Status.connected]);
+      final second = firedOn(detector,
+          [Status.disconnected, Status.reconnecting, Status.connected]);
 
       expect(first, hasLength(1));
       expect(second, hasLength(1));
@@ -111,8 +111,8 @@ void main() {
       final detector = ReconnectDetector();
       detector.onStatus(Status.connected);
 
-      final fired = firedOn(
-          detector, [Status.reconnecting, Status.infoHandshake, Status.connected]);
+      final fired = firedOn(detector,
+          [Status.reconnecting, Status.infoHandshake, Status.connected]);
 
       expect(fired, [Status.connected]);
     });

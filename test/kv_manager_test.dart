@@ -18,8 +18,7 @@ void main() {
 
   group('describeKvError', () {
     test('recognizes a stale-revision (wrong last sequence) conflict', () {
-      final message = describeKvError(
-          NatsException('wrong last sequence: 3'));
+      final message = describeKvError(NatsException('wrong last sequence: 3'));
       expect(message,
           'This key changed since it was loaded — reload and try again.');
     });
@@ -31,7 +30,8 @@ void main() {
 
     test('falls back to describeJetStreamError for other NatsExceptions', () {
       final message = describeKvError(NatsException('stream not found'));
-      expect(message, describeJetStreamError(NatsException('stream not found')));
+      expect(
+          message, describeJetStreamError(NatsException('stream not found')));
     });
 
     test('gives a friendly message for timeouts', () {

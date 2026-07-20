@@ -28,8 +28,7 @@ import 'helpers/nats_test_app.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets(
-      'JetStream stream selection survives a transient reconnect blip',
+  testWidgets('JetStream stream selection survives a transient reconnect blip',
       (tester) async {
     // Shortest valid Settings dropdown option (3/5/10/30s) -- keeps the test
     // from waiting out the full 10s default to see the reconnect land.
@@ -64,8 +63,7 @@ void main() {
     // the file-level doc comment) rather than a fixed name.
     final lookup = await Process.run(
         'docker', ['ps', '--filter', 'publish=4222', '--format', '{{.ID}}']);
-    expect(lookup.exitCode, 0,
-        reason: 'docker ps failed: ${lookup.stderr}');
+    expect(lookup.exitCode, 0, reason: 'docker ps failed: ${lookup.stderr}');
     final containerId = (lookup.stdout as String).trim().split('\n').first;
     expect(containerId, isNotEmpty,
         reason: 'No running container found publishing port 4222 -- is the '

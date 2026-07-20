@@ -154,7 +154,8 @@ class FakeKvManager extends KvManager {
   }
 
   @override
-  Stream<KeyValueEntry?> watch(String bucket) => watchControllerFor(bucket).stream;
+  Stream<KeyValueEntry?> watch(String bucket) =>
+      watchControllerFor(bucket).stream;
 
   @override
   Future<KvBucketStatus> bucketStatus(String bucket, {Duration? timeout}) {
@@ -279,8 +280,7 @@ void main() {
     expect(find.text('Select a bucket to see its keys.'), findsOneWidget);
   });
 
-  testWidgets('shows an empty state when there are no buckets',
-      (tester) async {
+  testWidgets('shows an empty state when there are no buckets', (tester) async {
     final manager = FakeKvManager();
 
     await tester.pumpWidget(
@@ -288,12 +288,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(
-        find.text('No KV buckets found on this account.'), findsOneWidget);
+    expect(find.text('No KV buckets found on this account.'), findsOneWidget);
   });
 
-  testWidgets('selecting a bucket loads and displays its keys',
-      (tester) async {
+  testWidgets('selecting a bucket loads and displays its keys', (tester) async {
     final manager = FakeKvManager();
     manager.listBucketsImpl = () async => [_bucketStream('app-config')];
     manager.listKeysImpl = (_) async => ['db.port'];
@@ -344,7 +342,8 @@ void main() {
     expect(find.text('db.host'), findsOneWidget);
     expect(find.text('feature.x'), findsOneWidget);
 
-    await tester.enterText(find.widgetWithText(TextField, 'Search keys'), 'db.');
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Search keys'), 'db.');
     await tester.pumpAndSettle();
 
     expect(find.text('db.port'), findsOneWidget);
@@ -373,8 +372,7 @@ void main() {
     expect(find.text('Bucket "app-config" created.'), findsOneWidget);
   });
 
-  testWidgets('Delete bucket confirms then calls the manager',
-      (tester) async {
+  testWidgets('Delete bucket confirms then calls the manager', (tester) async {
     final manager = FakeKvManager();
     manager.listBucketsImpl = () async => [_bucketStream('app-config')];
 
@@ -413,14 +411,14 @@ void main() {
     await tester.pumpAndSettle();
 
     final snackBar = tester.widget<SnackBar>(find.byType(SnackBar));
-    final colorScheme = Theme.of(tester.element(find.byType(SnackBar))).colorScheme;
+    final colorScheme =
+        Theme.of(tester.element(find.byType(SnackBar))).colorScheme;
     expect(snackBar.backgroundColor, colorScheme.error);
     final content = snackBar.content as Text;
     expect(content.style?.color, colorScheme.onError);
   });
 
-  testWidgets('Put Value dialog creates a key via the manager',
-      (tester) async {
+  testWidgets('Put Value dialog creates a key via the manager', (tester) async {
     final manager = FakeKvManager();
     manager.listBucketsImpl = () async => [_bucketStream('app-config')];
 
@@ -436,8 +434,7 @@ void main() {
 
     await tester.enterText(
         find.widgetWithText(TextFormField, 'Key'), 'db.port');
-    await tester.enterText(
-        find.widgetWithText(TextFormField, 'Value'), '5432');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Value'), '5432');
     await tester.tap(find.widgetWithText(TextButton, 'Put'));
     await tester.pumpAndSettle();
 
@@ -463,8 +460,7 @@ void main() {
     await tester.tap(find.text('db.port'));
     await tester.pumpAndSettle();
 
-    await tester.enterText(
-        find.widgetWithText(TextFormField, 'Value'), '5433');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Value'), '5433');
     await tester.tap(find.widgetWithText(TextButton, 'Save'));
     await tester.pumpAndSettle();
 
@@ -552,8 +548,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('feature.x'), findsOneWidget);
 
-    manager.watchControllerFor('app-config').add(
-        _entry('db.port', '', revision: 6, op: KeyValueOp.delete));
+    manager
+        .watchControllerFor('app-config')
+        .add(_entry('db.port', '', revision: 6, op: KeyValueOp.delete));
     await tester.pumpAndSettle();
     expect(find.text('db.port'), findsNothing);
   });
@@ -599,8 +596,7 @@ void main() {
 
   testWidgets(
       'exactly one active watch survives a keys-load failure, Retry, and a '
-      'bucket reselect',
-      (tester) async {
+      'bucket reselect', (tester) async {
     final manager = FakeKvManager();
     manager.listBucketsImpl =
         () async => [_bucketStream('app-config'), _bucketStream('other')];
@@ -720,8 +716,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: KvDashboard(
-              manager: manager, reconnectSignal: reconnectSignal),
+          body: KvDashboard(manager: manager, reconnectSignal: reconnectSignal),
         ),
       ),
     );
@@ -737,7 +732,8 @@ void main() {
     // until a fresh snapshot -- there is no resume-from-last-seen option to
     // backfill it, so re-fetching keys is the only way to pick it up.
     manager.listKeysImpl = (_) async => ['db.port', 'db.host'];
-    manager.getEntryImpl = (_, key) async => _entry(key, key == 'db.host' ? '10.0.0.1' : '5432');
+    manager.getEntryImpl =
+        (_, key) async => _entry(key, key == 'db.host' ? '10.0.0.1' : '5432');
 
     reconnectSignal.value++;
     await tester.pumpAndSettle();

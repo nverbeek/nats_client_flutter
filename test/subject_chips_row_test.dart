@@ -133,15 +133,15 @@ void main() {
   testWidgets('renders every chip with no overflow once widened',
       (tester) async {
     final subscriptions = longSubscriptions();
-    await tester.pumpWidget(buildRow(subscriptions: subscriptions, width: 20000));
+    await tester
+        .pumpWidget(buildRow(subscriptions: subscriptions, width: 20000));
     await tester.pumpAndSettle();
 
     expect(find.byType(InputChip).evaluate().length, subscriptions.length);
     expect(find.textContaining('more'), findsNothing);
   });
 
-  testWidgets(
-      'showSubscriptionColors: false renders chips without a color tab',
+  testWidgets('showSubscriptionColors: false renders chips without a color tab',
       (tester) async {
     await tester.pumpWidget(buildRow(
       subscriptions: [SubscriptionInfo(subject: 'orders.*', colorIndex: 0)],

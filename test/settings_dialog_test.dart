@@ -4,8 +4,7 @@ import 'package:nats_client_flutter/settings_dialog.dart';
 
 void main() {
   Widget buildDialog(
-      void Function(double, int, bool, bool, bool, bool, bool, bool, int,
-              bool)
+      void Function(double, int, bool, bool, bool, bool, bool, bool, int, bool)
           onSave,
       {int initialMaxMessages = 10000,
       bool initialShowTimestamps = false}) {
@@ -28,8 +27,8 @@ void main() {
     );
   }
 
-  void noopSave(double a, int b, bool c, bool d, bool e, bool f, bool g,
-      bool h, int i, bool j) {}
+  void noopSave(double a, int b, bool c, bool d, bool e, bool f, bool g, bool h,
+      int i, bool j) {}
 
   testWidgets('shows the initial values', (tester) async {
     await tester.pumpWidget(buildDialog(noopSave));
@@ -262,9 +261,16 @@ void main() {
                   initialShowSubscriptionColors: true,
                   initialMaxMessages: 10000,
                   initialShowTimestamps: false,
-                  onSave: (fontSize, retryInterval, jetStream, kv,
-                      objectStore, serviceDiscovery, updateCheck,
-                      showSubscriptionColors, maxMessages, showTimestamps) {
+                  onSave: (fontSize,
+                      retryInterval,
+                      jetStream,
+                      kv,
+                      objectStore,
+                      serviceDiscovery,
+                      updateCheck,
+                      showSubscriptionColors,
+                      maxMessages,
+                      showTimestamps) {
                     savedFontSize = fontSize;
                     savedRetryInterval = retryInterval;
                     savedJetStreamEnabled = jetStream;

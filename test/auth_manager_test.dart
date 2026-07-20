@@ -24,8 +24,7 @@ void main() {
       expect(option.pass, 'hunter2');
     });
 
-    test('returns null for username/password when both fields are empty',
-        () {
+    test('returns null for username/password when both fields are empty', () {
       expect(
         buildAuthConnectOption(
             method: AuthMethod.usernamePassword, username: '', password: ''),
@@ -55,11 +54,9 @@ void main() {
       );
     });
 
-    test('builds an nkey ConnectOption carrying the derived public key',
-        () {
+    test('builds an nkey ConnectOption carrying the derived public key', () {
       // A throwaway seed generated for this test — see Nkeys.createUser().
-      const seed =
-          'SUAOULG3VYH4VIZBYSVY6UXZ32DXVWNRAYGQ2QN3W5HGG6B5FCT2HUYNCY';
+      const seed = 'SUAOULG3VYH4VIZBYSVY6UXZ32DXVWNRAYGQ2QN3W5HGG6B5FCT2HUYNCY';
       final option =
           buildAuthConnectOption(method: AuthMethod.nkeySeed, nkeySeed: seed);
       expect(option, isNotNull);
@@ -96,7 +93,8 @@ void main() {
       );
     });
 
-    test('recognizes an authentication-related NatsException case-insensitively',
+    test(
+        'recognizes an authentication-related NatsException case-insensitively',
         () {
       expect(
         isAuthenticationError(NatsException('Authentication Expired')),
@@ -116,8 +114,8 @@ void main() {
     });
 
     test('returns false for a non-NatsException error', () {
-      expect(isAuthenticationError(Exception('Authorization Violation')),
-          isFalse);
+      expect(
+          isAuthenticationError(Exception('Authorization Violation')), isFalse);
     });
   });
 }

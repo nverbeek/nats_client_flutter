@@ -16,8 +16,7 @@ Widget withThemeModel(Widget child) {
 }
 
 void main() {
-  testWidgets(
-      'renders header version and headers as a table row when present',
+  testWidgets('renders header version and headers as a table row when present',
       (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: Scaffold(
@@ -199,8 +198,8 @@ void main() {
     final context = tester.element(find.byType(MessageDetailDialog));
     final expectedBackground = Theme.of(context).colorScheme.surface;
 
-    final container = tester
-        .widget<Container>(find.byKey(const Key('hexPayloadBackground')));
+    final container =
+        tester.widget<Container>(find.byKey(const Key('hexPayloadBackground')));
 
     expect(container.color, expectedBackground);
   });
@@ -291,7 +290,8 @@ void main() {
     expect(find.byIcon(Icons.copy), findsNothing);
   });
 
-  testWidgets('shows a Received row with the full timestamp when capturedAt is set',
+  testWidgets(
+      'shows a Received row with the full timestamp when capturedAt is set',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(

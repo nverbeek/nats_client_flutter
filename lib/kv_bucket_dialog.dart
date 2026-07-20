@@ -215,7 +215,8 @@ class _KvBucketStatusDialogState extends State<KvBucketStatusDialog> {
         Text('Size: ${formatBytes(status.size)}'),
         if (_error != null) ...[
           const SizedBox(height: 8),
-          Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          Text(_error!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error)),
         ],
       ],
     );

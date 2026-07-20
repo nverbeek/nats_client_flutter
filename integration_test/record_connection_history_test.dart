@@ -57,7 +57,8 @@ void main() {
 
   testWidgets('a successful connect records the target into history',
       (tester) async {
-    await seedBaseline(host: constants.defaultHost, port: constants.defaultPort);
+    await seedBaseline(
+        host: constants.defaultHost, port: constants.defaultPort);
 
     app.main();
     await tester.pumpAndSettle();

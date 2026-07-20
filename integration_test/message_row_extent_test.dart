@@ -66,8 +66,7 @@ void main() {
 
   testWidgets(
       'a long message does not overflow the row extent at max font size '
-      'with timestamps on',
-      (tester) async {
+      'with timestamps on', (tester) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('messageFontSize', 30.0);
 
@@ -90,15 +89,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull,
-        reason:
-            'the thin per-row timestamp must not push a long message past '
+        reason: 'the thin per-row timestamp must not push a long message past '
             'the fixed row extent at the max font size');
   });
 
   testWidgets(
       'toggling Show Message Timestamps in Settings shows/hides a '
-      'per-row HH:mm:ss text without changing the row extent',
-      (tester) async {
+      'per-row HH:mm:ss text without changing the row extent', (tester) async {
     await pumpConnectedApp(tester);
     addTearDown(() => disconnectApp(tester));
 
@@ -131,7 +128,8 @@ void main() {
     // label.
     final switchFinder = find.descendant(
         of: find.ancestor(
-            of: find.text('Show Message Timestamps'), matching: find.byType(Row)),
+            of: find.text('Show Message Timestamps'),
+            matching: find.byType(Row)),
         matching: find.byType(Switch));
     await tester.tap(switchFinder);
     await tester.tap(find.widgetWithText(TextButton, 'Save'));

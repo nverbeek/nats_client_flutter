@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 /// Depth" (not applicable to Object Store, which keeps one live revision per
 /// object) for a storage-type choice and an optional max-size cap.
 class CreateObjectStoreBucketDialog extends StatefulWidget {
-  final void Function(String bucket, String storage, int replicas,
-      int maxBytes, Duration? ttl) onCreate;
+  final void Function(String bucket, String storage, int replicas, int maxBytes,
+      Duration? ttl) onCreate;
 
   const CreateObjectStoreBucketDialog({super.key, required this.onCreate});
 

@@ -26,8 +26,8 @@ class SettingsDialog extends StatefulWidget {
   final bool initialShowSubscriptionColors;
   final int initialMaxMessages;
   final bool initialShowTimestamps;
-  final void Function(double, int, bool, bool, bool, bool, bool, bool, int,
-      bool) onSave;
+  final void Function(
+      double, int, bool, bool, bool, bool, bool, bool, int, bool) onSave;
 
   const SettingsDialog({
     super.key,

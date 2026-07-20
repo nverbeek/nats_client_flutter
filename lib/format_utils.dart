@@ -64,9 +64,8 @@ String formatHexDump(Uint8List bytes,
   final buffer = StringBuffer();
   final dumpLength = bytes.length <= limit ? bytes.length : limit;
   for (var offset = 0; offset < dumpLength; offset += bytesPerRow) {
-    final end = (offset + bytesPerRow < dumpLength)
-        ? offset + bytesPerRow
-        : dumpLength;
+    final end =
+        (offset + bytesPerRow < dumpLength) ? offset + bytesPerRow : dumpLength;
     final row = bytes.sublist(offset, end);
 
     buffer.write(offset.toRadixString(16).padLeft(8, '0'));
@@ -81,7 +80,8 @@ String formatHexDump(Uint8List bytes,
 
     buffer.write(' ');
     for (final byte in row) {
-      buffer.write(byte >= 0x20 && byte < 0x7f ? String.fromCharCode(byte) : '.');
+      buffer
+          .write(byte >= 0x20 && byte < 0x7f ? String.fromCharCode(byte) : '.');
     }
     if (end < dumpLength) buffer.write('\n');
   }

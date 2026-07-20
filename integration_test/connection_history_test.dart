@@ -74,8 +74,7 @@ void main() {
         matching: find.byIcon(Icons.close),
       );
 
-  testWidgets(
-      'tapping the Host field opens a dropdown showing seeded history',
+  testWidgets('tapping the Host field opens a dropdown showing seeded history',
       (tester) async {
     await pumpAppWithHistory(tester, [entryLocal, entryDemo]);
 

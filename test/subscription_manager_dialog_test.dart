@@ -26,8 +26,8 @@ void main() {
       expect(saved, isFalse);
       expect(find.text('Subject is required'), findsOneWidget);
 
-      final subjectField =
-          tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Subject'));
+      final subjectField = tester
+          .widget<TextFormField>(find.widgetWithText(TextFormField, 'Subject'));
       expect(subjectField.enabled, isTrue);
     });
 
@@ -68,8 +68,8 @@ void main() {
     testWidgets('edit mode: subject field is disabled, Remove button shown',
         (tester) async {
       var removed = false;
-      final existing =
-          SubscriptionInfo(subject: 'orders.*', queueGroup: 'workers', colorIndex: 0);
+      final existing = SubscriptionInfo(
+          subject: 'orders.*', queueGroup: 'workers', colorIndex: 0);
 
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
@@ -81,8 +81,8 @@ void main() {
         ),
       ));
 
-      final subjectField =
-          tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Subject'));
+      final subjectField = tester
+          .widget<TextFormField>(find.widgetWithText(TextFormField, 'Subject'));
       expect(subjectField.enabled, isFalse);
 
       await tester.tap(find.widgetWithText(TextButton, 'Remove'));
@@ -91,12 +91,13 @@ void main() {
       expect(removed, isTrue);
     });
 
-    testWidgets('edit mode: Save reports the (possibly unchanged) subject '
+    testWidgets(
+        'edit mode: Save reports the (possibly unchanged) subject '
         'and updated queue group', (tester) async {
       String? savedSubject;
       String? savedQueueGroup;
-      final existing =
-          SubscriptionInfo(subject: 'orders.*', queueGroup: 'workers', colorIndex: 0);
+      final existing = SubscriptionInfo(
+          subject: 'orders.*', queueGroup: 'workers', colorIndex: 0);
 
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
@@ -186,7 +187,8 @@ void main() {
         (tester) async {
       await tester.pumpWidget(buildManager(subscriptions: [
         SubscriptionInfo(subject: 'orders.*', colorIndex: 0),
-        SubscriptionInfo(subject: 'alerts', queueGroup: 'workers', colorIndex: 1),
+        SubscriptionInfo(
+            subject: 'alerts', queueGroup: 'workers', colorIndex: 1),
       ]));
 
       expect(find.text('orders.*'), findsOneWidget);
@@ -229,8 +231,7 @@ void main() {
       expect(removed, same(a));
     });
 
-    testWidgets(
-        'editing the queue group field does not commit until submitted',
+    testWidgets('editing the queue group field does not commit until submitted',
         (tester) async {
       final calls = <String?>[];
       final info = SubscriptionInfo(subject: 'orders.*', colorIndex: 0);
@@ -247,8 +248,8 @@ void main() {
         },
       ));
 
-      await tester.enterText(find.widgetWithText(TextFormField, 'Queue group'),
-          'workers');
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Queue group'), 'workers');
       await tester.pump();
       expect(calls, isEmpty, reason: 'typing alone must not trigger a resub');
 

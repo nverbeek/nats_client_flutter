@@ -73,8 +73,10 @@ void main() {
   test(
       'a malformed line is captured in errors with correct 1-based line '
       'number while surrounding valid lines still parse', () {
-    final first = ExportedMessage(subject: 'a', payload: Uint8List.fromList([1]));
-    final second = ExportedMessage(subject: 'b', payload: Uint8List.fromList([2]));
+    final first =
+        ExportedMessage(subject: 'a', payload: Uint8List.fromList([1]));
+    final second =
+        ExportedMessage(subject: 'b', payload: Uint8List.fromList([2]));
     final content = [
       encodeExportedMessageLine(first),
       'not valid json at all',
@@ -119,8 +121,8 @@ void main() {
     );
     final capturedAt = DateTime.utc(2026, 1, 1);
 
-    final exported = exportedMessageFromNatsMessage(natsMessage,
-        capturedAt: capturedAt);
+    final exported =
+        exportedMessageFromNatsMessage(natsMessage, capturedAt: capturedAt);
 
     expect(exported.subject, 'orders.new');
     expect(exported.payload, [5, 6, 7]);

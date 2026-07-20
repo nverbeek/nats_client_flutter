@@ -239,7 +239,8 @@ class ServiceDiscoveryDashboardState extends State<ServiceDiscoveryDashboard> {
           )
         else if (_services.isEmpty)
           Expanded(
-            child: _buildEmptyState(Icons.inbox_outlined,
+            child: _buildEmptyState(
+                Icons.inbox_outlined,
                 'No services responded. This only finds ADR-32 services '
                 '(nats.go\'s micro package, etc.) currently running and '
                 'reachable on this account.'),
@@ -271,8 +272,8 @@ class ServiceDiscoveryDashboardState extends State<ServiceDiscoveryDashboard> {
     );
   }
 
-  Widget _buildEndpointRow(String name, String subject,
-      EndpointStatsInfo? stats) {
+  Widget _buildEndpointRow(
+      String name, String subject, EndpointStatsInfo? stats) {
     return ListTile(
       title: Text(name),
       subtitle: Text(
@@ -336,7 +337,8 @@ class ServiceDiscoveryDashboardState extends State<ServiceDiscoveryDashboard> {
         ],
         if (stats != null) ...[
           const SizedBox(height: 8),
-          Text('Running since ${formatRelativeTime(stats.started.toIso8601String())}',
+          Text(
+              'Running since ${formatRelativeTime(stats.started.toIso8601String())}',
               style: Theme.of(context).textTheme.bodySmall),
         ],
         const SizedBox(height: 16),
@@ -351,8 +353,8 @@ class ServiceDiscoveryDashboardState extends State<ServiceDiscoveryDashboard> {
                     ?.copyWith(fontStyle: FontStyle.italic)),
           )
         else
-          ...endpoints.map((e) =>
-              _buildEndpointRow(e.name, e.subject, statsByName[e.name])),
+          ...endpoints.map(
+              (e) => _buildEndpointRow(e.name, e.subject, statsByName[e.name])),
       ],
     );
   }

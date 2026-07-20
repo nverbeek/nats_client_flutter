@@ -51,7 +51,8 @@ class KvManager {
   Future<List<StreamInfo>> listBuckets(
       {Duration timeout = const Duration(seconds: 5)}) async {
     final streams = await _js.listStreams(timeout: timeout);
-    return streams.where((s) => s.config.name.startsWith(kvStreamPrefix))
+    return streams
+        .where((s) => s.config.name.startsWith(kvStreamPrefix))
         .toList();
   }
 
@@ -164,9 +165,7 @@ class KvManager {
       storage: config['storage'] as String? ?? 'file',
       size: state['bytes'] as int? ?? 0,
       values: state['messages'] as int? ?? 0,
-      ttl: maxAgeNanos > 0
-          ? Duration(microseconds: maxAgeNanos ~/ 1000)
-          : null,
+      ttl: maxAgeNanos > 0 ? Duration(microseconds: maxAgeNanos ~/ 1000) : null,
       replicas: config['num_replicas'] as int? ?? 1,
       lastSeq: state['last_seq'] as int? ?? 0,
     );

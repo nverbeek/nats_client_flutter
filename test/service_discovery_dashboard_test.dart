@@ -52,8 +52,7 @@ void main() {
   testWidgets('shows a prompt to discover before Discover is tapped',
       (tester) async {
     final manager = FakeServiceDiscoveryManager();
-    await tester
-        .pumpWidget(wrap(ServiceDiscoveryDashboard(manager: manager)));
+    await tester.pumpWidget(wrap(ServiceDiscoveryDashboard(manager: manager)));
 
     expect(find.text('Tap Discover to find running services.'), findsOneWidget);
     expect(manager.discoverCalls, 0);
@@ -65,8 +64,7 @@ void main() {
             PingResponse(id: 'inst-1', name: 'orders', version: '1.0.0'),
             PingResponse(id: 'inst-2', name: 'billing', version: '2.1.0'),
           ];
-    await tester
-        .pumpWidget(wrap(ServiceDiscoveryDashboard(manager: manager)));
+    await tester.pumpWidget(wrap(ServiceDiscoveryDashboard(manager: manager)));
 
     await tester.tap(find.byKey(const ValueKey('discoverServicesButton')));
     await tester.pumpAndSettle();
@@ -82,8 +80,7 @@ void main() {
 
   testWidgets('discovering nothing shows the empty state', (tester) async {
     final manager = FakeServiceDiscoveryManager();
-    await tester
-        .pumpWidget(wrap(ServiceDiscoveryDashboard(manager: manager)));
+    await tester.pumpWidget(wrap(ServiceDiscoveryDashboard(manager: manager)));
 
     await tester.tap(find.byKey(const ValueKey('discoverServicesButton')));
     await tester.pumpAndSettle();
@@ -95,8 +92,7 @@ void main() {
       (tester) async {
     final manager = FakeServiceDiscoveryManager()
       ..discoverImpl = () async => throw NatsException('not connected');
-    await tester
-        .pumpWidget(wrap(ServiceDiscoveryDashboard(manager: manager)));
+    await tester.pumpWidget(wrap(ServiceDiscoveryDashboard(manager: manager)));
 
     await tester.tap(find.byKey(const ValueKey('discoverServicesButton')));
     await tester.pumpAndSettle();
@@ -134,8 +130,7 @@ void main() {
             ),
           ],
         );
-    await tester
-        .pumpWidget(wrap(ServiceDiscoveryDashboard(manager: manager)));
+    await tester.pumpWidget(wrap(ServiceDiscoveryDashboard(manager: manager)));
 
     await tester.tap(find.byKey(const ValueKey('discoverServicesButton')));
     await tester.pumpAndSettle();
@@ -157,8 +152,7 @@ void main() {
       ..discoverImpl = () async => [
             PingResponse(id: 'inst-1', name: 'orders', version: '1.0.0'),
           ];
-    await tester
-        .pumpWidget(wrap(ServiceDiscoveryDashboard(manager: manager)));
+    await tester.pumpWidget(wrap(ServiceDiscoveryDashboard(manager: manager)));
 
     await tester.tap(find.byKey(const ValueKey('discoverServicesButton')));
     await tester.pumpAndSettle();
@@ -175,8 +169,8 @@ void main() {
             PingResponse(id: 'inst-1', name: 'orders', version: '1.0.0'),
           ];
     final key = GlobalKey<ServiceDiscoveryDashboardState>();
-    await tester.pumpWidget(wrap(
-        ServiceDiscoveryDashboard(key: key, manager: manager)));
+    await tester.pumpWidget(
+        wrap(ServiceDiscoveryDashboard(key: key, manager: manager)));
 
     await tester.tap(find.byKey(const ValueKey('discoverServicesButton')));
     await tester.pumpAndSettle();

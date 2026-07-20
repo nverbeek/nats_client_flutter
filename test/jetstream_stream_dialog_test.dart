@@ -28,8 +28,7 @@ void main() {
     expect(find.text('A stream name is required.'), findsOneWidget);
   });
 
-  testWidgets(
-      'shows a validation error and blocks submit for empty subjects',
+  testWidgets('shows a validation error and blocks submit for empty subjects',
       (tester) async {
     var created = false;
     await tester.pumpWidget(buildDialog((_) => created = true));
@@ -91,8 +90,7 @@ void main() {
     expect(config!.maxAge, const Duration(days: 7));
   });
 
-  testWidgets('selecting a Replicas value passes it through',
-      (tester) async {
+  testWidgets('selecting a Replicas value passes it through', (tester) async {
     // The dialog's content now overflows the default 800x600 test surface --
     // resize it (matching `security_settings_dialog_test.dart`'s pattern for
     // its own tall dialog) so fields below the fold are actually
@@ -155,11 +153,9 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Max Messages (optional)'),
-        '1000');
+        find.widgetWithText(TextFormField, 'Max Messages (optional)'), '1000');
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Max Bytes (optional)'),
-        '2048');
+        find.widgetWithText(TextFormField, 'Max Bytes (optional)'), '2048');
     await tester.enterText(
         find.widgetWithText(
             TextFormField, 'Max Message Size (bytes, optional)'),
@@ -169,7 +165,8 @@ void main() {
             TextFormField, 'Max Messages Per Subject (optional)'),
         '5');
 
-    await tester.tap(find.widgetWithText(SwitchListTile, 'Allow Rollup Headers'));
+    await tester
+        .tap(find.widgetWithText(SwitchListTile, 'Allow Rollup Headers'));
     await tester.tap(find.widgetWithText(SwitchListTile, 'Deny Delete'));
     await tester.tap(find.widgetWithText(SwitchListTile, 'Deny Purge'));
     await tester.pump();
@@ -276,7 +273,8 @@ void main() {
     testWidgets('submitting without changes round-trips the same config',
         (tester) async {
       StreamConfig? config;
-      await tester.pumpWidget(buildDialog((c) => config = c, initial: existing));
+      await tester
+          .pumpWidget(buildDialog((c) => config = c, initial: existing));
 
       await tester.tap(find.widgetWithText(TextButton, 'Save'));
       await tester.pump();
@@ -301,7 +299,8 @@ void main() {
     testWidgets('the stream name cannot be edited even if attempted',
         (tester) async {
       StreamConfig? config;
-      await tester.pumpWidget(buildDialog((c) => config = c, initial: existing));
+      await tester
+          .pumpWidget(buildDialog((c) => config = c, initial: existing));
 
       // The field is disabled, but the submitted name should still be
       // whatever `initial` carried, not whatever the (ignored) controller
@@ -330,8 +329,8 @@ void main() {
       );
 
       StreamConfig? config;
-      await tester.pumpWidget(
-          buildDialog((c) => config = c, initial: kvBacking));
+      await tester
+          .pumpWidget(buildDialog((c) => config = c, initial: kvBacking));
 
       await tester.tap(find.widgetWithText(TextButton, 'Save'));
       await tester.pump();
@@ -352,8 +351,8 @@ void main() {
       );
 
       StreamConfig? config;
-      await tester.pumpWidget(
-          buildDialog((c) => config = c, initial: sixHours));
+      await tester
+          .pumpWidget(buildDialog((c) => config = c, initial: sixHours));
 
       expect(
         find.descendant(
@@ -378,8 +377,8 @@ void main() {
       );
 
       StreamConfig? config;
-      await tester.pumpWidget(
-          buildDialog((c) => config = c, initial: sixHours));
+      await tester
+          .pumpWidget(buildDialog((c) => config = c, initial: sixHours));
 
       await tester.enterText(
           find.widgetWithText(TextFormField, 'Max Age (days, optional)'), '3');
@@ -403,11 +402,12 @@ void main() {
       expect(find.text('-1'), findsNothing);
     });
 
-    testWidgets('blocks submit on unparseable numeric input instead of '
+    testWidgets(
+        'blocks submit on unparseable numeric input instead of '
         'silently wiping the limit', (tester) async {
       var submitted = false;
-      await tester.pumpWidget(
-          buildDialog((_) => submitted = true, initial: existing));
+      await tester
+          .pumpWidget(buildDialog((_) => submitted = true, initial: existing));
 
       await tester.enterText(
           find.widgetWithText(TextFormField, 'Max Bytes (optional)'), '10 GB');
