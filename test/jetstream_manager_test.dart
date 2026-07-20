@@ -96,4 +96,39 @@ void main() {
       expect(message, contains('JetStream is unavailable'));
     });
   });
+
+  group('describeJsApiErrorEnvelope', () {
+    test('uses the description when the server sends one', () {
+      expect(
+        describeJsApiErrorEnvelope(
+            {'code': 404, 'description': 'stream not found'}),
+        'stream not found',
+      );
+    });
+
+    test('falls back to the error code when description is absent', () {
+      // Permission and some auth errors reply with only err_code/code. The
+      // previous `map['error']['description'] as String` threw an opaque
+      // TypeError on these, which describeJetStreamError couldn't classify.
+      final message = describeJsApiErrorEnvelope({'err_code': 10052});
+      expect(message, contains('10052'));
+      expect(message, isNot(contains('TypeError')));
+    });
+
+    test('falls back to the code field when err_code is absent', () {
+      expect(describeJsApiErrorEnvelope({'code': 503}), contains('503'));
+    });
+
+    test('ignores an empty description rather than showing a blank error', () {
+      expect(
+        describeJsApiErrorEnvelope({'code': 500, 'description': ''}),
+        contains('500'),
+      );
+    });
+
+    test('tolerates an error payload that is not a map at all', () {
+      expect(describeJsApiErrorEnvelope('boom'), contains('boom'));
+      expect(describeJsApiErrorEnvelope(null), isNotEmpty);
+    });
+  });
 }

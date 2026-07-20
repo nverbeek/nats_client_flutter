@@ -40,14 +40,33 @@ bool isValidUtf8(Uint8List bytes) {
   }
 }
 
+/// How many bytes [formatHexDump] renders before truncating.
+///
+/// A hex dump costs roughly 4.3 chars of output per input byte, so an
+/// uncapped dump of a 1MB payload (well inside NATS's default max) builds a
+/// ~4.3MB string and asks the text layout engine for ~65,000 monospace
+/// lines in a single frame -- seconds of frozen UI. The Message Detail
+/// dialog also *defaults* to the hex view for non-UTF-8 payloads, so that
+/// cost would be paid on open without the user asking for it. 64KiB is
+/// several screens of dump, far more than anyone reads by eye, and keeps
+/// the generated string near 280KB.
+const int hexDumpByteLimit = 64 * 1024;
+
 /// Renders [bytes] as a classic hex + ASCII dump ([bytesPerRow] bytes per
 /// line): an 8-digit hex offset, each byte in hex with a mid-row gap, then
 /// the same bytes as ASCII (non-printable bytes shown as `.`).
-String formatHexDump(Uint8List bytes, {int bytesPerRow = 16}) {
+///
+/// Stops after [limit] bytes and appends a line saying how much was
+/// omitted; see [hexDumpByteLimit] for why. Pass a larger [limit] to
+/// override (an explicit "dump it all" action, a test).
+String formatHexDump(Uint8List bytes,
+    {int bytesPerRow = 16, int limit = hexDumpByteLimit}) {
   final buffer = StringBuffer();
-  for (var offset = 0; offset < bytes.length; offset += bytesPerRow) {
-    final end =
-        (offset + bytesPerRow < bytes.length) ? offset + bytesPerRow : bytes.length;
+  final dumpLength = bytes.length <= limit ? bytes.length : limit;
+  for (var offset = 0; offset < dumpLength; offset += bytesPerRow) {
+    final end = (offset + bytesPerRow < dumpLength)
+        ? offset + bytesPerRow
+        : dumpLength;
     final row = bytes.sublist(offset, end);
 
     buffer.write(offset.toRadixString(16).padLeft(8, '0'));
@@ -64,7 +83,14 @@ String formatHexDump(Uint8List bytes, {int bytesPerRow = 16}) {
     for (final byte in row) {
       buffer.write(byte >= 0x20 && byte < 0x7f ? String.fromCharCode(byte) : '.');
     }
-    if (end < bytes.length) buffer.write('\n');
+    if (end < dumpLength) buffer.write('\n');
+  }
+  if (bytes.length > dumpLength) {
+    final remaining = bytes.length - dumpLength;
+    buffer.write('\n\n[truncated -- showing the first '
+        '${formatGroupedCount(dumpLength)} of '
+        '${formatGroupedCount(bytes.length)} bytes; '
+        '${formatGroupedCount(remaining)} not shown]');
   }
   return buffer.toString();
 }
@@ -107,6 +133,31 @@ String formatEstimatedDuration(Duration d) {
   final minutes = totalSeconds ~/ 60;
   final seconds = totalSeconds % 60;
   return minutes == 0 ? '~${seconds}s' : '~${minutes}m ${seconds}s';
+}
+
+/// Compact, exact rendering of a configured [Duration] -- a consumer's
+/// ack-wait, a stream's max-age -- as up to two units: `45s`, `1m 30s`,
+/// `2h 15m`, `3d 4h`, and a bare `1m`/`2h`/`3d` when the smaller unit is
+/// zero.
+///
+/// Distinct from [formatEstimatedDuration]'s `~`-prefixed approximation
+/// (which is about how long something will *take*): these are configured
+/// values a user may need to read back exactly, so carrying the remainder
+/// matters -- a plain truncating ladder renders both 90s and 60s as `1m`,
+/// making two materially different ack-wait settings look identical.
+String formatConfiguredDuration(Duration d) {
+  if (d.inMilliseconds < 0) return '0s';
+  if (d.inSeconds < 60) return '${d.inSeconds}s';
+  if (d.inMinutes < 60) {
+    final seconds = d.inSeconds % 60;
+    return seconds == 0 ? '${d.inMinutes}m' : '${d.inMinutes}m ${seconds}s';
+  }
+  if (d.inHours < 24) {
+    final minutes = d.inMinutes % 60;
+    return minutes == 0 ? '${d.inHours}h' : '${d.inHours}h ${minutes}m';
+  }
+  final hours = d.inHours % 24;
+  return hours == 0 ? '${d.inDays}d' : '${d.inDays}d ${hours}h';
 }
 
 /// Truncates an error's `toString()` to [maxLength] characters (appending an

@@ -15,7 +15,13 @@ class ServiceDiscoveryDashboard extends StatefulWidget {
   /// The active discovery manager, or `null` when not currently connected.
   final ServiceDiscoveryManager? manager;
 
-  const ServiceDiscoveryDashboard({super.key, required this.manager});
+  /// Fires after a real reconnect -- see `JetStreamDashboard`'s doc comment
+  /// on the same parameter. Optional so tests that never disconnect don't
+  /// need to plumb one through.
+  final Listenable? reconnectSignal;
+
+  const ServiceDiscoveryDashboard(
+      {super.key, required this.manager, this.reconnectSignal});
 
   @override
   State<ServiceDiscoveryDashboard> createState() =>
@@ -33,6 +39,36 @@ class ServiceDiscoveryDashboardState extends State<ServiceDiscoveryDashboard> {
   String? _detailError;
   InfoResponse? _info;
   StatsResponse? _stats;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.reconnectSignal?.addListener(_onReconnect);
+  }
+
+  @override
+  void dispose() {
+    widget.reconnectSignal?.removeListener(_onReconnect);
+    super.dispose();
+  }
+
+  /// Recovers the error states a disconnect can strand this tab in. Unlike
+  /// the JetStream/KV dashboards this deliberately doesn't re-run a
+  /// successful discovery: every result here is the reply to an explicit
+  /// user-triggered fan-out (see the class doc), so silently re-issuing one
+  /// would break that contract. A *failed* discover or detail load is a
+  /// different matter -- that's the stuck-on-Retry state the reconnect
+  /// signal exists to clear.
+  void _onReconnect() {
+    if (!mounted || widget.manager == null) return;
+    if (_discoverError != null) {
+      _discover();
+    }
+    final selected = _selected;
+    if (_detailError != null && selected != null) {
+      _loadDetail(selected);
+    }
+  }
 
   @override
   void didUpdateWidget(covariant ServiceDiscoveryDashboard oldWidget) {

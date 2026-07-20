@@ -256,9 +256,16 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
       if (filterAliased) {
         addedToFiltered = newestFirst.length;
       } else {
-        final oldFilteredLength = _filteredMessages.length;
-        _runFilter();
-        addedToFiltered = _filteredMessages.length - oldFilteredLength;
+        // Test only the newly arrived batch and prepend its matches, rather
+        // than re-running `_runFilter()` over the whole list: the filter
+        // verdict for a message already in `_filteredMessages` can't have
+        // changed (both the filter text and those payloads are immutable
+        // between flushes), so a full pass re-lowercased every cached
+        // payload up to ~30x/second for an identical result. Same
+        // incremental approach `main.dart`'s `_insertMessages` uses.
+        final matches = _matching(newestFirst);
+        _filteredMessages.insertAll(0, matches);
+        addedToFiltered = matches.length;
       }
       _trimMessagesToCap();
     });
@@ -342,12 +349,20 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
     if (_currentFilter.isEmpty) {
       _filteredMessages = _messages;
     } else {
-      final lowerFilter = _currentFilter.toLowerCase();
-      _filteredMessages = _messages
-          .where((message) =>
-              decodeMessageTextFor(message).toLowerCase().contains(lowerFilter))
-          .toList();
+      _filteredMessages = _matching(_messages);
     }
+  }
+
+  /// The subset of [messages] matching the active filter, order preserved.
+  /// Shared by the full re-filter [_runFilter] does when the filter text
+  /// changes and the incremental per-batch pass [_insertMessages] does on
+  /// each flush, so both apply exactly one definition of "matches".
+  List<Message> _matching(List<Message> messages) {
+    final lowerFilter = _currentFilter.toLowerCase();
+    return messages
+        .where((message) =>
+            decodeMessageTextFor(message).toLowerCase().contains(lowerFilter))
+        .toList();
   }
 
   /// Row action menu items, shared by the trailing overflow button and the

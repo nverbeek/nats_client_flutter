@@ -90,5 +90,20 @@ void main() {
     expect(find.text('Select a stream to see details.'), findsNothing);
     expect(find.text(streamName), findsWidgets);
     expect(find.textContaining('Subjects (1):'), findsOneWidget);
+
+    // 6. The dashboard must also be *live* again, not just showing
+    // surviving state. This is what the post-reconnect recovery signal is
+    // for, and asserting only on steps 1-5 is why a bug that stopped that
+    // signal firing at all (see `reconnect_detector.dart`) shipped: the
+    // stale-but-correct-looking pane passed every check above. A refresh
+    // that lists the stream again proves the pane recovered rather than
+    // sitting on data frozen at disconnect time.
+    await tester.tap(find.byTooltip('Refresh streams'));
+    await pumpUntil(
+      tester,
+      () => find.text(streamName).evaluate().isNotEmpty,
+      timeout: const Duration(seconds: 15),
+    );
+    expect(find.textContaining('Subjects (1):'), findsOneWidget);
   });
 }

@@ -28,7 +28,7 @@ This app depends on the official mainline `dart_nats` package (`^1.2.2`), includ
 - [ ] **M17**: NATS Server Monitoring Dashboard. Not started — see below.
 - [x] **M18**: NATS Micro-services (Services API) Discovery.
 - [x] **M19**: Multi-Select + Clipboard Copy.
-- [ ] **M20** *(tentative — user flagged as a "maybe")*: Per-Subscription Message Rate Sparkline. Not started — see below.
+- [x] **M20** *(won't do)*: Per-Subscription Message Rate Sparkline. Dropped 2026-07-19 — user no longer interested.
 - [x] **M21**: Message Detail Headers Table + Raw Copy.
 - [x] **M22**: Export & Replay Captured Messages to/from File.
 - [x] **M23**: Reconnect-Buffer Overflow Handling (`maxReconnectBuffer`).
@@ -144,16 +144,9 @@ New tab (`[📊 Server Monitor]`) or a panel reachable from a toolbar icon, gate
 
 ---
 
-## Milestone 20: Per-Subscription Message Rate Sparkline (Low Priority, tentative)
+## Milestone 20: Per-Subscription Message Rate Sparkline (Won't Do)
 
-### Objective
-Milestone 11 already tags every message with its originating subscription's color via `sid`. This milestone would add a small rolling messages/sec indicator per subscription (e.g. next to its chip) so a noisy or unexpectedly quiet subject is visible at a glance instead of only inferable by watching the list scroll. **Flagged by the user as a "maybe"** — lowest-confidence item of this batch, worth a lighter design pass before committing to implementation.
-
-### Implementation Checklist
-- [ ] Decide visual treatment (tiny sparkline, a rate number, a pulsing dot) and where it lives (in the chip itself vs. only in the Subscription Manager dialog).
-- [ ] Compute a rolling rate per `sid` from existing arrival timestamps — no new `dart_nats` data needed, this is purely a local aggregation over what's already tagged.
-- [ ] If implemented inside the chip row itself, confirm it doesn't reintroduce the offstage-measurement/`OverflowBox`/`Tooltip` pitfalls that `subject_chips_row.dart`'s own doc comments describe from building its overflow-collapse logic.
-- [ ] Unit tests for the rate computation (fake clock) + widget/live-server verification that the displayed rate roughly tracks a known publish rate from a second test client.
+**Dropped 2026-07-19** — user is no longer interested. Would have added a small rolling messages/sec indicator per subscription (e.g. next to its chip), using Milestone 11's existing `sid` tagging. Left here only as a record of the idea; not to be picked up.
 
 ---
 

@@ -1,6 +1,7 @@
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:flutter/material.dart';
 
+import 'format_utils.dart' show formatConfiguredDuration;
 import 'jetstream_manager.dart' show ConsumerDetail, describeJetStreamError;
 
 /// Read-only detail dialog for a single JetStream consumer -- type, ack/
@@ -71,12 +72,6 @@ class _ConsumerDetailDialogState extends State<ConsumerDetailDialog> {
     }
   }
 
-  String _formatDuration(Duration d) {
-    if (d.inSeconds < 60) return '${d.inSeconds}s';
-    if (d.inMinutes < 60) return '${d.inMinutes}m';
-    return '${d.inHours}h';
-  }
-
   @override
   Widget build(BuildContext context) {
     final isPush = (_info.config.deliverSubject ?? '').isNotEmpty;
@@ -107,7 +102,7 @@ class _ConsumerDetailDialogState extends State<ConsumerDetailDialog> {
               Text('Filter Subject: ${_info.config.filterSubject}'),
             if (_info.created.isNotEmpty) Text('Created: ${_info.created}'),
             if (detail?.ackWait != null)
-              Text('Ack Wait: ${_formatDuration(detail!.ackWait!)}'),
+              Text('Ack Wait: ${formatConfiguredDuration(detail!.ackWait!)}'),
             if (detail?.maxDeliver != null)
               Text('Max Deliver: ${detail!.maxDeliver == -1 ? 'unlimited' : detail.maxDeliver}'),
             if (detail?.maxAckPending != null)

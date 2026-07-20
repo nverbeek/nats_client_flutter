@@ -74,11 +74,21 @@ class KvDashboardState extends State<KvDashboard> {
   /// consumer is `deliverPolicy: 'last'`, so a put/delete that landed while
   /// disconnected is invisible until a fresh snapshot -- there's no
   /// resume-from-last-seen option to backfill it otherwise. So this
-  /// unconditionally re-snapshots the selected bucket (which also restarts
-  /// the watch as `_loadKeys`'s last step) rather than only doing so when
-  /// `_keysError` happens to be set.
-  void _onReconnect() {
-    if (widget.manager == null) return;
+  /// re-snapshots the selected bucket (which also restarts the watch as
+  /// `_loadKeys`'s last step) rather than only doing so when `_keysError`
+  /// happens to be set.
+  ///
+  /// The re-snapshot is gated on one cheap `bucketStatus` request first,
+  /// though: it costs one round trip and tells us the backing stream's last
+  /// sequence, and since KV revisions *are* stream sequences, that matching
+  /// the highest revision we already hold means nothing was written while
+  /// we were away and the (still-live) watch has us covered. Without that
+  /// gate, every reconnect blip on a large bucket re-fetched every key --
+  /// thousands of requests, and repeatedly, since a flaky link is exactly
+  /// what produces repeated reconnects.
+  Future<void> _onReconnect() async {
+    final manager = widget.manager;
+    if (manager == null) return;
     if (_availabilityError != null) {
       _checkAvailability();
       return;
@@ -86,9 +96,29 @@ class KvDashboardState extends State<KvDashboard> {
     if (_bucketsError != null) {
       _loadBuckets();
     }
-    if (_selectedBucket != null) {
-      _loadKeys(_selectedBucket!);
+    final bucket = _selectedBucket;
+    if (bucket == null) return;
+
+    // An errored key list has no trustworthy high-water mark to compare
+    // against, so always do the full reload in that case.
+    if (_keysError == null && _entries.isNotEmpty) {
+      try {
+        final status = await manager.bucketStatus(bucket);
+        if (!mounted || widget.manager != manager || _selectedBucket != bucket) {
+          return;
+        }
+        final highestHeld = _entries.values
+            .fold<int>(0, (max, e) => e.revision > max ? e.revision : max);
+        if (status.lastSeq == highestHeld) return;
+      } catch (_) {
+        // Fall through to the full reload -- the probe is an optimization,
+        // never a reason to skip recovery.
+      }
+      if (!mounted || widget.manager != manager || _selectedBucket != bucket) {
+        return;
+      }
     }
+    _loadKeys(bucket);
   }
 
   @override

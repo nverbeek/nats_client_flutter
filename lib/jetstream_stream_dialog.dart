@@ -28,16 +28,50 @@ class StreamConfigDialog extends StatefulWidget {
   State<StreamConfigDialog> createState() => _StreamConfigDialogState();
 }
 
+/// Text for an optional numeric limit field: blank for "unset", and blank
+/// for the server's `-1` unlimited sentinel too, so an unlimited value never
+/// renders as a literal `-1` alongside a "Leave blank for unlimited" hint.
+String _optionalLimitText(int? value) =>
+    (value == null || value == -1) ? '' : value.toString();
+
+/// Validator shared by every optional numeric field: blank is always fine
+/// (it means "unlimited"), but anything non-blank must parse as a whole
+/// number. Without this, `int.tryParse` silently yields `null` for input
+/// like `10 GB` or `1e9`, which on an edit submits as "unlimited" and wipes
+/// the stream's existing limit with a success message.
+String? _validateOptionalNumber(String? value) {
+  final trimmed = (value ?? '').trim();
+  if (trimmed.isEmpty) return null;
+  final parsed = int.tryParse(trimmed);
+  if (parsed == null) {
+    return 'Enter a whole number, or leave blank for unlimited.';
+  }
+  if (parsed < 0) return 'Enter a positive number, or leave blank.';
+  return null;
+}
+
 class _StreamConfigDialogState extends State<StreamConfigDialog> {
   final _formKey = GlobalKey<FormState>();
   late final _nameController =
       TextEditingController(text: widget.initial?.name ?? '');
   late final _subjectsController =
       TextEditingController(text: (widget.initial?.subjects ?? []).join(', '));
-  late final _maxAgeController = TextEditingController(
-      text: widget.initial?.maxAge != null
-          ? widget.initial!.maxAge!.inDays.toString()
-          : '');
+  // Max age is entered in whole days, but the server stores nanoseconds and
+  // a stream can legitimately have a sub-day window (an hour, 30 minutes).
+  // `inDays` truncates those to `0`, which reads back as "blank/unlimited"
+  // on submit and silently clears the stream's retention window. So a
+  // sub-day age displays rounded up to `1`, *and* [_submit] round-trips the
+  // original `Duration` untouched whenever the user never edits this field
+  // (see [_initialMaxAgeText]) -- the displayed approximation is only ever
+  // committed if the user actually chooses to commit it.
+  late final String _initialMaxAgeText = widget.initial?.maxAge == null
+      ? ''
+      : (widget.initial!.maxAge!.inDays == 0
+              ? 1
+              : widget.initial!.maxAge!.inDays)
+          .toString();
+  late final _maxAgeController =
+      TextEditingController(text: _initialMaxAgeText);
   late final _maxMsgsController = TextEditingController(
       text: (widget.initial != null && widget.initial!.maxMsgs != -1)
           ? widget.initial!.maxMsgs.toString()
@@ -46,10 +80,13 @@ class _StreamConfigDialogState extends State<StreamConfigDialog> {
       text: (widget.initial != null && widget.initial!.maxBytes != -1)
           ? widget.initial!.maxBytes.toString()
           : '');
+  // `-1` is the server's "unlimited" sentinel for these two just as it is
+  // for maxMsgs/maxBytes above, so it belongs in a blank field rather than
+  // shown literally next to a "Leave blank for unlimited" hint.
   late final _maxMsgSizeController =
-      TextEditingController(text: widget.initial?.maxMsgSize?.toString() ?? '');
+      TextEditingController(text: _optionalLimitText(widget.initial?.maxMsgSize));
   late final _maxMsgsPerSubjectController = TextEditingController(
-      text: widget.initial?.maxMsgsPerSubject?.toString() ?? '');
+      text: _optionalLimitText(widget.initial?.maxMsgsPerSubject));
 
   late int _replicas = widget.initial?.numReplicas ?? 1;
   late String _storage = widget.initial?.storage ?? 'file';
@@ -87,8 +124,16 @@ class _StreamConfigDialogState extends State<StreamConfigDialog> {
     final maxMsgsPerSubject =
         int.tryParse(_maxMsgsPerSubjectController.text.trim());
 
+    // `$JS.API.STREAM.UPDATE` replaces the whole config rather than merging
+    // it, so anything this form doesn't expose has to be carried over from
+    // `widget.initial` explicitly or the server resets it to its default.
+    // `allowDirect` is the live example: `JetStreamManager.streamDetail`
+    // fetches it for exactly this reason, and KV buckets' backing streams
+    // are created with `allowDirect: true`, so an otherwise no-op
+    // Edit+Save on a `KV_*` stream used to turn direct gets off.
+    final initial = widget.initial;
     widget.onSubmit(StreamConfig(
-      name: widget.isEdit ? widget.initial!.name : _nameController.text.trim(),
+      name: widget.isEdit ? initial!.name : _nameController.text.trim(),
       subjects: subjects,
       storage: _storage,
       retention: _retention,
@@ -97,13 +142,21 @@ class _StreamConfigDialogState extends State<StreamConfigDialog> {
       discard: _discard,
       maxMsgsPerSubject: maxMsgsPerSubject,
       maxMsgSize: maxMsgSize,
-      maxAge: maxAgeDays != null && maxAgeDays > 0
-          ? Duration(days: maxAgeDays)
-          : null,
+      // Round-trip the original Duration untouched when the user never
+      // edited the field, so a sub-day age that can only be *displayed* as
+      // a whole number of days isn't rewritten just by opening the dialog.
+      maxAge: (initial != null &&
+              _maxAgeController.text.trim() == _initialMaxAgeText)
+          ? initial.maxAge
+          : (maxAgeDays != null && maxAgeDays > 0
+              ? Duration(days: maxAgeDays)
+              : null),
       numReplicas: _replicas,
       allowRollup: _allowRollup,
       denyDelete: _denyDelete,
       denyPurge: _denyPurge,
+      // Not exposed by this form -- preserved as-is rather than dropped.
+      allowDirect: initial?.allowDirect,
     ));
     Navigator.of(context).pop();
   }
@@ -230,6 +283,7 @@ class _StreamConfigDialogState extends State<StreamConfigDialog> {
                     labelText: 'Max Age (days, optional)',
                     hintText: 'Leave blank for unlimited',
                   ),
+                  validator: _validateOptionalNumber,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -240,6 +294,7 @@ class _StreamConfigDialogState extends State<StreamConfigDialog> {
                     labelText: 'Max Messages (optional)',
                     hintText: 'Leave blank for unlimited',
                   ),
+                  validator: _validateOptionalNumber,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -250,6 +305,7 @@ class _StreamConfigDialogState extends State<StreamConfigDialog> {
                     labelText: 'Max Bytes (optional)',
                     hintText: 'Leave blank for unlimited',
                   ),
+                  validator: _validateOptionalNumber,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -260,6 +316,7 @@ class _StreamConfigDialogState extends State<StreamConfigDialog> {
                     labelText: 'Max Message Size (bytes, optional)',
                     hintText: 'Leave blank for unlimited',
                   ),
+                  validator: _validateOptionalNumber,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -270,6 +327,7 @@ class _StreamConfigDialogState extends State<StreamConfigDialog> {
                     labelText: 'Max Messages Per Subject (optional)',
                     hintText: 'Leave blank for unlimited',
                   ),
+                  validator: _validateOptionalNumber,
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<int>(

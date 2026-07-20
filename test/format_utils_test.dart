@@ -277,6 +277,65 @@ void main() {
     test('handles an empty payload as an empty string', () {
       expect(formatHexDump(Uint8List(0)), isEmpty);
     });
+
+    test('caps output at the byte limit and says how much was omitted', () {
+      final bytes = Uint8List.fromList(List.generate(300, (i) => i % 256));
+      final dump = formatHexDump(bytes, limit: 128);
+
+      // 128 bytes at 16/row = 8 rows, plus the blank line and the notice.
+      final rows =
+          dump.split('\n').where((l) => l.startsWith('000000')).toList();
+      expect(rows, hasLength(8));
+      expect(dump, contains('truncated'));
+      expect(dump, contains('first 128 of 300 bytes'));
+      expect(dump, contains('172 not shown'));
+      // Nothing past the limit leaked into the dump: byte 128 would start a
+      // 9th row at offset 00000080.
+      expect(dump, isNot(contains('00000080')));
+    });
+
+    test('adds no truncation notice when the payload fits the limit', () {
+      final bytes = Uint8List.fromList(List.generate(128, (i) => i % 256));
+      expect(formatHexDump(bytes, limit: 128), isNot(contains('truncated')));
+    });
+
+    test('defaults to a limit that keeps a 1MB payload from being dumped whole',
+        () {
+      // Regression guard for the UI freeze: an uncapped dump of a 1MB
+      // payload builds a ~4.3MB string and ~65k lines in one frame.
+      final bytes = Uint8List(1024 * 1024);
+      final dump = formatHexDump(bytes);
+      expect(dump, contains('truncated'));
+      expect(dump.length, lessThan(400 * 1024));
+    });
+  });
+
+  group('formatConfiguredDuration', () {
+    test('shows seconds only when under a minute', () {
+      expect(formatConfiguredDuration(const Duration(seconds: 45)), '45s');
+    });
+
+    test('carries the seconds remainder rather than truncating to minutes', () {
+      // The bug this replaced rendered both of these as "1m", making two
+      // materially different ack-wait settings look identical.
+      expect(formatConfiguredDuration(const Duration(seconds: 90)), '1m 30s');
+      expect(formatConfiguredDuration(const Duration(seconds: 60)), '1m');
+    });
+
+    test('carries the minutes remainder into hours', () {
+      expect(formatConfiguredDuration(const Duration(minutes: 135)), '2h 15m');
+      expect(formatConfiguredDuration(const Duration(hours: 2)), '2h');
+    });
+
+    test('grows a days tier past 24 hours instead of a huge hour count', () {
+      expect(formatConfiguredDuration(const Duration(hours: 25)), '1d 1h');
+      expect(formatConfiguredDuration(const Duration(days: 3)), '3d');
+    });
+
+    test('clamps a negative duration rather than rendering a negative unit',
+        () {
+      expect(formatConfiguredDuration(const Duration(seconds: -5)), '0s');
+    });
   });
 
   group('formatEstimatedDuration', () {

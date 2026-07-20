@@ -32,6 +32,7 @@ import 'message_export.dart';
 import 'object_store_dashboard.dart';
 import 'object_store_manager.dart';
 import 'paused_banner.dart';
+import 'reconnect_detector.dart';
 import 'replay_banner.dart';
 import 'replay_config_dialog.dart';
 import 'send_message_dialog.dart';
@@ -391,6 +392,14 @@ class _MyHomePageState extends State<MyHomePage>
   // mounted yet at the moment a tick fires (e.g. a background tab) and only
   // need "did this fire since I last checked", not every individual event.
   final ValueNotifier<int> _reconnectSignal = ValueNotifier<int>(0);
+
+  // Decides which `Status.connected` events are genuine post-bounce
+  // reconnects (and so should tick `_reconnectSignal`) rather than a first
+  // connect. Its own class so the logic is unit testable against
+  // `dart_nats`'s real transition sequence without bouncing a live server
+  // -- see `reconnect_detector.dart` for what the previous inline version
+  // got wrong.
+  final ReconnectDetector _reconnectDetector = ReconnectDetector();
 
   // JetStream tab
   bool jetStreamEnabled = constants.defaultJetStreamEnabled;
@@ -1075,6 +1084,9 @@ class _MyHomePageState extends State<MyHomePage>
     // A new session starts un-connected -- only this client's own future
     // `Status.connected` event (below) sets this back to true.
     _hasEverConnectedThisSession = false;
+    // Likewise: a `connected` on the new client is a first connect, not a
+    // reconnect carried over from the previous one.
+    _reconnectDetector.reset();
     // sids are only meaningful for the lifetime of one Client instance --
     // null them all out now that we've discarded the old one.
     for (final info in subscriptions) {
@@ -1114,14 +1126,12 @@ class _MyHomePageState extends State<MyHomePage>
       Uri uri = Uri.parse(fullUri);
       _statusSub = natsClient.statusStream.listen((Status event) {
         debugPrint('Connection status event $event');
-        // Captured before `currentStatus` is overwritten below -- this is
-        // what distinguishes a genuine post-bounce reconnect (reconnecting ->
-        // connected) from the very first successful connect of the session
-        // (connecting -> connected), which has nothing for
-        // `_reconnectSignal`'s listeners to recover from yet.
-        final wasReconnecting = currentStatus == Status.reconnecting;
         currentStatus = event;
         String stateString = '';
+
+        // Fed every event (not just `connected`) -- it needs the drop that
+        // arms it as much as the recovery that fires it.
+        final didReconnect = _reconnectDetector.onStatus(event);
 
         switch (event) {
           case Status.connected:
@@ -1134,7 +1144,7 @@ class _MyHomePageState extends State<MyHomePage>
             } else {
               tlsConnection = false;
             }
-            if (wasReconnecting) {
+            if (didReconnect) {
               _reconnectSignal.value++;
             }
             break;
@@ -1835,6 +1845,7 @@ class _MyHomePageState extends State<MyHomePage>
 
     _statusSub?.cancel();
     _statusSub = null;
+    _reconnectDetector.reset();
     for (final info in subscriptions) {
       info.sid = null;
       info.subscription?.cancel();
@@ -3146,6 +3157,7 @@ class _MyHomePageState extends State<MyHomePage>
                             manager: _hasEverConnectedThisSession
                                 ? _serviceDiscoveryManager
                                 : null,
+                            reconnectSignal: _reconnectSignal,
                           ),
                       ],
                     )

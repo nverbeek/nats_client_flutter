@@ -57,12 +57,7 @@ class JetStreamManager {
       String streamName, String consumerName,
       {Duration timeout = const Duration(seconds: 5)}) async {
     final subject = '\$JS.API.CONSUMER.INFO.$streamName.$consumerName';
-    final response =
-        await client.request(subject, Uint8List(0), timeout: timeout);
-    final map = jsonDecode(response.string) as Map<String, dynamic>;
-    if (map['error'] != null) {
-      throw NatsException(map['error']['description'] as String);
-    }
+    final map = await jsApiRequest(client, subject, timeout: timeout);
     final info = ConsumerInfo.fromJson(map);
     final config = map['config'] as Map<String, dynamic>? ?? {};
     final ackWaitNanos = config['ack_wait'] as int?;
@@ -114,12 +109,7 @@ class JetStreamManager {
   Future<StreamInfo> streamDetail(String streamName,
       {Duration timeout = const Duration(seconds: 5)}) async {
     final subject = '\$JS.API.STREAM.INFO.$streamName';
-    final response =
-        await client.request(subject, Uint8List(0), timeout: timeout);
-    final map = jsonDecode(response.string) as Map<String, dynamic>;
-    if (map['error'] != null) {
-      throw NatsException(map['error']['description'] as String);
-    }
+    final map = await jsApiRequest(client, subject, timeout: timeout);
     final info = StreamInfo.fromJson(map);
     final cfg = map['config'] as Map<String, dynamic>? ?? {};
     final maxAgeNanos = cfg['max_age'] as int?;
@@ -227,6 +217,44 @@ class ConsumerDetail {
     required this.maxDeliver,
     required this.maxAckPending,
   });
+}
+
+/// Issues a raw `$JS.API.*` request and returns the decoded response,
+/// throwing a [NatsException] if the server replied with an error envelope.
+///
+/// Several places need JSON fields `dart_nats`'s own typed parsers drop
+/// (see [JetStreamManager.consumerDetail], [JetStreamManager.streamDetail],
+/// `KvManager.bucketStatus`), and each was repeating this same
+/// request/decode/check preamble. Sharing it also fixes the error path they
+/// all had: a server error object carries `description` only *sometimes* --
+/// permission and some auth errors reply with just `err_code`/`code` -- and
+/// a bare `map['error']['description'] as String` throws an opaque
+/// `TypeError` on those instead of the intended [NatsException], which
+/// [describeJetStreamError] then can't classify.
+Future<Map<String, dynamic>> jsApiRequest(
+  Client client,
+  String subject, {
+  Duration timeout = const Duration(seconds: 5),
+}) async {
+  final response = await client.request(subject, Uint8List(0), timeout: timeout);
+  final map = jsonDecode(response.string) as Map<String, dynamic>;
+  final error = map['error'];
+  if (error != null) {
+    throw NatsException(describeJsApiErrorEnvelope(error));
+  }
+  return map;
+}
+
+/// Best-effort human-readable text for a JetStream API error envelope,
+/// tolerating one that omits `description` (or isn't a map at all).
+String describeJsApiErrorEnvelope(Object? error) {
+  if (error is Map) {
+    final description = error['description'];
+    if (description is String && description.isNotEmpty) return description;
+    final code = error['err_code'] ?? error['code'];
+    if (code != null) return 'JetStream API error (code $code)';
+  }
+  return 'JetStream API error: $error';
 }
 
 /// Turns an error raised by a JetStream API call into a short, user-facing

@@ -311,5 +311,131 @@ void main() {
 
       expect(config!.name, 'orders');
     });
+
+    testWidgets('preserves allowDirect, which the form does not expose',
+        (tester) async {
+      // `$JS.API.STREAM.UPDATE` replaces the whole config rather than
+      // merging it, so a field this form doesn't render still has to be
+      // carried over. KV buckets' backing streams are created with
+      // allowDirect: true, so dropping it turned direct gets off for a
+      // bucket on an otherwise no-op Edit + Save.
+      final kvBacking = StreamConfig(
+        name: 'KV_settings',
+        subjects: [r'$KV.settings.>'],
+        maxMsgsPerSubject: 5,
+        allowRollup: true,
+        denyDelete: true,
+        discard: 'new',
+        allowDirect: true,
+      );
+
+      StreamConfig? config;
+      await tester.pumpWidget(
+          buildDialog((c) => config = c, initial: kvBacking));
+
+      await tester.tap(find.widgetWithText(TextButton, 'Save'));
+      await tester.pump();
+
+      expect(config!.allowDirect, isTrue);
+    });
+
+    testWidgets('round-trips a sub-day maxAge instead of clearing it',
+        (tester) async {
+      // Displayed rounded up to 1 day (the field is whole days), but an
+      // untouched field must submit the original Duration -- `inDays` on a
+      // 6-hour age truncates to 0, which used to read back as "blank /
+      // unlimited" and silently removed the retention window.
+      final sixHours = StreamConfig(
+        name: 'events',
+        subjects: ['events.>'],
+        maxAge: const Duration(hours: 6),
+      );
+
+      StreamConfig? config;
+      await tester.pumpWidget(
+          buildDialog((c) => config = c, initial: sixHours));
+
+      expect(
+        find.descendant(
+          of: find.widgetWithText(TextFormField, 'Max Age (days, optional)'),
+          matching: find.text('1'),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.widgetWithText(TextButton, 'Save'));
+      await tester.pump();
+
+      expect(config!.maxAge, const Duration(hours: 6));
+    });
+
+    testWidgets('an edited maxAge submits the newly entered value',
+        (tester) async {
+      final sixHours = StreamConfig(
+        name: 'events',
+        subjects: ['events.>'],
+        maxAge: const Duration(hours: 6),
+      );
+
+      StreamConfig? config;
+      await tester.pumpWidget(
+          buildDialog((c) => config = c, initial: sixHours));
+
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Max Age (days, optional)'), '3');
+      await tester.tap(find.widgetWithText(TextButton, 'Save'));
+      await tester.pump();
+
+      expect(config!.maxAge, const Duration(days: 3));
+    });
+
+    testWidgets('shows unlimited (-1) size limits as blank, not as "-1"',
+        (tester) async {
+      final unlimited = StreamConfig(
+        name: 'events',
+        subjects: ['events.>'],
+        maxMsgSize: -1,
+        maxMsgsPerSubject: -1,
+      );
+
+      await tester.pumpWidget(buildDialog((_) {}, initial: unlimited));
+
+      expect(find.text('-1'), findsNothing);
+    });
+
+    testWidgets('blocks submit on unparseable numeric input instead of '
+        'silently wiping the limit', (tester) async {
+      var submitted = false;
+      await tester.pumpWidget(
+          buildDialog((_) => submitted = true, initial: existing));
+
+      await tester.enterText(
+          find.widgetWithText(TextFormField, 'Max Bytes (optional)'), '10 GB');
+      await tester.tap(find.widgetWithText(TextButton, 'Save'));
+      await tester.pump();
+
+      expect(submitted, isFalse);
+      expect(find.text('Enter a whole number, or leave blank for unlimited.'),
+          findsOneWidget);
+    });
+  });
+
+  testWidgets('a blank optional numeric field still means unlimited',
+      (tester) async {
+    StreamConfig? config;
+    await tester.pumpWidget(buildDialog((c) => config = c));
+
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Stream Name'), 'orders');
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Subjects (comma-separated)'),
+        'orders.>');
+    await tester.tap(find.widgetWithText(TextButton, 'Create'));
+    await tester.pump();
+
+    expect(config, isNotNull);
+    expect(config!.maxMsgs, -1);
+    expect(config!.maxBytes, -1);
+    expect(config!.maxAge, isNull);
   });
 }

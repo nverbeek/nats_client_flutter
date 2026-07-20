@@ -1,10 +1,8 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 
-import 'jetstream_manager.dart' show describeJetStreamError;
+import 'jetstream_manager.dart' show describeJetStreamError, jsApiRequest;
 
 /// Prefix JetStream uses for the backing stream of every KV bucket. Bucket
 /// names shown in the UI have this stripped back off.
@@ -156,12 +154,7 @@ class KvManager {
       {Duration timeout = const Duration(seconds: 5)}) async {
     final streamName = '$kvStreamPrefix$bucket';
     final subject = '\$JS.API.STREAM.INFO.$streamName';
-    final response =
-        await client.request(subject, Uint8List(0), timeout: timeout);
-    final map = jsonDecode(response.string) as Map<String, dynamic>;
-    if (map['error'] != null) {
-      throw NatsException(map['error']['description'] as String);
-    }
+    final map = await jsApiRequest(client, subject, timeout: timeout);
     final config = map['config'] as Map<String, dynamic>? ?? {};
     final state = map['state'] as Map<String, dynamic>? ?? {};
     final maxAgeNanos = config['max_age'] as int? ?? 0;
@@ -175,6 +168,7 @@ class KvManager {
           ? Duration(microseconds: maxAgeNanos ~/ 1000)
           : null,
       replicas: config['num_replicas'] as int? ?? 1,
+      lastSeq: state['last_seq'] as int? ?? 0,
     );
   }
 }
@@ -191,6 +185,15 @@ class KvBucketStatus {
   final Duration? ttl;
   final int replicas;
 
+  /// Sequence number of the last message in the backing stream -- i.e. the
+  /// revision of the most recent put/delete/purge in this bucket, since KV
+  /// revisions *are* stream sequences. Not displayed anywhere; it exists so
+  /// `KvDashboard` can tell in one request whether anything changed while
+  /// disconnected instead of re-fetching every key. Defaults to `0`
+  /// ("nothing written"), which reads as "can't rule out a change" and so
+  /// degrades safely toward re-fetching.
+  final int lastSeq;
+
   KvBucketStatus({
     required this.bucket,
     required this.history,
@@ -199,6 +202,7 @@ class KvBucketStatus {
     required this.values,
     required this.ttl,
     required this.replicas,
+    this.lastSeq = 0,
   });
 }
 
