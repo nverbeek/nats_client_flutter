@@ -132,7 +132,7 @@ nats_client_flutter/
 ## 3. Tech Stack & Architectural Design
 
 ### Core Libraries (from `pubspec.yaml`)
-- **`dart_nats`**: Low-level NATS client protocol handler. A normal `^1.2.2` pub.dev dependency (`chartchuo/dart-nats`) — no `git:`/fork pin. This project has direct contributor access to that repo and has landed two upstream PRs: PR #44 (services discovery — `Client.discoverServices()`/`getServicesInfo()`/`getServicesStats()`, complementing the maintainer's own hosting-side `addService()`/`MicroService`) and PR #45 (four JetStream/KV bug fixes: list-pagination truncation, swallowed pull-consumer/`OrderedConsumer` errors, KV ephemeral-consumer leaks, fire-and-forget ack/nak/term — replaced by `ackSync()`/`nakSync()`/`termSync()`). Both are merged and released (1.2.1 and 1.2.2 respectively) — see ROADMAP.md's Milestone 18/26 entries. If a future feature needs another package-level change, the same direct-PR workflow applies; a `dependency_overrides`/branch pin is only needed transiently while such a change is being verified pre-merge.
+- **`dart_nats`**: Low-level NATS client protocol handler. A normal `^1.2.2` pub.dev dependency — no `git:`/fork pin. The upstream repo moved to [`dart-nats/dart-nats`](https://github.com/dart-nats/dart-nats) (formerly `chartchuo/dart-nats`), and this project's owner is now an owner of both that GitHub organization and the pub.dev package — so they have full merge rights on the repo and full publish rights on pub.dev, not just contributor PR access. This project has already landed two upstream PRs: PR #44 (services discovery — `Client.discoverServices()`/`getServicesInfo()`/`getServicesStats()`, complementing the maintainer's own hosting-side `addService()`/`MicroService`) and PR #45 (four JetStream/KV bug fixes: list-pagination truncation, swallowed pull-consumer/`OrderedConsumer` errors, KV ephemeral-consumer leaks, fire-and-forget ack/nak/term — replaced by `ackSync()`/`nakSync()`/`termSync()`). Both are merged and released (1.2.1 and 1.2.2 respectively) — see ROADMAP.md's Milestone 18/26 entries. If a future feature needs another package-level change, land it directly upstream and cut a pub.dev release; a `dependency_overrides`/branch pin is only needed transiently while such a change is being verified pre-release.
 - **`provider`**: Used for lightweight application state, specifically managing dark/light `ThemeModel`.
 - **`window_manager`**: Handles window resizing, positioning, and persistence on Desktop.
 - **`loader_overlay`**: Displays asynchronous loading/connecting modal states.
@@ -293,9 +293,9 @@ flutter pub get
 ```
 
 ### Code Formatting
-Ensure all modified files adhere strictly to the Dart SDK formatter style guidelines:
+Ensure all modified files adhere strictly to the Dart SDK formatter style guidelines. Run this over the whole project as the final step before finishing a change (see the Verification & Quality Mandate for why whole-project-and-last avoids drift):
 ```bash
-flutter format .
+dart format .
 ```
 
 ### Static Analysis & Lint Enforcement
@@ -353,6 +353,6 @@ docker build -t nats-client-flutter .
 - **Exclude Generated Artifacts**: Ensure all local `.env`, certificates, `scripts/node_modules`, or system-specific builds remain strictly ignored by git (abide by rules defined in `.gitignore`).
 
 ### Verification & Quality Mandate
-1. **Formatting**: Always format your modified code using `flutter format .` prior to finishing.
+1. **Formatting**: Run `dart format .` (from the repo root, over the whole project — not just the files you touched) and commit the result **before** you consider any change done. This is not optional and not a "later" step: an unformatted new file or hand-wrapped line drifts the tree from the formatter's output, and because CI and reviewers run the formatter over everything, that drift then shows up as spurious diff noise in unrelated files the next time anyone formats. Formatting last, over the whole repo, keeps every finished change format-clean by construction. (`flutter format` is a deprecated alias for `dart format`; use `dart format`.)
 2. **Analysis**: Always execute `flutter analyze` to ensure the project passes compile validation.
 3. **Regression Testing**: If you modify UI or logic covered by an existing test file, run it and keep it green. If you add a new dialog or `JetStreamManager` method, add a corresponding widget test under `test/` (see Recipe F for the patterns to reuse — `widget_test.dart` itself is an unused stub, not a place to add tests). If the change can only be verified against a real server (a new connection-state path, a new JetStream mutation, a new keyboard shortcut), add or extend an `integration_test/` file instead.

@@ -153,7 +153,7 @@ New tab (`[📊 Server Monitor]`) or a panel reachable from a toolbar icon, gate
 ## Milestone 30: Upstream-First `dart_nats` Round (Medium Priority)
 
 ### Objective
-Three real feature gaps are blocked at the `dart_nats` package level, not by anything this app can work around locally. This project has direct contributor access to `chartchuo/dart-nats` (established via PR #45) — use it again rather than waiting on someone else to add these.
+Three real feature gaps are blocked at the `dart_nats` package level, not by anything this app can work around locally. The upstream repo is now [`dart-nats/dart-nats`](https://github.com/dart-nats/dart-nats) (moved from `chartchuo/dart-nats`), and this project's owner is now an owner of both that org and the pub.dev package — so these can be merged and released directly rather than waiting on someone else to add them.
 
 ### What's blocked
 - **Consumer pause/resume** (NATS 2.11): no `$JS.API.CONSUMER.PAUSE` call anywhere in the package (verified against 1.2.2's `jetstream.dart`) — would need a new method added upstream before this app can expose it.
@@ -161,7 +161,7 @@ Three real feature gaps are blocked at the `dart_nats` package level, not by any
 - **Object Store streaming + chunk-orphan cleanup**: both directions buffer the whole object in memory with no streaming option, and overwriting an existing object leaves its previous chunks orphaned server-side rather than purging them.
 
 ### Implementation Checklist
-- [ ] Add pause/resume support to `ConsumerConfig`/a new `JetStream` method, following PR #45's pattern (branch on `chartchuo/dart-nats`, verify against the package's own test suite, cross-check the published pub.dev artifact before cutting over).
+- [ ] Add pause/resume support to `ConsumerConfig`/a new `JetStream` method, following PR #45's pattern (branch on `dart-nats/dart-nats`, verify against the package's own test suite, cross-check the published pub.dev artifact before cutting over).
 - [ ] Add filter/keep/seq parameters to `JsStream.purge()`.
 - [ ] Add a streaming upload/download path to `ObjectStore` (or at least chunk-by-chunk callback support) and purge the previous object's chunks on overwrite.
 - [ ] Once merged/published, app-side UI follow-up is separate future work — this milestone is scoped to the package-level fix only.
