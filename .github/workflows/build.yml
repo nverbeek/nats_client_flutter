@@ -135,6 +135,11 @@ jobs:
           type: 'zip'
           filename: NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-windows-x64.zip
           directory: build/windows/x64/runner/Release
+      - name: Upload x64 build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64-release
+          path: build/windows/x64/runner/Release/NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-windows-x64.zip
       - name: Windows x64 Release
         uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/')

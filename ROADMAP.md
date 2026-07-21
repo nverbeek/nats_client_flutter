@@ -112,7 +112,7 @@ Ranked by a recent feature-gap survey as the single biggest daily-use gap in the
 
 ### Implementation Checklist
 - [ ] Set up a free Microsoft Store developer account; complete the one-time manual Partner Center listing pass (screenshots, listing details, age rating, privacy policy).
-- [ ] Add the `msix` pub package + `msix_config:` to `pubspec.yaml`.
+- [x] Add the `msix` pub package + `msix_config:` to `pubspec.yaml`.
 - [ ] Add a GH Actions job (using `setup-msstore-cli` + `msstore package`/`msstore publish`) that packages and submits the Store build on tagged releases, gated behind repo secrets so it's a no-op on forks/PRs without them.
 - [ ] Leave the existing Windows EXE/ZIP GitHub Release artifact unsigned, as decided.
 - [ ] Register the snap name on the Snap Store and complete its one-time store listing.

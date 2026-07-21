@@ -61,6 +61,22 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   integration_test:
     sdk: flutter
+  msix: ^3.18.0
+
+# Microsoft Store packaging (see ROADMAP.md Milestone 15). `store: true` means
+# Microsoft signs the package for free during Store certification, so no
+# certificate_path/certificate_password is needed here. None of these values
+# are secret — they're baked into every shipped package's AppxManifest.xml
+# and visible in the Store listing itself.
+msix_config:
+  display_name: NATS Client
+  publisher_display_name: Nathan Ver Beek
+  identity_name: 9669NathanVerBeek.NATSClient
+  publisher: CN=24971B61-75AC-45F1-88B7-B046437FBAA9
+  msix_version: 1.0.16.0
+  logo_path: macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_1024.png
+  store: true
+  capabilities: internetClient
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
