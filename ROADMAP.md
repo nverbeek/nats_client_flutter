@@ -118,6 +118,7 @@ Ranked by a recent feature-gap survey as the single biggest daily-use gap in the
 - [ ] Register the snap name on the Snap Store and complete its one-time store listing.
 - [ ] Add `snapcraft.yaml` packaging the `flutter build linux` bundle.
 - [ ] Add a GH Actions job (`snapcore/action-build` + `snapcore/action-publish`, `snapcraft export-login` token as a repo secret) that builds and publishes the snap on tagged releases, gated behind repo secrets so it's a no-op on forks/PRs without them.
+- [x] Skip the GitHub Releases update check on Store/Snap-managed installs — `update_checker.dart`'s `isStoreManagedInstall()` detects an MSIX (Windows, via a `...\WindowsApps\...` executable path) or Snap (Linux, via the `SNAP` env var) install and `main.dart` skips `checkForUpdates()` for either, since both platforms auto-update on their own; only the direct-download exe/zip self-checks GitHub.
 - [ ] Decide macOS signing (Apple Developer Program, $99/yr, no free path) separately — still open, still tied to Milestone 3's existing macOS-never-verified gap (no Mac available to test on).
 - [ ] Document the publishing/signing setup (which secrets, how to rotate/renew) in `AGENTS.md` or a new doc.
 

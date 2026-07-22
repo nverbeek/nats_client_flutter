@@ -42,6 +42,53 @@ void main() {
     });
   });
 
+  group('isStoreManagedInstall', () {
+    test('Windows: true when the executable is under WindowsApps', () {
+      expect(
+        isStoreManagedInstall(
+          operatingSystem: 'windows',
+          resolvedExecutable:
+              r'C:\Program Files\WindowsApps\9669NathanVerBeek.NATSClient_1.0.16.0_x64__abc123\nats_client_flutter.exe',
+        ),
+        isTrue,
+      );
+    });
+
+    test('Windows: false for a direct-download install path', () {
+      expect(
+        isStoreManagedInstall(
+          operatingSystem: 'windows',
+          resolvedExecutable: r'C:\Users\nathan\Downloads\NATSClientUI\nats_client_flutter.exe',
+        ),
+        isFalse,
+      );
+    });
+
+    test('Linux: true when the SNAP environment variable is set', () {
+      expect(
+        isStoreManagedInstall(
+          operatingSystem: 'linux',
+          environment: {'SNAP': '/snap/nats-client/42'},
+        ),
+        isTrue,
+      );
+    });
+
+    test('Linux: false when the SNAP environment variable is absent', () {
+      expect(
+        isStoreManagedInstall(
+          operatingSystem: 'linux',
+          environment: {},
+        ),
+        isFalse,
+      );
+    });
+
+    test('returns false on an unrecognized operating system', () {
+      expect(isStoreManagedInstall(operatingSystem: 'macos'), isFalse);
+    });
+  });
+
   group('fetchLatestRelease', () {
     test('parses tag_name and html_url from a successful response', () async {
       final client = MockClient((request) async {

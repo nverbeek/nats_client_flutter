@@ -628,7 +628,7 @@ class _MyHomePageState extends State<MyHomePage>
       _trimToCap();
     });
 
-    if (updateCheckEnabled) {
+    if (updateCheckEnabled && !isStoreManagedInstall()) {
       checkForUpdates();
     }
   }
@@ -637,6 +637,11 @@ class _MyHomePageState extends State<MyHomePage>
   /// version, and if found, surfaces a dismissible popover with a button to
   /// view it. Best-effort and silent on failure — this is a convenience
   /// notification, not something that should ever interrupt the user.
+  ///
+  /// Only called for direct-download (GitHub Release) builds — Microsoft
+  /// Store and Snap Store installs auto-update through their own platform
+  /// (see [isStoreManagedInstall]), so this check would be redundant noise
+  /// for them.
   void checkForUpdates() async {
     final release = await fetchLatestRelease();
     if (release == null || !mounted) return;

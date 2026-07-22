@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
 
 import 'package:http/http.dart' as http;
 
@@ -18,6 +19,35 @@ class ReleaseInfo {
   final String htmlUrl;
 
   const ReleaseInfo({required this.version, required this.htmlUrl});
+}
+
+/// True when running as an install managed by an OS app store — the
+/// Microsoft Store on Windows (an MSIX package, deployed under
+/// `...\WindowsApps\...`) or the Snap Store on Linux (which always sets a
+/// `SNAP` environment variable inside its confined runtime) — rather than
+/// the directly-downloaded GitHub Release exe/zip. Store-managed installs
+/// auto-update through their own platform, so callers should skip the
+/// GitHub-based [fetchLatestRelease] check when this is true.
+///
+/// [operatingSystem], [resolvedExecutable], and [environment] can be
+/// overridden in tests (so both branches are exercisable regardless of the
+/// host OS actually running the test suite); they default to the real
+/// [Platform] values.
+bool isStoreManagedInstall({
+  String? operatingSystem,
+  String? resolvedExecutable,
+  Map<String, String>? environment,
+}) {
+  final os = operatingSystem ?? Platform.operatingSystem;
+  if (os == 'linux') {
+    final env = environment ?? Platform.environment;
+    return env['SNAP'] != null;
+  }
+  if (os == 'windows') {
+    final exePath = resolvedExecutable ?? Platform.resolvedExecutable;
+    return exePath.contains(r'\WindowsApps\');
+  }
+  return false;
 }
 
 /// Fetches the latest published GitHub release for this project.
