@@ -45,6 +45,3 @@ its result only affects whether an "update available" notice is shown.
 If this policy changes, the "Last updated" date above will change and the
 new version will be published at the same location.
 
-## Contact
-
-Questions about this policy can be sent to nathan.verbeek@gmail.com.
