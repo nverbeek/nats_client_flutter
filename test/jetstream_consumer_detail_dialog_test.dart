@@ -16,6 +16,8 @@ ConsumerInfo _consumerInfo({
   int numWaiting = 0,
   int numAckPending = 0,
   int numRedelivered = 0,
+  bool paused = false,
+  DateTime? pauseUntil,
 }) {
   return ConsumerInfo(
     type: '',
@@ -33,6 +35,8 @@ ConsumerInfo _consumerInfo({
     numWaiting: numWaiting,
     numAckPending: numAckPending,
     numRedelivered: numRedelivered,
+    paused: paused,
+    pauseUntil: pauseUntil,
   );
 }
 
@@ -41,9 +45,11 @@ ConsumerDetail _consumerDetail(
   Duration? ackWait,
   int? maxDeliver,
   int? maxAckPending,
+  DateTime? pauseUntil,
 }) {
   return ConsumerDetail(
     info: info,
+    pauseUntil: pauseUntil ?? info.pauseUntil,
     ackWait: ackWait,
     maxDeliver: maxDeliver,
     maxAckPending: maxAckPending,
@@ -153,6 +159,7 @@ void main() {
         },
         onDelete: () {},
         onTail: () {},
+        onPause: (_) async {},
       ),
     );
 
@@ -173,6 +180,12 @@ void main() {
     expect(
       tester
           .widget<TextButton>(find.widgetWithText(TextButton, 'Tail'))
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<TextButton>(find.widgetWithText(TextButton, 'Pause'))
           .onPressed,
       isNull,
     );
@@ -247,5 +260,116 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(ConsumerDetailDialog), findsNothing);
+  });
+
+  testWidgets(
+      'a non-paused consumer shows a Pause button; confirming a duration '
+      'calls onPause then refreshes without closing the dialog',
+      (tester) async {
+    final info = _consumerInfo();
+    Duration? pausedFor;
+    var refreshCalls = 0;
+    await _pump(
+      tester,
+      ConsumerDetailDialog(
+        initial: info,
+        onRefresh: () async {
+          refreshCalls++;
+          // The second refresh (after Pause) reflects the now-paused state.
+          if (refreshCalls > 1) {
+            return _consumerDetail(_consumerInfo(
+                paused: true,
+                pauseUntil: DateTime.utc(2026, 1, 1, 0, 5, 0)));
+          }
+          return _consumerDetail(info);
+        },
+        onPause: (duration) async => pausedFor = duration,
+      ),
+    );
+
+    expect(find.widgetWithText(TextButton, 'Resume'), findsNothing);
+    await tester.tap(find.widgetWithText(TextButton, 'Pause'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Pause for how many minutes'),
+        '5');
+    await tester.tap(find.widgetWithText(TextButton, 'Pause').last);
+    await tester.pumpAndSettle();
+
+    expect(pausedFor, const Duration(minutes: 5));
+    expect(find.byType(ConsumerDetailDialog), findsOneWidget);
+    expect(find.textContaining('Paused until:'), findsOneWidget);
+  });
+
+  testWidgets('cancelling the pause-duration prompt calls neither callback',
+      (tester) async {
+    final info = _consumerInfo();
+    var paused = false;
+    await _pump(
+      tester,
+      ConsumerDetailDialog(
+        initial: info,
+        onRefresh: () async => _consumerDetail(info),
+        onPause: (_) async => paused = true,
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(TextButton, 'Pause'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(paused, isFalse);
+    expect(find.byType(ConsumerDetailDialog), findsOneWidget);
+  });
+
+  testWidgets('a paused consumer shows Resume instead of Pause; tapping it '
+      'calls onResume then refreshes', (tester) async {
+    final info =
+        _consumerInfo(paused: true, pauseUntil: DateTime.utc(2026, 1, 1));
+    var resumeCalls = 0;
+    var refreshCalls = 0;
+    await _pump(
+      tester,
+      ConsumerDetailDialog(
+        initial: info,
+        onRefresh: () async {
+          refreshCalls++;
+          if (refreshCalls > 1) return _consumerDetail(_consumerInfo());
+          return _consumerDetail(info);
+        },
+        onResume: () async => resumeCalls++,
+      ),
+    );
+
+    expect(find.text('Pause'), findsNothing);
+    expect(find.textContaining('Paused until:'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Resume'));
+    await tester.pumpAndSettle();
+
+    expect(resumeCalls, 1);
+    expect(find.textContaining('Paused until:'), findsNothing);
+  });
+
+  testWidgets('shows an error message when resume fails, without closing',
+      (tester) async {
+    final info =
+        _consumerInfo(paused: true, pauseUntil: DateTime.utc(2026, 1, 1));
+    await _pump(
+      tester,
+      ConsumerDetailDialog(
+        initial: info,
+        onRefresh: () async => _consumerDetail(info),
+        onResume: () async => throw NatsException('resume failed'),
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(TextButton, 'Resume'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('resume failed'), findsOneWidget);
+    expect(find.byType(ConsumerDetailDialog), findsOneWidget);
   });
 }

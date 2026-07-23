@@ -47,12 +47,20 @@ class JetStreamManager {
   /// Get up-to-date info for a single consumer, plus a handful of
   /// `ConsumerConfig` fields `dart_nats` 1.2.3's `ConsumerInfo.fromJson`
   /// doesn't parse even though the server always sends them (`ack_wait`,
-  /// `max_deliver`, `max_ack_pending`). Issues the same raw
-  /// `$JS.API.CONSUMER.INFO.<stream>.<consumer>` request `consumerInfo()`
-  /// makes internally, reusing `ConsumerInfo.fromJson` for everything it
-  /// already handles and reading the three missing fields off the same JSON
-  /// itself -- mirroring the raw-JSON bypass `KvManager.bucketStatus` uses
-  /// for the same kind of package-side parsing gap.
+  /// `max_deliver`, `max_ack_pending`), and a correctly-read `pauseUntil`.
+  /// Issues the same raw `$JS.API.CONSUMER.INFO.<stream>.<consumer>` request
+  /// `consumerInfo()` makes internally, reusing `ConsumerInfo.fromJson` for
+  /// everything it already handles and reading the missing fields off the
+  /// same JSON itself -- mirroring the raw-JSON bypass `KvManager.bucketStatus`
+  /// uses for the same kind of package-side parsing gap.
+  ///
+  /// `pauseUntil` needs its own bypass even though `dart_nats` 1.3.0 added
+  /// `ConsumerInfo.fromJson` support for it: verified live against a real
+  /// `nats-server` (2.14.3) that the server nests `pause_until` inside
+  /// `config`, not at the response's top level where `ConsumerInfo.fromJson`
+  /// looks for it -- so `info.paused` (a genuine top-level field) reads
+  /// correctly, but `info.pauseUntil` always comes back `null`. `info.paused`
+  /// itself is trustworthy and used as-is.
   Future<ConsumerDetail> consumerDetail(String streamName, String consumerName,
       {Duration timeout = const Duration(seconds: 5)}) async {
     final subject = '\$JS.API.CONSUMER.INFO.$streamName.$consumerName';
@@ -60,6 +68,7 @@ class JetStreamManager {
     final info = ConsumerInfo.fromJson(map);
     final config = map['config'] as Map<String, dynamic>? ?? {};
     final ackWaitNanos = config['ack_wait'] as int?;
+    final pauseUntilStr = config['pause_until'] as String?;
     return ConsumerDetail(
       info: info,
       ackWait: (ackWaitNanos != null && ackWaitNanos > 0)
@@ -67,6 +76,8 @@ class JetStreamManager {
           : null,
       maxDeliver: config['max_deliver'] as int?,
       maxAckPending: config['max_ack_pending'] as int?,
+      pauseUntil:
+          pauseUntilStr != null ? DateTime.tryParse(pauseUntilStr) : null,
     );
   }
 
@@ -144,10 +155,22 @@ class JetStreamManager {
     return _js.deleteStream(streamName, timeout: timeout);
   }
 
-  /// Purge all messages from a stream, keeping the stream itself.
+  /// Purge messages from a stream, keeping the stream itself. With no
+  /// arguments, purges everything (the original all-or-nothing behavior).
+  /// [filter] restricts the purge to messages on a matching subject, [keep]
+  /// retains the newest N messages (of those matching [filter], if given)
+  /// instead of purging all matches, and [seq] purges all matching messages
+  /// up to but not including that stream sequence number. [keep] and [seq]
+  /// are mutually exclusive per the server's own `$JS.API.STREAM.PURGE` API
+  /// (`dart_nats` 1.4.0's `JsStream.purge()`).
   Future<void> purgeStream(String streamName,
-      {Duration timeout = const Duration(seconds: 5)}) {
-    return _js.stream(streamName).purge(timeout: timeout);
+      {String? filter,
+      int? keep,
+      int? seq,
+      Duration timeout = const Duration(seconds: 5)}) {
+    return _js
+        .stream(streamName)
+        .purge(filter: filter, keep: keep, seq: seq, timeout: timeout);
   }
 
   /// Create a new consumer (push or pull, durable or ephemeral) on [streamName].
@@ -160,6 +183,23 @@ class JetStreamManager {
   Future<void> deleteConsumer(String streamName, String consumerName,
       {Duration timeout = const Duration(seconds: 5)}) {
     return _js.deleteConsumer(streamName, consumerName, timeout: timeout);
+  }
+
+  /// Pause a consumer until [pauseUntil] (NATS 2.11+, `dart_nats` 1.3.0's
+  /// `JetStream.pauseConsumer`), suspending delivery/pull-ability without
+  /// deleting it. Use [resumeConsumer] to unpause early.
+  Future<ConsumerPauseResponse> pauseConsumer(
+      String streamName, String consumerName, DateTime pauseUntil,
+      {Duration timeout = const Duration(seconds: 2)}) {
+    return _js.pauseConsumer(streamName, consumerName, pauseUntil,
+        timeout: timeout);
+  }
+
+  /// Resume a previously-[pauseConsumer]-paused consumer immediately.
+  Future<ConsumerPauseResponse> resumeConsumer(
+      String streamName, String consumerName,
+      {Duration timeout = const Duration(seconds: 2)}) {
+    return _js.resumeConsumer(streamName, consumerName, timeout: timeout);
   }
 
   /// Publish a string payload into JetStream and wait for the server's
@@ -210,11 +250,19 @@ class ConsumerDetail {
   final int? maxDeliver;
   final int? maxAckPending;
 
+  /// The consumer's pause expiry, read directly off `config.pause_until` in
+  /// the raw JSON (see [JetStreamManager.consumerDetail]'s doc comment for
+  /// why `info.pauseUntil` itself can't be trusted). `null` when the
+  /// consumer isn't currently paused, or hasn't been fetched from this
+  /// bypass at all (e.g. a plain consumer-list row's `ConsumerInfo`).
+  final DateTime? pauseUntil;
+
   ConsumerDetail({
     required this.info,
     required this.ackWait,
     required this.maxDeliver,
     required this.maxAckPending,
+    this.pauseUntil,
   });
 }
 

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nats_client_flutter/jetstream_dashboard.dart';
 import 'package:nats_client_flutter/jetstream_manager.dart';
+import 'package:nats_client_flutter/jetstream_pause_dialog.dart';
 
 /// Test double for [JetStreamManager]. `Client` itself can't be faked (it's
 /// a concrete class backed by real socket/stream logic), but none of
@@ -26,10 +27,14 @@ class FakeJetStreamManager extends JetStreamManager {
   Future<void> Function(StreamConfig)? updateStreamImpl;
   Future<StreamInfo> Function(String)? streamDetailImpl;
   Future<void> Function(String)? deleteStreamImpl;
-  Future<void> Function(String)? purgeStreamImpl;
+  Future<void> Function(String, {String? filter, int? keep, int? seq})?
+      purgeStreamImpl;
   Future<void> Function(String, ConsumerConfig)? createConsumerImpl;
   Future<void> Function(String, String)? deleteConsumerImpl;
   Future<ConsumerDetail> Function(String, String)? consumerDetailImpl;
+  Future<ConsumerPauseResponse> Function(String, String, DateTime)?
+      pauseConsumerImpl;
+  Future<ConsumerPauseResponse> Function(String, String)? resumeConsumerImpl;
 
   Future<AccountInfo> Function()? fetchAccountInfoImpl;
 
@@ -39,9 +44,15 @@ class FakeJetStreamManager extends JetStreamManager {
   int purgeStreamCalls = 0;
   int deleteConsumerCalls = 0;
   int fetchAccountInfoCalls = 0;
+  int pauseConsumerCalls = 0;
+  int resumeConsumerCalls = 0;
   StreamConfig? lastCreatedStreamConfig;
   StreamConfig? lastUpdatedStreamConfig;
   ConsumerConfig? lastCreatedConsumerConfig;
+  String? lastPurgeFilter;
+  int? lastPurgeKeep;
+  int? lastPurgeSeq;
+  DateTime? lastPauseUntil;
 
   @override
   Future<String?> checkAvailability({Duration? timeout}) {
@@ -92,9 +103,38 @@ class FakeJetStreamManager extends JetStreamManager {
   }
 
   @override
-  Future<void> purgeStream(String streamName, {Duration? timeout}) async {
+  Future<void> purgeStream(String streamName,
+      {String? filter, int? keep, int? seq, Duration? timeout}) async {
     purgeStreamCalls++;
-    if (purgeStreamImpl != null) return purgeStreamImpl!(streamName);
+    lastPurgeFilter = filter;
+    lastPurgeKeep = keep;
+    lastPurgeSeq = seq;
+    if (purgeStreamImpl != null) {
+      return purgeStreamImpl!(streamName, filter: filter, keep: keep, seq: seq);
+    }
+  }
+
+  @override
+  Future<ConsumerPauseResponse> pauseConsumer(
+      String streamName, String consumerName, DateTime pauseUntil,
+      {Duration? timeout}) async {
+    pauseConsumerCalls++;
+    lastPauseUntil = pauseUntil;
+    if (pauseConsumerImpl != null) {
+      return pauseConsumerImpl!(streamName, consumerName, pauseUntil);
+    }
+    return ConsumerPauseResponse(paused: true, pauseUntil: pauseUntil);
+  }
+
+  @override
+  Future<ConsumerPauseResponse> resumeConsumer(
+      String streamName, String consumerName,
+      {Duration? timeout}) async {
+    resumeConsumerCalls++;
+    if (resumeConsumerImpl != null) {
+      return resumeConsumerImpl!(streamName, consumerName);
+    }
+    return ConsumerPauseResponse(paused: false);
   }
 
   @override
@@ -158,7 +198,12 @@ StreamInfo _stream(String name,
   );
 }
 
-ConsumerInfo _consumer(String name, {String ackPolicy = 'explicit'}) {
+ConsumerInfo _consumer(
+  String name, {
+  String ackPolicy = 'explicit',
+  bool paused = false,
+  DateTime? pauseUntil,
+}) {
   return ConsumerInfo(
     type: 'io.nats.jetstream.api.v1.consumer_info_response',
     streamName: 'orders',
@@ -169,6 +214,8 @@ ConsumerInfo _consumer(String name, {String ackPolicy = 'explicit'}) {
     numWaiting: 0,
     numAckPending: 0,
     numRedelivered: 0,
+    paused: paused,
+    pauseUntil: pauseUntil,
   );
 }
 
@@ -400,7 +447,8 @@ void main() {
       (tester) async {
     final manager = FakeJetStreamManager();
     manager.listStreamsImpl = () async => [_stream('orders', messages: 5)];
-    manager.purgeStreamImpl = (_) async => throw Exception('purge boom');
+    manager.purgeStreamImpl =
+        (_, {filter, keep, seq}) async => throw Exception('purge boom');
 
     await tester.pumpWidget(
       MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
@@ -708,6 +756,141 @@ void main() {
 
     expect(manager.deleteConsumerCalls, 0);
     expect(find.text('billing-processor'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Consumer Detail dialog Pause button prompts for a duration then '
+      'calls the manager with pauseUntil roughly duration from now',
+      (tester) async {
+    final manager = FakeJetStreamManager();
+    manager.listStreamsImpl = () async => [_stream('orders', messages: 3)];
+    manager.listConsumersImpl = (_) async => [_consumer('billing-processor')];
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('orders'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('billing-processor'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(TextButton, 'Pause'));
+    await tester.pumpAndSettle();
+    expect(find.text('Pause "billing-processor"?'), findsOneWidget);
+
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Pause for how many minutes'),
+        '10');
+    final before = DateTime.now().toUtc();
+    await tester.tap(find.descendant(
+      of: find.byType(ConsumerPauseDurationDialog),
+      matching: find.widgetWithText(TextButton, 'Pause'),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(manager.pauseConsumerCalls, 1);
+    expect(manager.lastPauseUntil, isNotNull);
+    final delta = manager.lastPauseUntil!.difference(before);
+    expect(delta.inMinutes, closeTo(10, 1));
+  });
+
+  testWidgets(
+      'a paused consumer shows Paused Until and its Resume button calls '
+      'the manager', (tester) async {
+    final manager = FakeJetStreamManager();
+    final pauseUntil = DateTime.now().toUtc().add(const Duration(minutes: 5));
+    manager.listStreamsImpl = () async => [_stream('orders', messages: 3)];
+    final pausedConsumer = _consumer('billing-processor',
+        paused: true, pauseUntil: pauseUntil);
+    manager.listConsumersImpl = (_) async => [pausedConsumer];
+    manager.consumerDetailImpl = (streamName, consumerName) async =>
+        ConsumerDetail(
+          info: pausedConsumer,
+          pauseUntil: pauseUntil,
+          ackWait: null,
+          maxDeliver: null,
+          maxAckPending: null,
+        );
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('orders'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('billing-processor'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Paused until:'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Pause'), findsNothing);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Resume'));
+    await tester.pumpAndSettle();
+
+    expect(manager.resumeConsumerCalls, 1);
+  });
+
+  testWidgets(
+      'Purge Stream dialog defaults to all-or-nothing but supports a '
+      'subject filter plus Keep Newest / Up to Sequence scopes',
+      (tester) async {
+    final manager = FakeJetStreamManager();
+    manager.listStreamsImpl = () async => [_stream('orders', messages: 5)];
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('orders'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Purge'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Subject Filter (optional)'),
+        'orders.cancelled');
+    await tester.tap(find.text('Keep Newest'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Keep newest N messages'), '25');
+
+    await tester.tap(find.widgetWithText(TextButton, 'Purge'));
+    await tester.pumpAndSettle();
+
+    expect(manager.purgeStreamCalls, 1);
+    expect(manager.lastPurgeFilter, 'orders.cancelled');
+    expect(manager.lastPurgeKeep, 25);
+    expect(manager.lastPurgeSeq, isNull);
+  });
+
+  testWidgets('Purge Stream dialog rejects a non-positive Keep count',
+      (tester) async {
+    final manager = FakeJetStreamManager();
+    manager.listStreamsImpl = () async => [_stream('orders', messages: 5)];
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('orders'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Purge'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Keep Newest'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.widgetWithText(TextFormField, 'Keep newest N messages'), '0');
+
+    await tester.tap(find.widgetWithText(TextButton, 'Purge'));
+    await tester.pumpAndSettle();
+
+    expect(manager.purgeStreamCalls, 0);
+    expect(find.text('Enter a positive integer.'), findsOneWidget);
   });
 
   testWidgets(

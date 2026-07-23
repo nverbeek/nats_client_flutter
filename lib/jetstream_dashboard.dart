@@ -8,6 +8,7 @@ import 'jetstream_consumer_dialog.dart';
 import 'jetstream_consumer_tail_view.dart';
 import 'jetstream_manager.dart';
 import 'jetstream_message_view.dart';
+import 'jetstream_purge_dialog.dart';
 import 'jetstream_stream_dialog.dart';
 import 'subject_chip_style.dart';
 
@@ -266,6 +267,9 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
         onRefresh: () => manager.consumerDetail(info.streamName, info.name),
         onDelete: () => _confirmDeleteConsumer(info.streamName, info.name),
         onTail: () => _tailConsumer(info),
+        onPause: (pauseFor) => manager.pauseConsumer(info.streamName, info.name,
+            DateTime.now().toUtc().add(pauseFor)),
+        onResume: () => manager.resumeConsumer(info.streamName, info.name),
       ),
     );
   }
@@ -418,32 +422,16 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
   void _confirmPurgeStream(String streamName) {
     showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Purge Stream?'),
-        content: Text(
-            'This permanently deletes all messages in "$streamName" but keeps '
-            'the stream and its consumers. This cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _runMutation(
-                () async {
-                  await widget.manager!.purgeStream(streamName);
-                  await _loadStreams();
-                },
-                successMessage: 'Stream "$streamName" purged.',
-              );
-            },
-            style: TextButton.styleFrom(
-                foregroundColor: Theme.of(context).colorScheme.error),
-            child: const Text('Purge'),
-          ),
-        ],
+      builder: (context) => PurgeStreamDialog(
+        streamName: streamName,
+        onSubmit: ({filter, keep, seq}) => _runMutation(
+          () async {
+            await widget.manager!
+                .purgeStream(streamName, filter: filter, keep: keep, seq: seq);
+            await _loadStreams();
+          },
+          successMessage: 'Stream "$streamName" purged.',
+        ),
       ),
     );
   }

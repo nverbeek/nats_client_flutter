@@ -10,12 +10,16 @@ import 'jetstream_manager.dart' show describeJetStreamError;
 const String objectStoreStreamPrefix = 'OBJ_';
 
 /// Above this transfer size, Upload/Download show a warn-and-proceed
-/// confirmation first -- the underlying library buffers a whole object's
-/// bytes in memory (twice, briefly) for both directions with no size limit
-/// of its own, so a very large object risks exhausting the app's memory
-/// with no warning otherwise. True streaming transfers would need a library
-/// change (see ROADMAP.md's upstream-first milestone); this is an app-side
-/// mitigation in the meantime.
+/// confirmation first. `dart_nats` 1.4.0 added `ObjectStore.putStream()`/
+/// `getStream()` for true streaming transfers, but this app doesn't use them
+/// -- the real memory cost starts one layer up, in `object_store_dashboard.dart`'s
+/// `pickUploadFile`/`saveDownloadedFile`, which already read/write the whole
+/// file via `file_picker` before `ObjectStoreManager` ever sees it (and must,
+/// on web, where there's no filesystem to stream from). Switching just the
+/// manager to `putStream()`/`getStream()` without also reworking that
+/// picking/saving layer would add complexity for no actual memory benefit,
+/// so this warning threshold remains the app's mitigation for large objects
+/// rather than true streaming.
 const int largeObjectTransferWarningThreshold = 100 * 1024 * 1024; // 100 MiB
 
 /// Thin, testable wrapper around a connected [Client] for Object Store

@@ -133,10 +133,10 @@ packages:
     dependency: "direct main"
     description:
       name: dart_nats
-      sha256: d69f7ca93363c83c0acad6d00619e5013e27b154dde083f451570d4c8d7e96df
+      sha256: "88c8d5aca85bf1380de9cace8740742e9f977ff50bcde6c3cd6600c31aa46adf"
       url: "https://pub.dev"
     source: hosted
-    version: "1.2.3"
+    version: "1.4.0"
   dbus:
     dependency: transitive
     description:

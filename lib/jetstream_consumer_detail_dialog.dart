@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'format_utils.dart' show formatConfiguredDuration;
 import 'jetstream_manager.dart' show ConsumerDetail, describeJetStreamError;
+import 'jetstream_pause_dialog.dart' show ConsumerPauseDurationDialog;
 
 /// Read-only detail dialog for a single JetStream consumer -- type, ack/
 /// deliver policy, filter subject, ack-wait/max-deliver/max-ack-pending, and
@@ -14,12 +15,15 @@ import 'jetstream_manager.dart' show ConsumerDetail, describeJetStreamError;
 /// the consumer list) without an extra round trip; [onRefresh] is called on
 /// open (to pick up the ack-wait/max-deliver/max-ack-pending fields the list
 /// view's plain `ConsumerInfo` doesn't carry) and again on every manual
-/// Refresh tap.
+/// Refresh tap, and after a successful [onPause]/[onResume] so the displayed
+/// `paused`/`pauseUntil` state stays current without closing the dialog.
 class ConsumerDetailDialog extends StatefulWidget {
   final ConsumerInfo initial;
   final Future<ConsumerDetail> Function() onRefresh;
   final VoidCallback? onDelete;
   final VoidCallback? onTail;
+  final Future<void> Function(Duration pauseFor)? onPause;
+  final Future<void> Function()? onResume;
 
   const ConsumerDetailDialog({
     super.key,
@@ -27,6 +31,8 @@ class ConsumerDetailDialog extends StatefulWidget {
     required this.onRefresh,
     this.onDelete,
     this.onTail,
+    this.onPause,
+    this.onResume,
   });
 
   @override
@@ -38,6 +44,7 @@ class _ConsumerDetailDialogState extends State<ConsumerDetailDialog> {
   ConsumerDetail? _detail;
   bool _loading = false;
   String? _error;
+  bool _pausing = false;
 
   @override
   void initState() {
@@ -69,6 +76,49 @@ class _ConsumerDetailDialogState extends State<ConsumerDetailDialog> {
         _error = describeJetStreamError(e);
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _pause() async {
+    final duration = await showDialog<Duration>(
+      context: context,
+      builder: (context) => ConsumerPauseDurationDialog(consumerName: _info.name),
+    );
+    if (duration == null || !mounted) return;
+    setState(() {
+      _pausing = true;
+      _error = null;
+    });
+    try {
+      await widget.onPause!(duration);
+      if (!mounted) return;
+      await _refresh();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = describeJetStreamError(e);
+      });
+    } finally {
+      if (mounted) setState(() => _pausing = false);
+    }
+  }
+
+  Future<void> _resume() async {
+    setState(() {
+      _pausing = true;
+      _error = null;
+    });
+    try {
+      await widget.onResume!();
+      if (!mounted) return;
+      await _refresh();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = describeJetStreamError(e);
+      });
+    } finally {
+      if (mounted) setState(() => _pausing = false);
     }
   }
 
@@ -115,6 +165,17 @@ class _ConsumerDetailDialogState extends State<ConsumerDetailDialog> {
             Text('Waiting: ${_info.numWaiting}'),
             Text('Ack Pending: ${_info.numAckPending}'),
             Text('Redelivered: ${_info.numRedelivered}'),
+            if (_info.paused) ...[
+              const SizedBox(height: 8),
+              Text(
+                detail?.pauseUntil != null
+                    ? 'Paused until: ${detail!.pauseUntil!.toLocal()}'
+                    : 'Paused',
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.bold),
+              ),
+            ],
             if (_error != null) ...[
               const SizedBox(height: 8),
               Text(_error!,
@@ -124,6 +185,21 @@ class _ConsumerDetailDialogState extends State<ConsumerDetailDialog> {
         ),
       ),
       actions: [
+        if (_info.paused)
+          TextButton(
+            onPressed:
+                _pausing || _info.name.isEmpty || widget.onResume == null
+                    ? null
+                    : _resume,
+            child: const Text('Resume'),
+          )
+        else
+          TextButton(
+            onPressed: _pausing || _info.name.isEmpty || widget.onPause == null
+                ? null
+                : _pause,
+            child: const Text('Pause'),
+          ),
         TextButton(
           onPressed: _info.name.isEmpty || widget.onDelete == null
               ? null
