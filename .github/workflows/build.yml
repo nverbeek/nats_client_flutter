@@ -196,6 +196,8 @@ jobs:
         run: flutter pub get
       - name: Enable windows build
         run: flutter config --enable-windows-desktop
+      - name: Build artifacts
+        run: flutter build windows --release
       - name: Setup Microsoft Store Developer CLI
         uses: microsoft/microsoft-store-apppublisher@v1.1
       - name: Configure Microsoft Store Developer CLI
