@@ -172,10 +172,20 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: build/windows/x64/runner/Release/NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-windows-x64.zip
-  publish-windows-store:
+  check-store-secrets:
     needs: test
-    # Tag-only; no-op on forks/PRs since they won't have the Partner Center secrets.
-    if: startsWith(github.ref, 'refs/tags/') && secrets.PARTNER_CENTER_CLIENT_ID != ''
+    runs-on: ubuntu-latest
+    outputs:
+      has-secrets: ${{ steps.check.outputs.has-secrets }}
+    steps:
+      - id: check
+        # secrets can't be read directly in a job/step `if:`, only here in a
+        # step body, so this job exists purely to expose the check as an
+        # output the next job's `if:` can reference via `needs`.
+        run: echo "has-secrets=${{ secrets.PARTNER_CENTER_CLIENT_ID != '' }}" >> "$GITHUB_OUTPUT"
+  publish-windows-store:
+    needs: [test, check-store-secrets]
+    if: startsWith(github.ref, 'refs/tags/') && needs.check-store-secrets.outputs.has-secrets == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
