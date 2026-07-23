@@ -23,7 +23,7 @@ This app depends on the official mainline `dart_nats` package (`^1.4.0`), includ
 - [x] **M12**: Connection Host/Port History — remembers up to 10 previously-successful targets.
 - [x] **M13** *(won't do)*: Message Direction Indicator (incoming vs. outgoing). Dropped 2026-07-22 — user no longer interested.
 - [x] **M14** *(won't do)*: Request/Reply Correlation Improvements. Dropped 2026-07-22 — user no longer interested.
-- [ ] **M15**: Windows distribution via Microsoft Store (free MSIX signing) + unsigned GitHub Releases. Not started — decided 2026-07-18. *(Linux/Snap Store distribution and macOS code signing dropped 2026-07-22 — Snap Store no longer wanted, macOS cost prohibitive.)*
+- [ ] **M15**: Windows distribution via Microsoft Store (free MSIX signing) + unsigned GitHub Releases. Store listing live 2026-07-23; GH Actions submission automation for future versions and publishing-setup docs still open. *(Linux/Snap Store distribution and macOS code signing dropped 2026-07-22 — Snap Store no longer wanted, macOS cost prohibitive.)*
 - [x] **M16**: Material 3 standards — OS dynamic color, `FilledButton`/`IconButton` variants.
 - [ ] **M17**: NATS Server Monitoring Dashboard. Not started — see below.
 - [x] **M18**: NATS Micro-services (Services API) Discovery.
@@ -65,10 +65,10 @@ Linux Snap Store distribution and macOS code signing were both dropped 2026-07-2
 - One-time manual prerequisite: the app must already exist in Partner Center with at least one completed submission (store listing, screenshots, age rating, privacy policy) and `msstore init` run once in the repo — after that, version-bump submissions on tagged releases can run unattended, added as a new job in `.github/workflows/build.yml` alongside the existing `build-windows-x64`/`build-windows-arm64` jobs.
 
 ### Implementation Checklist
-- [ ] Set up a free Microsoft Store developer account; complete the one-time manual Partner Center listing pass (screenshots, listing details, age rating, privacy policy).
+- [x] Set up a free Microsoft Store developer account; complete the one-time manual Partner Center listing pass (screenshots, listing details, age rating, privacy policy). Submission cleared certification and the listing went live 2026-07-23.
 - [x] Add the `msix` pub package + `msix_config:` to `pubspec.yaml`.
-- [ ] Add a GH Actions job (using `setup-msstore-cli` + `msstore package`/`msstore publish`) that packages and submits the Store build on tagged releases, gated behind repo secrets so it's a no-op on forks/PRs without them.
-- [ ] Leave the existing Windows EXE/ZIP GitHub Release artifact unsigned, as decided.
+- [x] Add a GH Actions job (`publish-windows-store` in `build.yml`, using `microsoft/microsoft-store-apppublisher` + `msstore reconfigure`/`msstore publish`) that packages and submits the Store build on tagged releases, gated on `secrets.PARTNER_CENTER_CLIENT_ID != ''` so it's a no-op on forks/PRs without them. Not yet verified end-to-end against a real tagged release.
+- [x] Leave the existing Windows EXE/ZIP GitHub Release artifact unsigned, as decided.
 - [x] Skip the GitHub Releases update check on Store-managed installs — `update_checker.dart`'s `isStoreManagedInstall()` detects an MSIX install (Windows, via a `...\WindowsApps\...` executable path) or a Snap-confined runtime (via the `SNAP` env var, left over from before Snap Store distribution was dropped — harmless to keep) and `main.dart` skips `checkForUpdates()` for either; only the direct-download exe/zip self-checks GitHub.
 - [ ] Document the publishing/signing setup (which secrets, how to rotate/renew) in `AGENTS.md` or a new doc.
 

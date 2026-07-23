@@ -172,6 +172,28 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: build/windows/x64/runner/Release/NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-windows-x64.zip
+  publish-windows-store:
+    needs: test
+    # Tag-only; no-op on forks/PRs since they won't have the Partner Center secrets.
+    if: startsWith(github.ref, 'refs/tags/') && secrets.PARTNER_CENTER_CLIENT_ID != ''
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+      - name: Install project dependencies
+        run: flutter pub get
+      - name: Enable windows build
+        run: flutter config --enable-windows-desktop
+      - name: Setup Microsoft Store Developer CLI
+        uses: microsoft/microsoft-store-apppublisher@v1.1
+      - name: Configure Microsoft Store Developer CLI
+        run: msstore reconfigure --tenantId ${{ secrets.PARTNER_CENTER_TENANT_ID }} --sellerId ${{ secrets.PARTNER_CENTER_SELLER_ID }} --clientId ${{ secrets.PARTNER_CENTER_CLIENT_ID }} --clientSecret ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+      - name: Publish to Microsoft Store
+        # msstore builds+packages+submits in one call. --appId is the Store
+        # Product ID (distinct from pubspec.yaml's Package Identity Name).
+        run: msstore publish . --appId 9NVR7NHHL4FB
   build-windows-arm64:
     needs: test
     runs-on: windows-11-arm
