@@ -90,6 +90,31 @@ jobs:
       - name: Stop auth fixture servers
         if: always()
         run: docker rm -f nats-fixture-userpass nats-fixture-token nats-fixture-nkey nats-fixture-creds
+  release-notes:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Extract changelog section
+        run: |
+          PUBSPEC_VERSION="$(grep -m1 '^version:' pubspec.yaml | sed 's/version:[[:space:]]*//' | cut -d'+' -f1)"
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$TAG_VERSION" != "$PUBSPEC_VERSION" ]; then
+            echo "Tag v$TAG_VERSION does not match pubspec.yaml version $PUBSPEC_VERSION" >&2
+            exit 1
+          fi
+          if ! grep -q "^# $PUBSPEC_VERSION\$" CHANGELOG.md; then
+            echo "CHANGELOG.md has no '# $PUBSPEC_VERSION' entry" >&2
+            exit 1
+          fi
+          awk '/^# /{if (p) exit; if ($0 == "# '"$PUBSPEC_VERSION"'") p=1; next} p' CHANGELOG.md > release_notes.md
+      - name: Set release description
+        uses: softprops/action-gh-release@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          body_path: release_notes.md
   build-web:
     needs: test
     runs-on: ubuntu-latest

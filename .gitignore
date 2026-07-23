@@ -138,3 +138,4 @@ tf/terraform.tfstate.backup
 cert
 scripts/node_modules
 scripts/package-lock.json
+nats_client_dart_nats.code-workspace
