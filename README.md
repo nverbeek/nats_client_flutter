@@ -3,6 +3,14 @@
 
 This NATS client is a cross-platform desktop & web application written in Flutter. The client allows users to easily watch & manage NATS messages.
 
+<a href="https://apps.microsoft.com/detail/9NVR7NHHL4FB?mode=direct">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://get.microsoft.com/images/en-us%20light.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://get.microsoft.com/images/en-us%20dark.svg">
+    <img src="https://get.microsoft.com/images/en-us%20dark.svg" width="200" alt="Get it from Microsoft">
+  </picture>
+</a>
+
 # Platforms
 This application currently supports Windows, Linux, macOS and Web platforms. 
 

@@ -198,14 +198,33 @@ jobs:
         run: flutter config --enable-windows-desktop
       - name: Build artifacts
         run: flutter build windows --release
+      - name: Package MSIX
+        # msstore publish only *locates* an existing package, it does not
+        # build one — without this the submission silently inherits the
+        # previously published package instead of shipping this build.
+        run: dart run msix:create --architecture x64
+      - name: Verify MSIX version matches the tag
+        shell: pwsh
+        run: |
+          $expected = "$($env:GITHUB_REF_NAME -replace '^v','').0"
+          $msix = Resolve-Path 'build/windows/x64/runner/Release/nats_client_flutter.msix'
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($msix)
+          $manifest = (New-Object System.IO.StreamReader($zip.GetEntry('AppxManifest.xml').Open())).ReadToEnd()
+          $zip.Dispose()
+          if ($manifest -notmatch "Version=`"$([regex]::Escape($expected))`"") {
+            throw "MSIX version does not match tag $env:GITHUB_REF_NAME (expected $expected)"
+          }
+          Write-Host "MSIX version $expected OK"
       - name: Setup Microsoft Store Developer CLI
         uses: microsoft/microsoft-store-apppublisher@v1.1
       - name: Configure Microsoft Store Developer CLI
         run: msstore reconfigure --tenantId ${{ secrets.PARTNER_CENTER_TENANT_ID }} --sellerId ${{ secrets.PARTNER_CENTER_SELLER_ID }} --clientId ${{ secrets.PARTNER_CENTER_CLIENT_ID }} --clientSecret ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
       - name: Publish to Microsoft Store
-        # msstore builds+packages+submits in one call. --appId is the Store
-        # Product ID (distinct from pubspec.yaml's Package Identity Name).
-        run: msstore publish . --appId 9NVR7NHHL4FB
+        # --appId is the Store Product ID (distinct from pubspec.yaml's
+        # Package Identity Name). --inputFile pins the exact package rather
+        # than letting the CLI guess at a "best candidate".
+        run: msstore publish . --appId 9NVR7NHHL4FB --inputFile build/windows/x64/runner/Release/nats_client_flutter.msix
   build-windows-arm64:
     needs: test
     runs-on: windows-11-arm
