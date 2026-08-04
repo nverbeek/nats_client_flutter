@@ -222,9 +222,10 @@ jobs:
         run: msstore reconfigure --tenantId ${{ secrets.PARTNER_CENTER_TENANT_ID }} --sellerId ${{ secrets.PARTNER_CENTER_SELLER_ID }} --clientId ${{ secrets.PARTNER_CENTER_CLIENT_ID }} --clientSecret ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
       - name: Publish to Microsoft Store
         # --appId is the Store Product ID (distinct from pubspec.yaml's
-        # Package Identity Name). --inputFile pins the exact package rather
-        # than letting the CLI guess at a "best candidate".
-        run: msstore publish . --appId 9NVR7NHHL4FB --inputFile build/windows/x64/runner/Release/nats_client_flutter.msix
+        # Package Identity Name). --inputDirectory points at the folder
+        # holding the .msix built above, rather than letting the CLI guess
+        # at a "best candidate" across the whole tree.
+        run: msstore publish . --appId 9NVR7NHHL4FB --inputDirectory build/windows/x64/runner/Release
   build-windows-arm64:
     needs: test
     runs-on: windows-11-arm
