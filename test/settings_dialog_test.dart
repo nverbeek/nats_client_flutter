@@ -4,15 +4,18 @@ import 'package:nats_client_flutter/settings_dialog.dart';
 
 void main() {
   Widget buildDialog(
-      void Function(double, int, bool, bool, bool, bool, bool, bool, int, bool)
+      void Function(
+              double, int, int, bool, bool, bool, bool, bool, bool, int, bool)
           onSave,
       {int initialMaxMessages = 10000,
+      int initialHeartbeatInterval = 120,
       bool initialShowTimestamps = false}) {
     return MaterialApp(
       home: Scaffold(
         body: SettingsDialog(
           initialFontSize: 14,
           initialRetryInterval: 5,
+          initialHeartbeatInterval: initialHeartbeatInterval,
           initialJetStreamEnabled: true,
           initialKvEnabled: true,
           initialObjectStoreEnabled: true,
@@ -27,8 +30,8 @@ void main() {
     );
   }
 
-  void noopSave(double a, int b, bool c, bool d, bool e, bool f, bool g, bool h,
-      int i, bool j) {}
+  void noopSave(double a, int b, int heartbeat, bool c, bool d, bool e, bool f,
+      bool g, bool h, int i, bool j) {}
 
   testWidgets('shows the initial values', (tester) async {
     await tester.pumpWidget(buildDialog(noopSave));
@@ -94,6 +97,7 @@ void main() {
     await tester.pumpWidget(buildDialog(noopSave));
 
     final objectStoreSwitchFinder = find.byType(Switch).at(3);
+    await tester.ensureVisible(objectStoreSwitchFinder);
     await tester.tap(objectStoreSwitchFinder);
     await tester.pump();
 
@@ -156,6 +160,37 @@ void main() {
     expect(find.text('10 seconds'), findsOneWidget);
   });
 
+  testWidgets('shows the Heartbeat Interval and saves a changed one',
+      (tester) async {
+    int? saved;
+    await tester.pumpWidget(buildDialog((_, __, heartbeat, ___, ____, _____,
+            ______, _______, ________, _________, __________) =>
+        saved = heartbeat));
+
+    expect(find.text('2 minutes'), findsOneWidget);
+    await tester.ensureVisible(find.text('2 minutes'));
+    await tester.tap(find.text('2 minutes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('30 seconds').last);
+    await tester.pumpAndSettle();
+    expect(find.text('30 seconds'), findsOneWidget);
+
+    await tester.ensureVisible(find.widgetWithText(TextButton, 'Save'));
+    await tester.tap(find.widgetWithText(TextButton, 'Save'));
+    await tester.pumpAndSettle();
+    expect(saved, 30);
+  });
+
+  testWidgets(
+      'a persisted Heartbeat Interval outside the standard options still '
+      'shows up as a selected item', (tester) async {
+    await tester
+        .pumpWidget(buildDialog(noopSave, initialHeartbeatInterval: 45));
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('45 seconds'), findsOneWidget);
+  });
+
   testWidgets('changing the Max Messages Kept dropdown updates the value',
       (tester) async {
     await tester.pumpWidget(buildDialog(noopSave));
@@ -201,6 +236,7 @@ void main() {
                 builder: (context) => SettingsDialog(
                   initialFontSize: 14,
                   initialRetryInterval: 5,
+                  initialHeartbeatInterval: 120,
                   initialJetStreamEnabled: true,
                   initialKvEnabled: true,
                   initialObjectStoreEnabled: true,
@@ -210,7 +246,7 @@ void main() {
                   initialMaxMessages: 10000,
                   initialShowTimestamps: false,
                   onSave: (_, __, ___, ____, _____, ______, _______, ________,
-                          _________, __________) =>
+                          _________, __________, ___________) =>
                       saveCalled = true,
                 ),
               ),
@@ -234,6 +270,7 @@ void main() {
       (tester) async {
     double? savedFontSize;
     int? savedRetryInterval;
+    int? savedHeartbeatInterval;
     bool? savedJetStreamEnabled;
     bool? savedKvEnabled;
     bool? savedObjectStoreEnabled;
@@ -253,6 +290,7 @@ void main() {
                 builder: (context) => SettingsDialog(
                   initialFontSize: 14,
                   initialRetryInterval: 5,
+                  initialHeartbeatInterval: 120,
                   initialJetStreamEnabled: true,
                   initialKvEnabled: true,
                   initialObjectStoreEnabled: true,
@@ -263,6 +301,7 @@ void main() {
                   initialShowTimestamps: false,
                   onSave: (fontSize,
                       retryInterval,
+                      heartbeatInterval,
                       jetStream,
                       kv,
                       objectStore,
@@ -273,6 +312,7 @@ void main() {
                       showTimestamps) {
                     savedFontSize = fontSize;
                     savedRetryInterval = retryInterval;
+                    savedHeartbeatInterval = heartbeatInterval;
                     savedJetStreamEnabled = jetStream;
                     savedKvEnabled = kv;
                     savedObjectStoreEnabled = objectStore;
@@ -307,6 +347,7 @@ void main() {
 
     expect(savedFontSize, 14);
     expect(savedRetryInterval, 5);
+    expect(savedHeartbeatInterval, 120);
     expect(savedJetStreamEnabled, isFalse);
     expect(savedKvEnabled, isTrue);
     expect(savedObjectStoreEnabled, isTrue);

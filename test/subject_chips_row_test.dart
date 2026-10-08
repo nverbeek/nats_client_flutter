@@ -152,4 +152,30 @@ void main() {
     final tabChip = tester.widget<ColorTabChip>(find.byType(ColorTabChip));
     expect(tabChip.color, isNull);
   });
+
+  testWidgets(
+      'flags only a permission-denied subscription, with an explanatory '
+      'tooltip', (tester) async {
+    final denied = SubscriptionInfo(subject: 'secret.>', colorIndex: 1)
+      ..permissionDenied = true;
+    await tester.pumpWidget(buildRow(subscriptions: [
+      SubscriptionInfo(subject: 'alerts', colorIndex: 0),
+      denied,
+    ]));
+
+    expect(
+        find.descendant(
+            of: find.widgetWithText(InputChip, 'secret.>'),
+            matching: find.byIcon(Icons.block)),
+        findsOneWidget);
+    expect(
+        find.descendant(
+            of: find.widgetWithText(InputChip, 'alerts'),
+            matching: find.byIcon(Icons.block)),
+        findsNothing);
+    expect(
+        find.byTooltip(
+            'Permission denied: the server refused this subscription'),
+        findsOneWidget);
+  });
 }

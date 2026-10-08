@@ -89,4 +89,31 @@ void main() {
       expect(light, isNotNull);
     });
   });
+
+  group('findDeniedSubscription', () {
+    final plain = SubscriptionInfo(subject: 'orders.>', colorIndex: 0);
+    final queued = SubscriptionInfo(
+        subject: 'orders.>', queueGroup: 'workers', colorIndex: 1);
+    final emptyQueue =
+        SubscriptionInfo(subject: 'alerts', queueGroup: '', colorIndex: 2);
+    final subscriptions = [plain, queued, emptyQueue];
+
+    test('matches subject and queue group exactly', () {
+      expect(
+          findDeniedSubscription(subscriptions, 'orders.>', null), same(plain));
+      expect(findDeniedSubscription(subscriptions, 'orders.>', 'workers'),
+          same(queued));
+    });
+
+    test('treats an empty queue group as none', () {
+      expect(findDeniedSubscription(subscriptions, 'alerts', null),
+          same(emptyQueue));
+    });
+
+    test('returns null when nothing matches', () {
+      expect(findDeniedSubscription(subscriptions, 'orders.new', null), isNull);
+      expect(
+          findDeniedSubscription(subscriptions, 'orders.>', 'other'), isNull);
+    });
+  });
 }

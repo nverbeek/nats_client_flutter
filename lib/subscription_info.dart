@@ -18,12 +18,16 @@ import 'constants.dart' as constants;
 /// message stream, so it can be cancelled before a new one is attached —
 /// without that, reconnecting (or any other resubscribe path) would stack a
 /// duplicate listener on top of the old one, double-inserting every message.
+/// [permissionDenied] is runtime-only too: set when the server refuses this
+/// subscription (a typed `NatsPermissionsViolation`), cleared on the next
+/// subscribe attempt.
 class SubscriptionInfo {
   String subject;
   String? queueGroup;
   final int colorIndex;
   int? sid;
   StreamSubscription<Message<dynamic>>? subscription;
+  bool permissionDenied = false;
 
   SubscriptionInfo({
     required this.subject,
@@ -93,4 +97,20 @@ Color resolveSubscriptionColor(int colorIndex, bool isDark) {
       ? constants.subscriptionPaletteDark
       : constants.subscriptionPaletteLight;
   return palette[colorIndex % palette.length];
+}
+
+/// Returns the subscription in [subscriptions] that a server-refused
+/// subscribe on [subject] (with optional queue group [queue]) refers to, or
+/// null if none matches.
+SubscriptionInfo? findDeniedSubscription(
+  List<SubscriptionInfo> subscriptions,
+  String subject,
+  String? queue,
+) {
+  for (final info in subscriptions) {
+    final infoQueue =
+        (info.queueGroup?.isEmpty ?? true) ? null : info.queueGroup;
+    if (info.subject == subject && infoQueue == queue) return info;
+  }
+  return null;
 }

@@ -1,3 +1,5 @@
+import 'dart:io' show TlsException;
+
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 
 /// Authentication method selectable in the Security Settings dialog.
@@ -55,13 +57,21 @@ ConnectOption? buildAuthConnectOption({
 /// Returns true if [error] represents an authentication/authorization
 /// failure reported by the NATS server (e.g. a bad password, invalid NKey,
 /// or expired/invalid `.creds` JWT), as opposed to a generic connectivity
-/// failure. Mirrors the phrase matching `dart_nats` itself uses to decide
-/// whether to stop retrying (see its `-ERR` handler in `client.dart`).
-bool isAuthenticationError(Object error) {
-  if (error is! NatsException) {
-    return false;
-  }
-  final message = error.message?.toLowerCase() ?? '';
-  return message.contains('authorization violation') ||
-      message.contains('authentication');
+/// failure. Since dart_nats 1.6.0 the client maps a server `-ERR` to a typed
+/// exception, and [NatsAuthenticationException] (with its
+/// [NatsAuthorizationViolation]/[NatsAuthenticationExpired] subtypes) is
+/// exactly the set it treats as fatal -- it stops retrying and closes.
+bool isAuthenticationError(Object error) =>
+    error is NatsAuthenticationException;
+
+/// Returns true if [error] is a failed TLS handshake (an untrusted server
+/// certificate, a rejected client certificate, ...). Since dart_nats 1.5.0
+/// such a failure no longer throws out of `connect()`: it reaches `onError`
+/// wrapped as a `NatsException('TLS handshake failed: ...')` and the attempt
+/// is retried like any other. A raw [TlsException] is also accepted, for one
+/// raised on an already-established secure socket.
+bool isTlsHandshakeError(Object error) {
+  if (error is TlsException) return true;
+  return error is NatsException &&
+      (error.message ?? '').startsWith('TLS handshake failed');
 }

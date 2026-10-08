@@ -133,10 +133,10 @@ packages:
     dependency: "direct main"
     description:
       name: dart_nats
-      sha256: "88c8d5aca85bf1380de9cace8740742e9f977ff50bcde6c3cd6600c31aa46adf"
+      sha256: "24237fe24817d5a0af5f0f645d254f4be7634043e1c206674e4b6f53d78b975b"
       url: "https://pub.dev"
     source: hosted
-    version: "1.4.0"
+    version: "1.6.1"
   dbus:
     dependency: transitive
     description:
@@ -415,14 +415,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.18.0"
-  mutex:
-    dependency: transitive
-    description:
-      name: mutex
-      sha256: "8827da25de792088eb33e572115a5eb0d61d61a3c01acbc8bcbe76ed78f1a1f2"
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.1.0"
   nested:
     dependency: transitive
     description:

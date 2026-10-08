@@ -12,6 +12,7 @@ The application provides a settings dialog (⚙️ button in the toolbar) with t
 - **Message Font Size**: Adjusts the font size of messages in the message list.
 - **Show Subscription Colors**: Shows or hides the per-subscription color indicator on subject chips and Live Messages rows. On by default; turning it off doesn't lose the assigned colors, it just stops displaying them — turn it back on and each subscription shows its original color again.
 - **Reconnect Interval**: Controls the amount of time between reconnection attempts.
+- **Heartbeat Interval**: How often the app checks that the connection is still alive. A dead connection is detected after about two missed checks, so a shorter interval notices a dropped connection sooner. Applies on the next connect.
 - **Enable JetStream**: Shows or hides the JetStream tab (see below). On by default; turning it off doesn't affect your connection or the Live Messages tab, it just hides the JetStream UI for users who don't need it.
 - **Enable Key-Value Stores**: Shows or hides the Key-Value Stores tab (see below). On by default; same "just hides the UI" behavior as the JetStream toggle.
 - **Enable Object Store**: Shows or hides the Object Store tab (see below). On by default; same "just hides the UI" behavior as the JetStream toggle.
@@ -54,13 +55,15 @@ Beyond TLS/mTLS, the Security Settings dialog (🔒 button) also has an **Authen
 
 - **None**: No application-level credentials are sent (default).
 - **Username & Password**: Sends the given username and password as part of the connection handshake.
-- **Token**: Sends a single bearer token as part of the connection handshake.
+- **Token**: Sends a single bearer token as part of the connection handshake. The token is read again on every reconnect, so if you change it here while connected, the next reconnect uses the new one.
 - **NKey Seed**: Sends the public key derived from the given `SU...` seed; the client signs the server's nonce challenge automatically. The seed field is obscured like a password, with a 👁 toggle to reveal it.
 - **Credentials File (.creds)**: Loads a decentralized JWT + NKey `.creds` file (the format used by NGS/Synadia Cloud and self-hosted operator-mode NATS) via the same **Browse** pattern used for the certificate fields above.
 
 These are real secrets, so unlike the connection fields and certificate paths above (which are always remembered), they are **not persisted by default**. Check **Remember credentials on this device** to save them (stored locally, not encrypted); leave it unchecked to re-enter them each time the application starts.
 
-If the server rejects your credentials, the status bar and a notification will say "Authentication failed — check your credentials" rather than the generic connection-failure message.
+If the server rejects your credentials, the status bar and a notification will say "Authentication failed — check your credentials" rather than the generic connection-failure message. If credentials that were working expire or are revoked mid-session, the notification says so instead.
+
+If your credentials connect but don't allow a particular subject, the server refuses just that subscription or publish and the connection stays up. A notification names the refused subject, and a refused subscription shows a 🚫 icon on its chip until it's subscribed again.
 
 ## Connection Status
 The connection status is shown on the bottom right of the application in the status bar at all times.

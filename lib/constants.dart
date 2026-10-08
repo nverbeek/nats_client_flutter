@@ -77,6 +77,7 @@ const String prefLastHeight = "LAST_HEIGHT";
 const String prefLastPositionX = "LAST_POSITION_X";
 const String prefLastPositionY = "LAST_POSITION_Y";
 const String prefRetryInterval = "RETRY_INTERVAL";
+const String prefHeartbeatInterval = "HEARTBEAT_INTERVAL";
 const String prefJetStreamEnabled = "JETSTREAM_ENABLED";
 const String prefKvEnabled = "KV_ENABLED";
 const String prefObjectStoreEnabled = "OBJECT_STORE_ENABLED";
@@ -88,6 +89,12 @@ const String prefShowTimestamps = "SHOW_TIMESTAMPS";
 
 // retry interval options (in seconds)
 const int defaultRetryInterval = 10;
+// Seconds between heartbeat PINGs; 120 matches dart_nats's own default.
+const int defaultHeartbeatInterval = 120;
+// How long a heartbeat PING may go unanswered before it counts as missed
+// (dart_nats `pingTimeout`). A dead connection is then noticed after about
+// 2 x heartbeat interval + this, instead of 3 x heartbeat interval.
+const Duration heartbeatPingTimeout = Duration(seconds: 10);
 
 // JetStream defaults
 const bool defaultJetStreamEnabled = true;
@@ -127,3 +134,9 @@ const String prefRememberCredentials = "REMEMBER_CREDENTIALS";
 // authentication failure feedback
 const String authenticationFailure =
     'Authentication failed — check your credentials';
+const String authenticationExpired =
+    'Your credentials expired or were revoked — update them in Security Settings and reconnect';
+
+/// The SnackBar text for a server-refused subscribe or publish on [subject].
+String permissionDenied({required bool publish, required String subject}) =>
+    'Permission denied: not allowed to ${publish ? 'publish' : 'subscribe'} to "$subject"';

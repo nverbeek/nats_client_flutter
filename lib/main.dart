@@ -503,6 +503,7 @@ class _MyHomePageState extends State<MyHomePage>
   bool _prefsInitialized = false;
   double messageFontSize = 14.0;
   int retryInterval = constants.defaultRetryInterval;
+  int heartbeatInterval = constants.defaultHeartbeatInterval;
   bool updateCheckEnabled = constants.defaultUpdateCheckEnabled;
   bool showSubscriptionColors = constants.defaultShowSubscriptionColors;
   // 0 means unlimited -- see `maxMessagesOptions` in settings_dialog.dart.
@@ -605,6 +606,8 @@ class _MyHomePageState extends State<MyHomePage>
       messageFontSize = prefs.getDouble('messageFontSize') ?? 14.0;
       retryInterval = prefs.getInt(constants.prefRetryInterval) ??
           constants.defaultRetryInterval;
+      heartbeatInterval = prefs.getInt(constants.prefHeartbeatInterval) ??
+          constants.defaultHeartbeatInterval;
       jetStreamEnabled = prefs.getBool(constants.prefJetStreamEnabled) ??
           constants.defaultJetStreamEnabled;
       kvEnabled =
@@ -780,6 +783,7 @@ class _MyHomePageState extends State<MyHomePage>
     final prefs = await SharedPreferences.getInstance();
     prefs.setDouble('messageFontSize', messageFontSize);
     prefs.setInt(constants.prefRetryInterval, retryInterval);
+    prefs.setInt(constants.prefHeartbeatInterval, heartbeatInterval);
     prefs.setBool(constants.prefJetStreamEnabled, jetStreamEnabled);
     prefs.setBool(constants.prefKvEnabled, kvEnabled);
     prefs.setBool(constants.prefObjectStoreEnabled, objectStoreEnabled);
@@ -1102,13 +1106,40 @@ class _MyHomePageState extends State<MyHomePage>
     _objectStoreManager = ObjectStoreManager(natsClient);
     _serviceDiscoveryManager = ServiceDiscoveryManager(natsClient);
 
-    // surface authentication failures distinctly from generic connection
-    // failures (a bad password/token/nkey/creds file closes the connection
-    // via a server -ERR, rather than throwing out of connect() below)
+    // Set once a specific failure message has already been shown from
+    // `onError` below, so the `connect()` failure that follows it doesn't
+    // replace that message with a generic one.
+    var failureReported = false;
+    final client = natsClient;
+
+    // surface authentication and TLS failures distinctly from generic
+    // connection failures
     natsClient.onError = (dynamic error) {
       debugPrint('NATS client error: $error');
-      if (error != null && isAuthenticationError(error as Object)) {
-        showSnackBar(constants.authenticationFailure);
+      if (error == null) return;
+      if (error is NatsPermissionsViolation) {
+        _handlePermissionsViolation(error);
+      } else if (isAuthenticationError(error as Object)) {
+        // A bad password/token/nkey/creds file: dart_nats stops retrying and
+        // closes the client itself (and connect() below rethrows it on a
+        // first connect).
+        failureReported = true;
+        showSnackBar(error is NatsAuthenticationExpired
+            ? constants.authenticationExpired
+            : constants.authenticationFailure);
+      } else if (isTlsHandshakeError(error) &&
+          !_hasEverConnectedThisSession &&
+          identical(client, natsClient)) {
+        // Since dart_nats 1.5.0 a TLS handshake failure is an ordinary failed
+        // attempt, retried forever under `retryCount: -1` with nothing
+        // reaching connect() below. On a first connect that just means a
+        // certificate setting is wrong, so stop and say so rather than
+        // retrying silently. (Once this session has connected, a TLS failure
+        // on reconnect is left to retry -- e.g. a server restarting with a
+        // rotated certificate.)
+        failureReported = true;
+        showSnackBar(constants.connectionFailureTls);
+        client.forceClose();
       }
     };
 
@@ -1203,6 +1234,13 @@ class _MyHomePageState extends State<MyHomePage>
         token: authToken,
         nkeySeed: authNkeySeed,
       );
+      if (authMethod == AuthMethod.token && authToken.isNotEmpty) {
+        // Read the token afresh on every connect attempt rather than only
+        // the one captured now, so a token changed in Security Settings
+        // (e.g. a rotated one) is used by the next reconnect without a
+        // manual Disconnect/Connect.
+        natsClient.authTokenHandler = () => authToken;
+      }
       if (authMethod == AuthMethod.nkeySeed && authNkeySeed.isNotEmpty) {
         natsClient.seed = authNkeySeed;
       } else if (authMethod == AuthMethod.credentialsFile &&
@@ -1210,26 +1248,30 @@ class _MyHomePageState extends State<MyHomePage>
         natsClient.loadCredentials(utf8.decode(authCredsFileBytes!));
       }
 
-      // finally, make the connection attempt. Deliberately not overriding
-      // pingInterval/maxPingsOut: dart_nats 1.2.2's defaults (120s / 2
-      // outstanding pings) already give heartbeat-based dead-connection
-      // detection with no observable happy-path change -- no user complaint
-      // about reconnect latency has come up to justify tuning them.
+      // finally, make the connection attempt. The heartbeat PING interval
+      // is a setting; pingTimeout counts an unanswered PING as missed at its
+      // own deadline instead of at the next tick, so with dart_nats's
+      // default maxPingsOut (2) a dead connection is noticed after about
+      // 2 x interval + pingTimeout rather than 3 x interval.
       await natsClient.connect(uri,
           retry: true,
           retryCount: -1,
           retryInterval: retryInterval,
+          pingInterval: Duration(seconds: heartbeatInterval),
+          pingTimeout: constants.heartbeatPingTimeout,
           connectOption: authConnectOption,
           securityContext: securityContext as dynamic);
-    } on TlsException {
-      showSnackBar(constants.connectionFailureTls);
-      setStateDisconnected();
-    } on HttpException {
-      showSnackBar(constants.connectionFailureNetwork);
-      setStateDisconnected();
     } catch (e) {
-      showSnackBar(
-          '${constants.connectionFailureGenericPrefix}: ${truncatedErrorDetail(e)}');
+      if (!failureReported) {
+        if (e is TlsException) {
+          showSnackBar(constants.connectionFailureTls);
+        } else if (e is HttpException) {
+          showSnackBar(constants.connectionFailureNetwork);
+        } else {
+          showSnackBar(
+              '${constants.connectionFailureGenericPrefix}: ${truncatedErrorDetail(e)}');
+        }
+      }
       setStateDisconnected();
     } finally {
       _isConnecting = false;
@@ -1301,6 +1343,9 @@ class _MyHomePageState extends State<MyHomePage>
     // attaching a new one, so the old listener can't keep double-inserting
     // messages alongside the new one.
     info.subscription?.cancel();
+    // A fresh attempt -- the server re-refuses it (and _handlePermissionsViolation
+    // sets this again) if the permission is still missing.
+    info.permissionDenied = false;
 
     var sub = natsClient.sub(info.subject, queueGroup: info.queueGroup);
     info.sid = sub.sid;
@@ -1316,6 +1361,26 @@ class _MyHomePageState extends State<MyHomePage>
       _messageCapturedAt[event] = DateTime.now();
       handleIncomingMessage(event);
     });
+  }
+
+  /// A subscribe or publish the server refused for lack of permission. The
+  /// connection stays up; the server just drops the message or subscription.
+  /// A refused subscription is also flagged on its chip. Refused publishes to
+  /// `$`-prefixed API subjects (JetStream, KV, Object Store, `$SRV`) aren't
+  /// announced here: those are requests, which dart_nats now fails at once
+  /// with this same error, so the dashboard that made them already shows it.
+  void _handlePermissionsViolation(NatsPermissionsViolation violation) {
+    final publish = violation.operation == NatsOperation.publish;
+    if (publish && violation.subject.startsWith(r'$')) return;
+    if (!publish) {
+      final denied = findDeniedSubscription(
+          subscriptions, violation.subject, violation.queue);
+      if (denied != null && mounted) {
+        setState(() => denied.permissionDenied = true);
+      }
+    }
+    showSnackBar(constants.permissionDenied(
+        publish: publish, subject: violation.subject));
   }
 
   Future<void> _persistSubscriptions() async {
@@ -2156,6 +2221,7 @@ class _MyHomePageState extends State<MyHomePage>
         return SettingsDialog(
           initialFontSize: messageFontSize,
           initialRetryInterval: retryInterval,
+          initialHeartbeatInterval: heartbeatInterval,
           initialJetStreamEnabled: jetStreamEnabled,
           initialKvEnabled: kvEnabled,
           initialObjectStoreEnabled: objectStoreEnabled,
@@ -2167,6 +2233,7 @@ class _MyHomePageState extends State<MyHomePage>
           onSave: (
             fontSize,
             retryIntervalValue,
+            heartbeatIntervalValue,
             jetStreamEnabledValue,
             kvEnabledValue,
             objectStoreEnabledValue,
@@ -2181,6 +2248,7 @@ class _MyHomePageState extends State<MyHomePage>
             setState(() {
               messageFontSize = fontSize;
               retryInterval = retryIntervalValue;
+              heartbeatInterval = heartbeatIntervalValue;
               jetStreamEnabled = jetStreamEnabledValue;
               kvEnabled = kvEnabledValue;
               objectStoreEnabled = objectStoreEnabledValue;

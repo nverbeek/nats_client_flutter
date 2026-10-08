@@ -334,13 +334,23 @@ class _SubscriptionManagerDialogState extends State<SubscriptionManagerDialog> {
                                 // Showing it always is harmless when the
                                 // subject already fits.
                                 child: Tooltip(
-                                  message: info.subject,
+                                  message: info.permissionDenied
+                                      ? '${info.subject} — permission denied: '
+                                          'the server refused this subscription'
+                                      : info.subject,
                                   child: ColorTabChip(
                                     color: widget.showSubscriptionColors
                                         ? resolveSubscriptionColor(
                                             info.colorIndex, widget.isDark)
                                         : null,
                                     chip: Chip(
+                                      avatar: info.permissionDenied
+                                          ? Icon(Icons.block,
+                                              size: 16,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .error)
+                                          : null,
                                       label: Text(info.subject,
                                           overflow: TextOverflow.ellipsis),
                                       labelStyle:

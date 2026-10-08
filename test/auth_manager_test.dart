@@ -1,3 +1,5 @@
+import 'dart:io' show HandshakeException;
+
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nats_client_flutter/auth_manager.dart';
@@ -86,36 +88,67 @@ void main() {
   });
 
   group('isAuthenticationError', () {
-    test('recognizes an authorization violation NatsException', () {
+    // Built the way the client itself builds them from a server `-ERR` line.
+    test('recognizes an authorization violation', () {
       expect(
-        isAuthenticationError(NatsException('Authorization Violation')),
+        isAuthenticationError(
+            NatsException.fromServerError("'Authorization Violation'")),
         isTrue,
       );
     });
 
-    test(
-        'recognizes an authentication-related NatsException case-insensitively',
-        () {
+    test('recognizes an expired authentication', () {
       expect(
-        isAuthenticationError(NatsException('Authentication Expired')),
+        isAuthenticationError(
+            NatsException.fromServerError("'Authentication Expired'")),
         isTrue,
       );
     });
 
-    test('returns false for an unrelated NatsException', () {
+    test('recognizes a generic authentication error', () {
       expect(
-        isAuthenticationError(NatsException('Invalid Subject')),
+        isAuthenticationError(NatsException.fromServerError(
+            "'authentication error - Nkey \"\"'")),
+        isTrue,
+      );
+    });
+
+    test('returns false for an unrelated server error', () {
+      expect(
+        isAuthenticationError(
+            NatsException.fromServerError("'Maximum Connections Exceeded'")),
         isFalse,
       );
     });
 
-    test('returns false for a NatsException with no message', () {
+    test('returns false for a plain NatsException', () {
+      expect(isAuthenticationError(NatsException('Invalid Subject')), isFalse);
       expect(isAuthenticationError(NatsException(null)), isFalse);
     });
 
     test('returns false for a non-NatsException error', () {
       expect(
           isAuthenticationError(Exception('Authorization Violation')), isFalse);
+    });
+  });
+
+  group('isTlsHandshakeError', () {
+    test('recognizes the client-wrapped TLS handshake failure', () {
+      expect(
+        isTlsHandshakeError(NatsException(
+            'TLS handshake failed: HandshakeException: CERTIFICATE_VERIFY_FAILED')),
+        isTrue,
+      );
+    });
+
+    test('recognizes a raw TlsException', () {
+      expect(isTlsHandshakeError(const HandshakeException('bad cert')), isTrue);
+    });
+
+    test('returns false for other errors', () {
+      expect(isTlsHandshakeError(NatsException('Connection closed')), isFalse);
+      expect(isTlsHandshakeError(NatsException(null)), isFalse);
+      expect(isTlsHandshakeError(Exception('TLS handshake failed')), isFalse);
     });
   });
 }

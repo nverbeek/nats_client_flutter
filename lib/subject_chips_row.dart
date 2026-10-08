@@ -136,7 +136,7 @@ class _SubjectChipsRowState extends State<SubjectChipsRow> {
   // is required to actually suppress it: null would fall back to the
   // generic localized default instead of no tooltip.
   Widget _buildChip(SubscriptionInfo info, {bool includeDeleteTooltip = true}) {
-    return Padding(
+    final chip = Padding(
       padding: const EdgeInsets.only(right: _chipGap),
       child: ColorTabChip(
         color: widget.showSubscriptionColors
@@ -147,6 +147,11 @@ class _SubjectChipsRowState extends State<SubjectChipsRow> {
         // knows about our smaller font and can still center it correctly;
         // a custom Text.style bypasses that and renders visibly off-center.
         chip: InputChip(
+          // A subscription the server refused for lack of permission.
+          avatar: info.permissionDenied
+              ? Icon(Icons.block,
+                  size: 16, color: Theme.of(context).colorScheme.error)
+              : null,
           label: Text(_labelFor(info)),
           labelStyle: SubjectChipStyle.labelStyleFor(context),
           backgroundColor: SubjectChipStyle.backgroundColorFor(context),
@@ -158,6 +163,11 @@ class _SubjectChipsRowState extends State<SubjectChipsRow> {
               includeDeleteTooltip ? 'Remove subscription' : '',
         ),
       ),
+    );
+    if (!info.permissionDenied || !includeDeleteTooltip) return chip;
+    return Tooltip(
+      message: 'Permission denied: the server refused this subscription',
+      child: chip,
     );
   }
 

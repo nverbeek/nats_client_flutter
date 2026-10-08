@@ -15,9 +15,21 @@ const List<int> maxMessagesOptions = [
   0
 ];
 
+/// Options offered by the "Heartbeat Interval" dropdown, in seconds. 120 is
+/// the default (`constants.defaultHeartbeatInterval`).
+const List<int> heartbeatIntervalOptions = [15, 30, 60, 120];
+
+/// "30 seconds", "1 minute", "2 minutes".
+String formatHeartbeatInterval(int seconds) {
+  if (seconds % 60 != 0) return '$seconds seconds';
+  final minutes = seconds ~/ 60;
+  return minutes == 1 ? '1 minute' : '$minutes minutes';
+}
+
 class SettingsDialog extends StatefulWidget {
   final double initialFontSize;
   final int initialRetryInterval;
+  final int initialHeartbeatInterval;
   final bool initialJetStreamEnabled;
   final bool initialKvEnabled;
   final bool initialObjectStoreEnabled;
@@ -27,12 +39,13 @@ class SettingsDialog extends StatefulWidget {
   final int initialMaxMessages;
   final bool initialShowTimestamps;
   final void Function(
-      double, int, bool, bool, bool, bool, bool, bool, int, bool) onSave;
+      double, int, int, bool, bool, bool, bool, bool, bool, int, bool) onSave;
 
   const SettingsDialog({
     super.key,
     required this.initialFontSize,
     required this.initialRetryInterval,
+    required this.initialHeartbeatInterval,
     required this.initialJetStreamEnabled,
     required this.initialKvEnabled,
     required this.initialObjectStoreEnabled,
@@ -51,6 +64,7 @@ class SettingsDialog extends StatefulWidget {
 class _SettingsDialogState extends State<SettingsDialog> {
   late double tempFontSize;
   late int tempRetryInterval;
+  late int tempHeartbeatInterval;
   late bool tempJetStreamEnabled;
   late bool tempKvEnabled;
   late bool tempObjectStoreEnabled;
@@ -64,12 +78,21 @@ class _SettingsDialogState extends State<SettingsDialog> {
   // still shows up as a valid, selected item instead of tripping the
   // dropdown's "value must be one of items" assertion.
   late List<int> _maxMessagesItems;
+  // heartbeatIntervalOptions plus, if needed, the persisted value (same
+  // reasoning as _maxMessagesItems).
+  late List<int> _heartbeatItems;
 
   @override
   void initState() {
     super.initState();
     tempFontSize = widget.initialFontSize;
     tempRetryInterval = widget.initialRetryInterval;
+    tempHeartbeatInterval = widget.initialHeartbeatInterval;
+    _heartbeatItems = [
+      ...heartbeatIntervalOptions,
+      if (!heartbeatIntervalOptions.contains(tempHeartbeatInterval))
+        tempHeartbeatInterval,
+    ]..sort();
     tempJetStreamEnabled = widget.initialJetStreamEnabled;
     tempKvEnabled = widget.initialKvEnabled;
     tempObjectStoreEnabled = widget.initialObjectStoreEnabled;
@@ -173,6 +196,39 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     onChanged: (value) {
                       setState(() {
                         tempRetryInterval = value!;
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const Tooltip(
+                  message: 'How often to check that the connection is alive. '
+                      'A dead connection is detected after about two missed '
+                      'checks. Applies on the next connect.',
+                  child: Text('Heartbeat Interval'),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: DropdownButtonFormField<int>(
+                    initialValue: tempHeartbeatInterval,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    items: [
+                      for (final seconds in _heartbeatItems)
+                        DropdownMenuItem(
+                            value: seconds,
+                            child: Text(formatHeartbeatInterval(seconds))),
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                        tempHeartbeatInterval = value!;
                       });
                     },
                   ),
@@ -314,6 +370,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
             widget.onSave(
                 tempFontSize,
                 tempRetryInterval,
+                tempHeartbeatInterval,
                 tempJetStreamEnabled,
                 tempKvEnabled,
                 tempObjectStoreEnabled,
