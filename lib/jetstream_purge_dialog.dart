@@ -68,7 +68,8 @@ class _PurgeStreamDialogState extends State<PurgeStreamDialog> {
       seq = int.parse(_seqController.text.trim());
     }
     Navigator.of(context).pop();
-    widget.onSubmit(filter: filter.isEmpty ? null : filter, keep: keep, seq: seq);
+    widget.onSubmit(
+        filter: filter.isEmpty ? null : filter, keep: keep, seq: seq);
   }
 
   @override

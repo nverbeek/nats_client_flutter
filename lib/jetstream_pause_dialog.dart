@@ -43,8 +43,7 @@ class _ConsumerPauseDurationDialogState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                  'Message delivery/pulls are suspended until the pause '
+              const Text('Message delivery/pulls are suspended until the pause '
                   'expires or the consumer is resumed.'),
               const SizedBox(height: 16),
               TextFormField(

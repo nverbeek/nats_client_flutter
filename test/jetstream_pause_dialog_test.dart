@@ -66,8 +66,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Pause for how many minutes'),
-        '15');
+        find.widgetWithText(TextFormField, 'Pause for how many minutes'), '15');
     await tester.tap(find.widgetWithText(TextButton, 'Pause'));
     await tester.pumpAndSettle();
 

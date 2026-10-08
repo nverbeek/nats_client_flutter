@@ -267,8 +267,8 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
         onRefresh: () => manager.consumerDetail(info.streamName, info.name),
         onDelete: () => _confirmDeleteConsumer(info.streamName, info.name),
         onTail: () => _tailConsumer(info),
-        onPause: (pauseFor) => manager.pauseConsumer(info.streamName, info.name,
-            DateTime.now().toUtc().add(pauseFor)),
+        onPause: (pauseFor) => manager.pauseConsumer(
+            info.streamName, info.name, DateTime.now().toUtc().add(pauseFor)),
         onResume: () => manager.resumeConsumer(info.streamName, info.name),
       ),
     );

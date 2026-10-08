@@ -781,8 +781,7 @@ void main() {
     expect(find.text('Pause "billing-processor"?'), findsOneWidget);
 
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Pause for how many minutes'),
-        '10');
+        find.widgetWithText(TextFormField, 'Pause for how many minutes'), '10');
     final before = DateTime.now().toUtc();
     await tester.tap(find.descendant(
       of: find.byType(ConsumerPauseDurationDialog),
@@ -802,17 +801,17 @@ void main() {
     final manager = FakeJetStreamManager();
     final pauseUntil = DateTime.now().toUtc().add(const Duration(minutes: 5));
     manager.listStreamsImpl = () async => [_stream('orders', messages: 3)];
-    final pausedConsumer = _consumer('billing-processor',
-        paused: true, pauseUntil: pauseUntil);
+    final pausedConsumer =
+        _consumer('billing-processor', paused: true, pauseUntil: pauseUntil);
     manager.listConsumersImpl = (_) async => [pausedConsumer];
-    manager.consumerDetailImpl = (streamName, consumerName) async =>
-        ConsumerDetail(
-          info: pausedConsumer,
-          pauseUntil: pauseUntil,
-          ackWait: null,
-          maxDeliver: null,
-          maxAckPending: null,
-        );
+    manager.consumerDetailImpl =
+        (streamName, consumerName) async => ConsumerDetail(
+              info: pausedConsumer,
+              pauseUntil: pauseUntil,
+              ackWait: null,
+              maxDeliver: null,
+              maxAckPending: null,
+            );
 
     await tester.pumpWidget(
       MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),

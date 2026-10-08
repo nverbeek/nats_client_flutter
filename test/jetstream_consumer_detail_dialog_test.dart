@@ -278,8 +278,7 @@ void main() {
           // The second refresh (after Pause) reflects the now-paused state.
           if (refreshCalls > 1) {
             return _consumerDetail(_consumerInfo(
-                paused: true,
-                pauseUntil: DateTime.utc(2026, 1, 1, 0, 5, 0)));
+                paused: true, pauseUntil: DateTime.utc(2026, 1, 1, 0, 5, 0)));
           }
           return _consumerDetail(info);
         },
@@ -292,8 +291,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Pause for how many minutes'),
-        '5');
+        find.widgetWithText(TextFormField, 'Pause for how many minutes'), '5');
     await tester.tap(find.widgetWithText(TextButton, 'Pause').last);
     await tester.pumpAndSettle();
 
@@ -324,7 +322,8 @@ void main() {
     expect(find.byType(ConsumerDetailDialog), findsOneWidget);
   });
 
-  testWidgets('a paused consumer shows Resume instead of Pause; tapping it '
+  testWidgets(
+      'a paused consumer shows Resume instead of Pause; tapping it '
       'calls onResume then refreshes', (tester) async {
     final info =
         _consumerInfo(paused: true, pauseUntil: DateTime.utc(2026, 1, 1));

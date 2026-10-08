@@ -82,7 +82,8 @@ class _ConsumerDetailDialogState extends State<ConsumerDetailDialog> {
   Future<void> _pause() async {
     final duration = await showDialog<Duration>(
       context: context,
-      builder: (context) => ConsumerPauseDurationDialog(consumerName: _info.name),
+      builder: (context) =>
+          ConsumerPauseDurationDialog(consumerName: _info.name),
     );
     if (duration == null || !mounted) return;
     setState(() {
@@ -187,10 +188,9 @@ class _ConsumerDetailDialogState extends State<ConsumerDetailDialog> {
       actions: [
         if (_info.paused)
           TextButton(
-            onPressed:
-                _pausing || _info.name.isEmpty || widget.onResume == null
-                    ? null
-                    : _resume,
+            onPressed: _pausing || _info.name.isEmpty || widget.onResume == null
+                ? null
+                : _resume,
             child: const Text('Resume'),
           )
         else

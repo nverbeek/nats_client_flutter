@@ -14,8 +14,7 @@ import 'helpers/nats_test_app.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets(
-      'Pause/Resume a durable pull consumer via Consumer Detail',
+  testWidgets('Pause/Resume a durable pull consumer via Consumer Detail',
       (tester) async {
     await pumpConnectedApp(tester);
     addTearDown(() => disconnectApp(tester));
@@ -81,18 +80,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Pause "$consumerName"?'), findsOneWidget);
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Pause for how many minutes'),
-        '1');
+        find.widgetWithText(TextFormField, 'Pause for how many minutes'), '1');
     await tester.tap(find.widgetWithText(TextButton, 'Pause').last);
-    await pumpUntil(
-        tester, () => find.textContaining('Paused until:').evaluate().isNotEmpty);
+    await pumpUntil(tester,
+        () => find.textContaining('Paused until:').evaluate().isNotEmpty);
     await tester.pumpAndSettle();
 
     // 3. Resume it immediately and confirm the paused state clears.
     expect(find.widgetWithText(TextButton, 'Resume'), findsOneWidget);
     await tester.tap(find.widgetWithText(TextButton, 'Resume'));
-    await pumpUntil(tester,
-        () => find.textContaining('Paused until:').evaluate().isEmpty);
+    await pumpUntil(
+        tester, () => find.textContaining('Paused until:').evaluate().isEmpty);
     await tester.pumpAndSettle();
     expect(find.widgetWithText(TextButton, 'Pause'), findsOneWidget);
 

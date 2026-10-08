@@ -58,7 +58,8 @@ void main() {
       expect(
         isStoreManagedInstall(
           operatingSystem: 'windows',
-          resolvedExecutable: r'C:\Users\nathan\Downloads\NATSClientUI\nats_client_flutter.exe',
+          resolvedExecutable:
+              r'C:\Users\nathan\Downloads\NATSClientUI\nats_client_flutter.exe',
         ),
         isFalse,
       );
