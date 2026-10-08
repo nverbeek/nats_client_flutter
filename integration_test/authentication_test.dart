@@ -162,16 +162,20 @@ void main() {
     );
 
     // The connection stays up; only the refused subscription is flagged.
+    // Checked on the model rather than by finding the chip's icon: on a
+    // narrow window (CI's Xvfb) the second chip sits in the "+N more"
+    // overflow and isn't rendered. The chip marker itself is covered by
+    // test/subject_chips_row_test.dart.
     expect(find.text('Status: ${constants.connected}'), findsOneWidget);
-    expect(
-        find.descendant(
-            of: find.byType(InputChip), matching: find.byIcon(Icons.block)),
-        findsOneWidget);
+    // MyHomePage has no fake-injection point for the client or its
+    // subscription list, so read them off the state (see AGENTS.md Recipe F).
+    final state = tester.state(find.byType(app.MyHomePage)) as dynamic;
+    final subscriptions = state.subscriptions as List<SubscriptionInfo>;
+    expect({for (final s in subscriptions) s.subject: s.permissionDenied},
+        {'allowed.subject': false, 'forbidden.subject': true});
     await waitForSnackBarGone(tester);
 
-    // MyHomePage has no fake-injection point for the client, so publish
-    // through the real one directly (see AGENTS.md Recipe F).
-    final state = tester.state(find.byType(app.MyHomePage)) as dynamic;
+    // Publish through the real client directly.
     await state.natsClient.pubString('forbidden.subject', 'nope');
     final publishDenied =
         constants.permissionDenied(publish: true, subject: 'forbidden.subject');
