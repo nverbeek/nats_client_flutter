@@ -22,6 +22,9 @@ import 'package:integration_test/integration_test.dart';
 /// `SANDBOX_PROBE_DIR` (a directory outside the app container, holding a
 /// `probe.pem` the CI step wrote) and `SANDBOX_PROBE_CONTENT` (that file's
 /// contents) passed via `--dart-define`.
+/// How long to wait for the CI driver to answer each panel.
+const _panelTimeout = Duration(minutes: 2);
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -41,20 +44,21 @@ void main() {
         throwsA(isA<FileSystemException>()),
       );
 
-      // Same call shape as main.dart's pickFile() for TLS certs.
+      // Same call shape as main.dart's pickFile() for TLS certs. The
+      // timeout turns "the driver never answered the panel" into a test
+      // failure instead of a CI job that hangs until it's killed.
       final picked = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pem'],
-      );
+          type: FileType.custom,
+          allowedExtensions: ['pem']).timeout(_panelTimeout);
       expect(picked, isNotNull, reason: 'Open panel was dismissed');
       expect(picked!.files.single.path, probePath);
       final readBack = await File(probePath).readAsBytes();
       expect(utf8.decode(readBack), probeContent);
 
       // Same call shape as main.dart's Export / Object Store download.
-      final savePath = await FilePicker.platform.saveFile(
-        fileName: 'saved.txt',
-      );
+      final savePath = await FilePicker.platform
+          .saveFile(fileName: 'saved.txt')
+          .timeout(_panelTimeout);
       expect(savePath, '$probeDir/saved.txt');
       await File(savePath!).writeAsBytes(utf8.encode('saved:$probeContent'));
     },

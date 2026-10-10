@@ -118,29 +118,35 @@ jobs:
         # lives under $HOME but outside the TCC-protected folders
         # (Documents/Desktop/Downloads), so only the sandbox governs access.
         # The AppleScript driver answers the panels the test opens; see the
-        # header comments of both files.
+        # header comments of both files. Its log is streamed live (prefixed
+        # [panel-driver]) and its screenshots are uploaded below.
+        timeout-minutes: 20
         run: |
           PROBE_DIR="$HOME/sandbox-probe"
           PROBE_CONTENT="nats-client-sandbox-probe-$GITHUB_RUN_ID"
-          mkdir -p "$PROBE_DIR"
+          SHOT_DIR="$RUNNER_TEMP/panel-screenshots"
+          mkdir -p "$PROBE_DIR" "$SHOT_DIR"
           printf '%s' "$PROBE_CONTENT" > "$PROBE_DIR/probe.pem"
-          osascript scripts/ci/drive_macos_file_panel.applescript "$PROBE_DIR" \
-            > "$RUNNER_TEMP/panel-driver.log" 2>&1 &
-          DRIVER_PID=$!
+          osascript scripts/ci/drive_macos_file_panel.applescript "$PROBE_DIR" "$SHOT_DIR" 2>&1 \
+            | sed -u 's/^/[panel-driver] /' &
           status=0
           flutter test integration_test/macos_file_picker_sandbox_test.dart -d macos -r github \
             --dart-define=SANDBOX_PROBE_DIR="$PROBE_DIR" \
             --dart-define=SANDBOX_PROBE_CONTENT="$PROBE_CONTENT" || status=$?
-          kill "$DRIVER_PID" 2>/dev/null || true
-          echo "::group::Panel driver log"
-          cat "$RUNNER_TEMP/panel-driver.log"
-          echo "::endgroup::"
+          pkill -f drive_macos_file_panel || true
           if [ "$status" -ne 0 ]; then
             exit "$status"
           fi
           # The test wrote this through the Save panel; check it from
           # outside the sandbox too.
           test "$(cat "$PROBE_DIR/saved.txt")" = "saved:$PROBE_CONTENT"
+      - name: Upload panel driver screenshots
+        if: success() || failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-panel-screenshots
+          path: ${{ runner.temp }}/panel-screenshots
+          if-no-files-found: ignore
       - name: Run macOS integration smoke tests
         # Runs even if the picker test failed, so one CI run reports both.
         if: success() || failure()
