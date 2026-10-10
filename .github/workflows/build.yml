@@ -79,10 +79,15 @@ jobs:
           # paired with the scripts/capture_screenshots.ps1 watcher process
           # (see AGENTS.md "Recipe G"), which doesn't exist in CI — it would
           # just time out waiting for capture acks that never arrive.
+          # macos_file_picker_sandbox_test.dart is excluded too: it's
+          # macOS-only (it'd just skip here after a full Linux build) and
+          # runs in the test-macos job below.
           for f in integration_test/*_test.dart; do
-            if [ "$(basename "$f")" = "screenshot_tour_test.dart" ]; then
-              continue
-            fi
+            case "$(basename "$f")" in
+              screenshot_tour_test.dart|macos_file_picker_sandbox_test.dart)
+                continue
+                ;;
+            esac
             echo "::group::$f"
             xvfb-run -a flutter test "$f" -d linux -r github
             echo "::endgroup::"
@@ -90,6 +95,64 @@ jobs:
       - name: Stop auth fixture servers
         if: always()
         run: docker rm -f nats-fixture-userpass nats-fixture-token nats-fixture-nkey nats-fixture-creds
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+      - name: Install project dependencies
+        run: flutter pub get
+      - name: Enable macOS build
+        run: flutter config --enable-macos-desktop
+      - name: Start nats-server
+        # GitHub's macOS runners have no Docker, so the `test` job's
+        # nats:latest service container isn't an option here.
+        run: |
+          brew install nats-server
+          nats-server -js -m 8222 > "$RUNNER_TEMP/nats-server.log" 2>&1 &
+      - name: Run sandboxed file picker test
+        # Proves the App Sandbox lets the native Open/Save panels grant
+        # access to files outside the app container. The probe directory
+        # lives under $HOME but outside the TCC-protected folders
+        # (Documents/Desktop/Downloads), so only the sandbox governs access.
+        # The AppleScript driver answers the panels the test opens; see the
+        # header comments of both files.
+        run: |
+          PROBE_DIR="$HOME/sandbox-probe"
+          PROBE_CONTENT="nats-client-sandbox-probe-$GITHUB_RUN_ID"
+          mkdir -p "$PROBE_DIR"
+          printf '%s' "$PROBE_CONTENT" > "$PROBE_DIR/probe.pem"
+          osascript scripts/ci/drive_macos_file_panel.applescript "$PROBE_DIR" \
+            > "$RUNNER_TEMP/panel-driver.log" 2>&1 &
+          DRIVER_PID=$!
+          status=0
+          flutter test integration_test/macos_file_picker_sandbox_test.dart -d macos -r github \
+            --dart-define=SANDBOX_PROBE_DIR="$PROBE_DIR" \
+            --dart-define=SANDBOX_PROBE_CONTENT="$PROBE_CONTENT" || status=$?
+          kill "$DRIVER_PID" 2>/dev/null || true
+          echo "::group::Panel driver log"
+          cat "$RUNNER_TEMP/panel-driver.log"
+          echo "::endgroup::"
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+          # The test wrote this through the Save panel; check it from
+          # outside the sandbox too.
+          test "$(cat "$PROBE_DIR/saved.txt")" = "saved:$PROBE_CONTENT"
+      - name: Run macOS integration smoke tests
+        # Runs even if the picker test failed, so one CI run reports both.
+        if: success() || failure()
+        run: |
+          for f in integration_test/live_messages_test.dart integration_test/object_store_lifecycle_test.dart; do
+            echo "::group::$f"
+            flutter test "$f" -d macos -r github
+            echo "::endgroup::"
+          done
+      - name: Show nats-server log
+        if: failure()
+        run: cat "$RUNNER_TEMP/nats-server.log"
   release-notes:
     needs: test
     if: startsWith(github.ref, 'refs/tags/')
@@ -310,7 +373,7 @@ jobs:
         with:
           files: build/linux/x64/release/bundle/NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-linux.zip
   build-macos:
-    needs: test
+    needs: [test, test-macos]
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
@@ -323,6 +386,13 @@ jobs:
         run: flutter config --enable-macos-desktop
       - name: Build artifacts
         run: flutter build macos --release
+      - name: Check sandbox file-access entitlement
+        # Without it, file_picker refuses every Open/Save panel in the
+        # sandboxed app (ENTITLEMENT_NOT_FOUND), breaking TLS/.creds picks,
+        # Export, Replay and Object Store upload/download.
+        run: |
+          codesign -d --entitlements - --xml "build/macos/Build/Products/Release/NATS Client.app" \
+            | grep -q 'com.apple.security.files.user-selected.read-write'
       - name: Archive Release
         uses: thedoctor0/zip-release@0.7.6
         with:
