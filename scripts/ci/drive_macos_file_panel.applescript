@@ -53,16 +53,13 @@ on answerSheet(targetPath, label)
 		key code 36 -- Return: confirm Open / Save
 	end tell
 	log label & " sheet answered with " & targetPath
-	-- Wait for this sheet to close, so the next waitForSheet can't mistake
-	-- it for the following panel.
-	repeat 60 times
-		tell application "System Events"
-			if not (exists sheet 1 of window 1 of appProc) then return
-		end tell
-		delay 0.5
-	end repeat
-	my shoot(label & "-4-still-open")
-	error label & " sheet did not close"
+	-- Give this sheet time to close before looking for the next one. Don't
+	-- wait for "no sheet": the test opens the Save panel as soon as the
+	-- Open panel returns, so a sheet can be present again almost at once.
+	-- If this sheet didn't actually close, the test's own assertions on
+	-- the returned paths catch it.
+	delay 3
+	my shoot(label & "-4-after")
 end answerSheet
 
 on waitForSheet(label)
