@@ -11,7 +11,7 @@ This app depends on the official mainline `dart_nats` package (`^1.6.1`), includ
 - [x] **M0**: Migrated off a custom fork to mainline `dart_nats`.
 - [x] **M1**: JetStream Stream & Consumer Monitor — browse, create/delete/purge streams and consumers, publish into a stream, Ack/Nak/Term on a tailed consumer.
 - [x] **M2**: Key-Value (KV) Store Inspector — bucket/key CRUD, live watch, optimistic-concurrency edits.
-- [x] **M3**: Testing & release cleanup — CI, test coverage, Windows/Linux/Web platform verification. *macOS has never been functionally verified — compiles in CI but no Mac has been available to run it.*
+- [x] **M3**: Testing & release cleanup — CI, test coverage, Windows/Linux/Web platform verification. *macOS gap partly closed by M35: CI's `test-macos` job now runs the sandboxed file-panel test plus `live_messages_test`/`object_store_lifecycle_test` on a GitHub macOS runner. Nobody has used the app by hand on a real Mac yet.*
 - [x] **M4**: Expanded Authentication — username/password, token, NKey seed, `.creds` file.
 - [x] **M5**: Update Notifications — checks GitHub Releases on startup, opt-out toggle.
 - [x] **M6**: Live Message List UX — Filter/Find on JetStream Browse Messages, scroll-stable inserts on both message lists, Pause/Resume.
@@ -23,7 +23,7 @@ This app depends on the official mainline `dart_nats` package (`^1.6.1`), includ
 - [x] **M12**: Connection Host/Port History — remembers up to 10 previously-successful targets.
 - [x] **M13** *(won't do)*: Message Direction Indicator (incoming vs. outgoing). Dropped 2026-07-22 — user no longer interested.
 - [x] **M14** *(won't do)*: Request/Reply Correlation Improvements. Dropped 2026-07-22 — user no longer interested.
-- [ ] **M15**: Windows distribution via Microsoft Store (free MSIX signing) + unsigned GitHub Releases. Store listing live 2026-07-23; GH Actions submission automation for future versions and publishing-setup docs still open. *(Linux/Snap Store distribution and macOS code signing dropped 2026-07-22 — Snap Store no longer wanted, macOS cost prohibitive.)*
+- [ ] **M15**: Windows distribution via Microsoft Store (free MSIX signing) + unsigned GitHub Releases. Store listing live 2026-07-23; GH Actions submission automation for future versions and publishing-setup docs still open. *(Linux/Snap Store distribution dropped 2026-07-22. macOS was dropped the same day but revived 2026-10-10 as its own milestone, M35.)*
 - [x] **M16**: Material 3 standards — OS dynamic color, `FilledButton`/`IconButton` variants.
 - [ ] **M17**: NATS Server Monitoring Dashboard. Not started — see below.
 - [x] **M18**: NATS Micro-services (Services API) Discovery.
@@ -45,6 +45,7 @@ This app depends on the official mainline `dart_nats` package (`^1.6.1`), includ
 - [x] **Row Right-Click Context Menu** *(small standalone addition, not numbered)*: right-clicking a row — on the Live Messages tab, JetStream Browse Messages, JetStream Consumer Tail, or KV Store keys — opens the same action menu as that row's trailing overflow (⋮) button, anchored at the click point instead of the row's trailing edge.
 - [x] **M33**: `dart_nats` 1.4.0 Adoption — Consumer Pause/Resume + Filtered Purge — app-side follow-up to M30's package-level-only scope. Bumped the dependency to `^1.4.0`; added `JetStreamManager.pauseConsumer()`/`resumeConsumer()` with a Pause/Resume action + duration prompt (`jetstream_pause_dialog.dart`) on Consumer Detail; extended `JetStreamManager.purgeStream()`/the Purge dialog (`jetstream_purge_dialog.dart`) with `filter`/`keep`/`seq` options (defaulting to the original all-or-nothing behavior). Object Store streaming (`putStream()`/`getStream()`) deliberately **not** adopted — the real memory cost starts one layer up in `file_picker`'s eager buffering, so switching just the manager would add complexity for no actual benefit (see the code comment on `largeObjectTransferWarningThreshold` in `object_store_manager.dart`); the chunk-orphan-on-overwrite fix is still gained for free from the dependency bump alone. Live-server verification (real `nats-server` 2.14.3) caught a genuine `dart_nats` parsing gap: the server nests a paused consumer's `pause_until` inside `config`, not at the response's top level where `ConsumerInfo.fromJson` looks for it, so `info.paused` reads correctly but `info.pauseUntil` is always `null` — worked around with the same raw-JSON-bypass pattern `consumerDetail()` already used for `ack_wait`/`max_deliver`/`max_ack_pending` (worth fixing upstream in `dart-nats` too, but out of scope for this app-side release).
 - [x] **M34**: `dart_nats` 1.6.1 Adoption — bumped from `^1.4.0`, with no API breakage. Fixed two connect regressions from 1.5.0's handshake-aware connect: a first-connect TLS certificate failure now went to `onError` and was retried forever with no message, so `natsConnect()` now stops the client and shows the TLS error itself; and an auth failure now also throws out of `connect()`, whose generic SnackBar replaced the friendly auth one. `isAuthenticationError()` now checks the new typed `NatsAuthenticationException` instead of matching message text. The wrong-credentials path, untestable before (see Recipe H), is now covered by `authentication_test.dart`. Also adopted four 1.5–1.6 features: a server-refused subscribe/publish (typed `NatsPermissionsViolation`) shows a SnackBar naming the subject and flags a refused subscription's chip (`SubscriptionInfo.permissionDenied`), covered against a real server via a restricted user added to the user/pass fixture; expired/revoked credentials (`NatsAuthenticationExpired`) get their own message; a new "Heartbeat Interval" setting (15s–2m, default 120s) plus an always-on 10s `pingTimeout` detects a dead connection after about 2× interval + 10s instead of 3× interval (measured live with `docker pause`); and the token auth method uses `authTokenHandler`, so a token edited in Security Settings is used by the next reconnect.
+- [ ] **M35**: macOS Distribution — notarized DMG on GitHub Releases + a personal Homebrew tap, fully automated on tag. Step 1 (sandbox file-access fix + macOS CI job) done 2026-10-10; signing, notarization and the tap not started. See below.
 
 ---
 
@@ -53,7 +54,7 @@ This app depends on the official mainline `dart_nats` package (`^1.6.1`), includ
 ### Objective
 Windows builds are currently unsigned: users hit "Unknown Publisher"/SmartScreen warnings. **Decision made 2026-07-18, scope narrowed 2026-07-22**: publish a signed build via the **Microsoft Store** (Microsoft signs the MSIX for free as part of Store certification, sidestepping SignPath/Azure Artifact Signing entirely) while **keeping the existing GitHub Releases EXE/ZIP unsigned** on purpose, for now — no code-signing cert spend for that path.
 
-Linux Snap Store distribution and macOS code signing were both dropped 2026-07-22 (Snap Store no longer wanted; macOS cost prohibitive) — see the Dropped/Won't-Do section below for the record of what was scoped out.
+Linux Snap Store distribution was dropped 2026-07-22 (no longer wanted) — see the Dropped/Won't-Do section below. macOS signing was dropped the same day, then revived 2026-10-10 as Milestone 35.
 
 ### Findings
 - Individual **and** company Microsoft Store developer registration is free as of a late-2025/2026 policy change (the old ~$19/~$99 one-time fees are gone).
@@ -96,6 +97,55 @@ New tab (`[📊 Server Monitor]`) or a panel reachable from a toolbar icon, gate
 
 ---
 
+## Milestone 35: macOS Distribution (Notarized DMG + Homebrew Tap)
+
+### Objective
+Today `build-macos` uploads an ad-hoc-signed `.app` in a zip, which Gatekeeper blocks on download. Ship a **Developer ID-signed, notarized DMG** on GitHub Releases, and publish it through a **personal Homebrew tap**. The hard rule: every channel must go from tag push to live with no manual steps, like the Windows Store job. One-time setup is fine.
+
+### Decisions (2026-10-10)
+- **Notarized DMG**: yes. It needs the $99/yr Apple Developer Program, and has no human review.
+- **Homebrew, personal tap** (`nverbeek/homebrew-tap`): yes.
+  - homebrew/cask has a notability bar (roughly 75 stars, or 30 forks or watchers). This repo had 18 stars, 5 forks and 3 watchers. A personal tap has no such bar.
+  - Install command: `brew install --cask nverbeek/tap/nats-client-ui`.
+  - Homebrew 5.0 deprecated `--no-quarantine` and set 2026-09-01 as the date to disable casks that fail Gatekeeper. A notarized DMG passes Gatekeeper, so it isn't affected.
+- **Mac App Store**: deferred. Upload and submit-for-review can be automated with an App Store Connect API key, but Apple reviews every version by hand, so a tag doesn't reliably go live. Guideline 2.4.5 also means compiling `lib/update_checker.dart` out of a store flavor. The sandbox side is already done, since Step 1 keeps the sandbox on.
+- **No Mac needed for setup.** Enrollment, the certificate and the API key are all done on the web plus openssl on Windows. Everything else runs on GitHub's macOS runners.
+
+### Implementation Checklist
+- [x] **Step 1: sandbox file access** (2026-10-10).
+  - Both `macos/Runner/*.entitlements` lacked `com.apple.security.files.user-selected.read-write`. Because of that, file_picker refused every Open/Save panel with `ENTITLEMENT_NOT_FOUND`, which broke TLS/`.creds` picks, Export, Replay and Object Store upload/download.
+  - The fix keeps the sandbox. No security-scoped bookmarks are needed, because TLS/`.creds` files are stored as contents, not paths.
+  - The new `test-macos` CI job proves the fix. `integration_test/macos_file_picker_sandbox_test.dart` drives real panels through `scripts/ci/drive_macos_file_panel.applescript`, with a negative control showing the build really is sandboxed. The job failed before the fix and passed after it. It also runs two existing integration tests against Homebrew's `nats-server`.
+  - `build-macos` now asserts the entitlement is present in the shipped binary.
+- [ ] **One-time setup (manual)**:
+  1. Enroll in the Apple Developer Program as an individual.
+  2. Create the **Developer ID Application** certificate. On Windows:
+     - `openssl req -new -newkey rsa:2048 -nodes -keyout devid.key -out devid.csr`
+     - Upload the CSR at developer.apple.com and download the `.cer`.
+     - `openssl x509 -inform DER -in <downloaded>.cer -out devid.pem`
+     - `openssl pkcs12 -export -legacy -inkey devid.key -in devid.pem -out devid.p12`. The `-legacy` flag matters: macOS `security import` rejects OpenSSL 3's default p12 encryption.
+  3. In App Store Connect, go to Users and Access → Integrations and create an API key (Team key, Developer role). Download the `.p8`; it can only be downloaded once.
+  4. Create the public repo `nverbeek/homebrew-tap` and a fine-grained PAT with contents:write on that repo only.
+  5. Add these repo secrets: `MACOS_CERT_P12_BASE64`, `MACOS_CERT_PASSWORD`, `MACOS_KEYCHAIN_PASSWORD`, `APPLE_TEAM_ID`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8_BASE64`, `HOMEBREW_TAP_TOKEN`.
+- [ ] **Sign + notarize in `build-macos`**. These steps are gated on tags, plus a `workflow_dispatch` path for debugging without a release, and on the secrets being present, so forks and PRs keep the unsigned zip.
+  1. Import the `.p12` into a temporary keychain (`security create-keychain`/`import`/`set-key-partition-list`).
+  2. Sign inside-out: nested frameworks and dylibs first, then `NATS Client.app`, each with `--options runtime --timestamp --entitlements macos/Runner/Release.entitlements`. The hardened runtime is mandatory for notarization. If Flutter's release runtime turns out to need a hardened-runtime exception, add it there.
+  3. Build the DMG with `hdiutil create -format UDZO`, then sign the DMG.
+  4. `xcrun notarytool submit --key/--key-id/--issuer --wait`. On rejection, print `notarytool log`.
+  5. `xcrun stapler staple`.
+  6. Verify with `codesign --verify --deep --strict`, `spctl -a -t open --context context:primary-signature -vv` and `stapler validate`.
+  7. Upload `NATSClientUI-<version>-macos.dmg` to the release.
+- [ ] **`homebrew` job** (`needs: build-macos`, tags only):
+  - Compute the DMG's sha256.
+  - Render `Casks/nats-client-ui.rb` with `version`, `sha256`, the GH Release `url`, `app "NATS Client.app"`, `livecheck` with `strategy :github_latest`, and a `depends_on macos:` floor matching `MACOSX_DEPLOYMENT_TARGET`.
+  - Commit and push it to the tap with `HOMEBREW_TAP_TOKEN`.
+  - Smoke-test `brew install --cask nverbeek/tap/nats-client-ui` on `macos-latest`.
+- [ ] Decide whether Homebrew installs should skip the in-app update popover, like `isStoreManagedInstall()` does for MSIX/Snap. Leaving it on is reasonable: it only links to the release, and `brew upgrade` picks up the new version.
+- [ ] README: add install instructions (`brew` command + DMG). AGENTS.md: document the secrets, how to renew them (the Developer ID cert lasts 5 years, the membership renews yearly), and how to debug a notarization rejection.
+- [ ] Verify end to end on a pre-release tag before announcing. Optionally have someone open the DMG once on a real Mac.
+
+---
+
 ## Dropped / Won't-Do Milestones
 
 Kept as a one-line record of ideas that were scoped out, not to be picked up.
@@ -103,7 +153,7 @@ Kept as a one-line record of ideas that were scoped out, not to be picked up.
 - **M13 — Message Direction Indicator** *(dropped 2026-07-22)*: would have tracked locally-sent Live Messages as first-class list entries (not dependent on loopback subscription) and added a visual outgoing/incoming indicator per row. User no longer interested.
 - **M14 — Request/Reply Correlation Improvements** *(dropped 2026-07-22)*: would have added a dedicated "Request" send mode using `dart_nats`'s `client.request()`/`requestString()` (or improved correlation for the plain pub/sub "Reply To" flow), with paired-row linking and timeout/failure UX. User no longer interested.
 - **M15's Linux/Snap Store scope** *(dropped 2026-07-22)*: would have published to the Snap Store via `snapcraft.yaml` + `snapcore/action-build`/`action-publish` on tagged releases. User no longer interested in Snap Store distribution.
-- **M15's macOS code signing** *(dropped 2026-07-22)*: would have pursued Apple Developer Program signing ($99/yr, no free path). Cost prohibitive; also still tied to Milestone 3's macOS-never-verified gap (no Mac available to test on).
+- **M15's macOS code signing** *(dropped 2026-07-22, revived 2026-10-10 as M35)*: originally dropped as cost prohibitive. The user has since decided the $99/yr Apple Developer Program is worth it.
 - **M20 — Per-Subscription Message Rate Sparkline** *(dropped 2026-07-19)*: would have added a small rolling messages/sec indicator per subscription (e.g. next to its chip), using Milestone 11's existing `sid` tagging. User no longer interested.
 
 ---

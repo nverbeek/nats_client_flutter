@@ -37,7 +37,7 @@ Below is the structured layout of the workspace, pointing you to relevant files 
 ```
 nats_client_flutter/
 ├── .github/workflows/
-│   └── build.yml               # CI: `test` job (real nats:latest -js + Xvfb, runs test/ + integration_test/)
+│   └── build.yml               # CI: `test` job (real nats:latest -js + Xvfb, runs test/ + integration_test/), plus `test-macos` (sandboxed file panels + macOS smoke tests)
 │                                #   gates every build/release job via `needs: test`, then multi-platform builds & Docker publishing
 ├── assets/
 │   ├── app_help.md             # Standard application markdown help file loaded dynamically in-app
@@ -84,6 +84,7 @@ nats_client_flutter/
 │   ├── subscription_manager_dialog.dart # Full subscription list dialog (add/remove/queue-group-edit per row, live unsub/resub)
 │   └── update_checker.dart     # Pure logic/network split for the GitHub Releases update check (fetchLatestRelease, isNewerVersion)
 ├── scripts/                    # Icon generator, mockup testing, and screenshot utilities
+│   ├── ci/drive_macos_file_panel.applescript # Answers the native panels opened by macos_file_picker_sandbox_test.dart in CI
 │   ├── generate_icons.js       # Custom Node.js sharp-based cross-platform transparent icon generator
 │   ├── generate_icons.bat      # Helper batch script to run generate_icons.js
 │   ├── jetstream_demo.ps1      # pwsh-only (see Recipe E): seeds demo streams + a publish loop (or -Iterations N for a finite run)
@@ -121,6 +122,7 @@ nats_client_flutter/
 │   ├── queue_group_test.dart            # A queue-group burst splits between the app's own subscription and a second direct client in the same group, rather than both receiving everything
 │   ├── settings_tab_toggle_test.dart    # Regression: toggling JetStream/KV/Object Store off+on in Settings must not break the TabController (no server needed)
 │   ├── service_discovery_test.dart      # A second dart_nats client hosts a fake ADR-32 service via addService(); Discover finds/inspects/stats-checks it, then confirms it vanishes after it stops
+│   ├── macos_file_picker_sandbox_test.dart # macOS-only, CI `test-macos` job: real Open/Save panels grant sandboxed access (see Recipe F)
 │   └── screenshot_tour_test.dart        # Drives the app through the README's screenshots — run via scripts/capture_screenshots.ps1, not directly
 ├── Dockerfile                  # Multi-stage Docker container (Debian Flutter builder -> Alpine Nginx host)
 ├── analysis_options.yaml       # Static analysis and lints configuration (extends flutter_lints/flutter.yaml)
@@ -241,6 +243,7 @@ Two distinct suites, two distinct patterns — don't mix them up:
   - `find.text(...)` also matches `EditableText`, and a plain `Text` widget always builds its own internal `RichText` — a predicate checking both `Text` and `RichText` double-counts every unstyled row. Match your own custom widgets (e.g. `RegexTextHighlight.text`) directly instead of guessing at Flutter's internal render tree.
   - Tapping a `ListTile` doesn't grant it keyboard focus the way tapping a text field does — if a shortcut test needs `selectedIndex` set and then a bare-letter key event to reach the app's `Focus(onKeyEvent: ...)`, explicitly call `Focus.of(tester.element(rowFinder)).requestFocus()` after selecting the row, or the key event has nothing focused to bubble up from.
   - Nak causes a *real* server redelivery — a second row with the same payload can legitimately appear afterward. Prefer `.last` when re-locating "the row I just acted on" (new deliveries insert at index 0).
+- **macOS-only (`integration_test/macos_file_picker_sandbox_test.dart`)**: this runs only in CI's `test-macos` job on a GitHub macOS runner. That job has no Docker, so it starts nats-server from Homebrew, and it also runs a couple of the regular integration tests on macOS as a smoke check. The test opens real native Open/Save panels under the App Sandbox. `scripts/ci/drive_macos_file_panel.applescript`, started in the background by the job, answers them by typing paths. It also checks that a direct read outside the container is denied, which proves the build really is sandboxed. The Linux `test` job's loop skips it.
 
 ### Recipe G: Regenerating README Screenshots
 The images under `images/` (referenced from the README's "Screenshots" section) are captured automatically, not hand-taken. A real OS-level window screenshot (title bar and all) can only come from a process other than the one being photographed, so this is two cooperating processes: `scripts/capture_screenshots.ps1` (host) and `integration_test/screenshot_tour_test.dart` (drives the real app), trading turns through plain files under `build/.screenshot_signals/` — see `integration_test/helpers/screenshot_signal.dart` for the handshake and `scripts/capture_screenshots.ps1`'s header comment for the Win32 capture side.
@@ -351,7 +354,8 @@ docker build -t nats-client-flutter .
 
 ### Security Protocols
 - **No Hardcoded Secrets**: Under no circumstances should you print, log, or commit passwords, credentials, keys, or private certificates.
-- **Client TLS Cert Files**: The TLS setting expects file paths. Ensure that client certificates and private keys remain strictly on the host system. The app stores these paths in `SharedPreferences` for user convenience. When working with paths, never write fallback hardcoded certificate paths to any git-tracked resource.
+- **Client TLS Cert Files**: The user picks each TLS file (and a `.creds` file) through a native file panel. The app reads the file straight away and stores its **contents**, gzip+base64, in `SharedPreferences`, not its path (`handleTrustedCertificateFile()` and the handlers after it in `lib/main.dart`). This matters on macOS: the App Sandbox only grants access to a picked file for that pick, so re-opening a stored path on a later launch would fail. Keep any new file-based feature to "read/write immediately after the panel returns". Never write fallback hardcoded certificate paths or contents to any git-tracked resource.
+- **macOS App Sandbox**: both `macos/Runner/*.entitlements` files enable the sandbox and need `com.apple.security.files.user-selected.read-write`. Without it, file_picker refuses every Open/Save panel with `ENTITLEMENT_NOT_FOUND`. CI's `build-macos` job asserts the shipped app has it.
 - **Exclude Generated Artifacts**: Ensure all local `.env`, certificates, `scripts/node_modules`, or system-specific builds remain strictly ignored by git (abide by rules defined in `.gitignore`).
 
 ### Verification & Quality Mandate
