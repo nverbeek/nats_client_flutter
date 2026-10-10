@@ -1,3 +1,9 @@
+# 1.0.18
+
+## Bug Fixes
+
+- **macOS: file pickers work again**: every native Open/Save panel failed in the macOS build, because the sandboxed app was missing the user-selected file access entitlement. This affected TLS certificate/key and `.creds` selection, Export, Replay, and Object Store upload/download. A new macOS CI job now runs the real panels under the sandbox on every push.
+
 # 1.0.17
 
 ## New Features
