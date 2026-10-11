@@ -1,8 +1,19 @@
 # 1.0.18
 
+## New Features
+
+- **Permission-denied notices**: when the server refuses a subscribe or publish because of account permissions, a message now names the refused subject, and the refused subscription is flagged on its chip. Previously the refusal went unnoticed.
+- **Expired or revoked credentials**: connecting with credentials the server reports as expired or revoked now shows a specific message instead of a generic connection error.
+- **Heartbeat Interval setting**: a new setting (15 seconds to 2 minutes, default 2 minutes) controls how often the app checks the connection is alive. Each check now also times out after 10 seconds, so a dead connection is noticed after about two intervals plus 10 seconds, instead of three intervals.
+- **Token changes apply on reconnect**: a token edited in Security Settings is now used the next time the app reconnects, without having to disconnect and connect again.
+
 ## Bug Fixes
 
 - **macOS: file pickers work again**: every native Open/Save panel failed in the macOS build, because the sandboxed app was missing the user-selected file access entitlement. This affected TLS certificate/key and `.creds` selection, Export, Replay, and Object Store upload/download. A new macOS CI job now runs the real panels under the sandbox on every push.
+
+## Maintenance & Dependencies
+
+- Upgraded `dart_nats` to 1.6.1. Authentication failures are now recognized by error type instead of by matching message text, and the wrong-credentials path is now covered by an integration test.
 
 # 1.0.17
 
