@@ -381,6 +381,8 @@ jobs:
   build-macos:
     needs: [test, test-macos]
     runs-on: macos-latest
+    outputs:
+      signed: ${{ steps.signing.outputs.enabled }}
     steps:
       - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
@@ -399,19 +401,79 @@ jobs:
         run: |
           codesign -d --entitlements - --xml "build/macos/Build/Products/Release/NATS Client.app" \
             | grep -q 'com.apple.security.files.user-selected.read-write'
-      - name: Archive Release
+      - name: Decide whether to sign
+        id: signing
+        # Sign + notarize on release tags, and on manual workflow_dispatch
+        # runs so the pipeline can be tested without cutting a release.
+        # Ordinary pushes, PRs and forks (no secrets) keep the unsigned zip.
+        # Secrets can't be read in a step `if:`, hence this output.
+        run: echo "enabled=${{ secrets.MACOS_CERT_P12_BASE64 != '' && (github.ref_type == 'tag' || github.event_name == 'workflow_dispatch') }}" >> "$GITHUB_OUTPUT"
+      - name: Sign, notarize and package DMG
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          MACOS_CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: bash scripts/ci/macos_sign_notarize.sh build/macos-dist "NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-macos"
+      - name: Upload signed DMG for the Homebrew job
+        if: steps.signing.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: build/macos-dist/NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-macos.dmg
+          if-no-files-found: error
+      - name: Archive unsigned Release
+        if: steps.signing.outputs.enabled != 'true'
         uses: thedoctor0/zip-release@0.7.6
         with:
           type: 'zip'
           filename: NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-macos.zip
           directory: build/macos/Build/Products/Release
-      - name: macOS Release
+      - name: macOS Release (signed)
         uses: softprops/action-gh-release@v3
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') && steps.signing.outputs.enabled == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: |
+            build/macos-dist/NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-macos.dmg
+            build/macos-dist/NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-macos.zip
+      - name: macOS Release (unsigned)
+        uses: softprops/action-gh-release@v3
+        if: startsWith(github.ref, 'refs/tags/') && steps.signing.outputs.enabled != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: build/macos/Build/Products/Release/NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-macos.zip
+  publish-homebrew:
+    # Runs whenever build-macos produced a notarized DMG. On a release tag it
+    # test-installs the cask from the real release asset, then pushes it to
+    # nverbeek/homebrew-tap. On a workflow_dispatch run it's a dry run: the
+    # same install test against the DMG artifact, no push.
+    needs: build-macos
+    if: needs.build-macos.outputs.signed == 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-dmg
+          path: dist
+      - name: Render, test-install and publish the cask
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          DMG="dist/NATSClientUI-${ARTIFACT_SUFFIX}-macos.dmg"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/NATSClientUI-${GITHUB_REF_NAME}-macos.dmg"
+            bash scripts/ci/homebrew_cask.sh "${GITHUB_REF_NAME#v}" "$DMG" "$URL" --publish
+          else
+            VERSION="$(grep -m1 '^version:' pubspec.yaml | sed 's/version:[[:space:]]*//' | cut -d'+' -f1)"
+            bash scripts/ci/homebrew_cask.sh "$VERSION" "$DMG" "file://$PWD/$DMG"
+          fi
   build-docker:
     needs: test
     runs-on: ubuntu-latest
