@@ -140,7 +140,7 @@ Today `build-macos` uploads an ad-hoc-signed `.app` in a zip, which Gatekeeper b
   - Render `Casks/nats-client-ui.rb` with `version`, `sha256`, the GH Release `url`, `app "NATS Client.app"`, `livecheck` with `strategy :github_latest`, and a `depends_on macos:` floor matching `MACOSX_DEPLOYMENT_TARGET`.
   - Commit and push it to the tap with `HOMEBREW_TAP_TOKEN`.
   - Smoke-test `brew install --cask nverbeek/tap/nats-client-ui` on `macos-latest`.
-- [ ] Decide whether Homebrew installs should skip the in-app update popover, like `isStoreManagedInstall()` does for MSIX/Snap. Leaving it on is reasonable: it only links to the release, and `brew upgrade` picks up the new version.
+- [x] Decided 2026-10-13: Homebrew installs **keep** the in-app update popover, unlike MSIX/Snap installs (`isStoreManagedInstall()`). It still usefully tells the user an upgrade is available, and they can install it with `brew upgrade`.
 - [x] README: add install instructions (`brew` command + DMG). AGENTS.md: document the secrets, how to renew them (the Developer ID cert lasts 5 years, the membership renews yearly), and how to debug a notarization rejection.
 - [ ] Confirm the first real release (v1.0.18) end to end: the DMG and zip are on the release page, `Casks/nats-client-ui.rb` lands in `nverbeek/homebrew-tap`, and `brew install --cask nverbeek/tap/nats-client-ui` works from the published tap. Release tags only match `vX.Y.Z`, so there's no pre-release tag path; manual `workflow_dispatch` runs cover pre-release testing. Optionally have someone open the DMG once on a real Mac.
 
