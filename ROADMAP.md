@@ -45,7 +45,7 @@ This app depends on the official mainline `dart_nats` package (`^1.6.1`), includ
 - [x] **Row Right-Click Context Menu** *(small standalone addition, not numbered)*: right-clicking a row — on the Live Messages tab, JetStream Browse Messages, JetStream Consumer Tail, or KV Store keys — opens the same action menu as that row's trailing overflow (⋮) button, anchored at the click point instead of the row's trailing edge.
 - [x] **M33**: `dart_nats` 1.4.0 Adoption — Consumer Pause/Resume + Filtered Purge — app-side follow-up to M30's package-level-only scope. Bumped the dependency to `^1.4.0`; added `JetStreamManager.pauseConsumer()`/`resumeConsumer()` with a Pause/Resume action + duration prompt (`jetstream_pause_dialog.dart`) on Consumer Detail; extended `JetStreamManager.purgeStream()`/the Purge dialog (`jetstream_purge_dialog.dart`) with `filter`/`keep`/`seq` options (defaulting to the original all-or-nothing behavior). Object Store streaming (`putStream()`/`getStream()`) deliberately **not** adopted — the real memory cost starts one layer up in `file_picker`'s eager buffering, so switching just the manager would add complexity for no actual benefit (see the code comment on `largeObjectTransferWarningThreshold` in `object_store_manager.dart`); the chunk-orphan-on-overwrite fix is still gained for free from the dependency bump alone. Live-server verification (real `nats-server` 2.14.3) caught a genuine `dart_nats` parsing gap: the server nests a paused consumer's `pause_until` inside `config`, not at the response's top level where `ConsumerInfo.fromJson` looks for it, so `info.paused` reads correctly but `info.pauseUntil` is always `null` — worked around with the same raw-JSON-bypass pattern `consumerDetail()` already used for `ack_wait`/`max_deliver`/`max_ack_pending` (worth fixing upstream in `dart-nats` too, but out of scope for this app-side release).
 - [x] **M34**: `dart_nats` 1.6.1 Adoption — bumped from `^1.4.0`, with no API breakage. Fixed two connect regressions from 1.5.0's handshake-aware connect: a first-connect TLS certificate failure now went to `onError` and was retried forever with no message, so `natsConnect()` now stops the client and shows the TLS error itself; and an auth failure now also throws out of `connect()`, whose generic SnackBar replaced the friendly auth one. `isAuthenticationError()` now checks the new typed `NatsAuthenticationException` instead of matching message text. The wrong-credentials path, untestable before (see Recipe H), is now covered by `authentication_test.dart`. Also adopted four 1.5–1.6 features: a server-refused subscribe/publish (typed `NatsPermissionsViolation`) shows a SnackBar naming the subject and flags a refused subscription's chip (`SubscriptionInfo.permissionDenied`), covered against a real server via a restricted user added to the user/pass fixture; expired/revoked credentials (`NatsAuthenticationExpired`) get their own message; a new "Heartbeat Interval" setting (15s–2m, default 120s) plus an always-on 10s `pingTimeout` detects a dead connection after about 2× interval + 10s instead of 3× interval (measured live with `docker pause`); and the token auth method uses `authTokenHandler`, so a token edited in Security Settings is used by the next reconnect.
-- [ ] **M35**: macOS Distribution — notarized DMG on GitHub Releases + a personal Homebrew tap, fully automated on tag. Step 1 (sandbox file-access fix + macOS CI job) done 2026-10-10; signing, notarization and the tap not started. See below.
+- [ ] **M35**: macOS Distribution — notarized DMG on GitHub Releases + a personal Homebrew tap, fully automated on tag. Step 1 (sandbox file-access fix + macOS CI job) done 2026-10-10; signing, notarization and the Homebrew job done 2026-10-13 and verified on a manual run; the first real tap publish happens on the next release tag. See below.
 
 ---
 
@@ -117,7 +117,7 @@ Today `build-macos` uploads an ad-hoc-signed `.app` in a zip, which Gatekeeper b
   - The fix keeps the sandbox. No security-scoped bookmarks are needed, because TLS/`.creds` files are stored as contents, not paths.
   - The new `test-macos` CI job proves the fix. `integration_test/macos_file_picker_sandbox_test.dart` drives real panels through `scripts/ci/drive_macos_file_panel.applescript`, with a negative control showing the build really is sandboxed. The job failed before the fix and passed after it. It also runs two existing integration tests against Homebrew's `nats-server`.
   - `build-macos` now asserts the entitlement is present in the shipped binary.
-- [ ] **One-time setup (manual)**:
+- [x] **One-time setup (manual)**, done 2026-10-13:
   1. Enroll in the Apple Developer Program as an individual.
   2. Create the **Developer ID Application** certificate. On Windows:
      - `openssl req -new -newkey rsa:2048 -nodes -keyout devid.key -out devid.csr`
@@ -127,7 +127,7 @@ Today `build-macos` uploads an ad-hoc-signed `.app` in a zip, which Gatekeeper b
   3. In App Store Connect, go to Users and Access → Integrations and create an API key (Team key, Developer role). Download the `.p8`; it can only be downloaded once.
   4. Create the public repo `nverbeek/homebrew-tap` and a fine-grained PAT with contents:write on that repo only.
   5. Add these repo secrets: `MACOS_CERT_P12_BASE64`, `MACOS_CERT_PASSWORD`, `MACOS_KEYCHAIN_PASSWORD`, `APPLE_TEAM_ID`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8_BASE64`, `HOMEBREW_TAP_TOKEN`.
-- [ ] **Sign + notarize in `build-macos`**. These steps are gated on tags, plus a `workflow_dispatch` path for debugging without a release, and on the secrets being present, so forks and PRs keep the unsigned zip.
+- [x] **Sign + notarize in `build-macos`** (`scripts/ci/macos_sign_notarize.sh`). Verified 2026-10-13 on a manual run: app and DMG both notarized, `spctl` reports "Notarized Developer ID". These steps are gated on tags, plus a `workflow_dispatch` path for debugging without a release, and on the secrets being present, so forks and PRs keep the unsigned zip.
   1. Import the `.p12` into a temporary keychain (`security create-keychain`/`import`/`set-key-partition-list`).
   2. Sign inside-out: nested frameworks and dylibs first, then `NATS Client.app`, each with `--options runtime --timestamp --entitlements macos/Runner/Release.entitlements`. The hardened runtime is mandatory for notarization. If Flutter's release runtime turns out to need a hardened-runtime exception, add it there.
   3. Build the DMG with `hdiutil create -format UDZO`, then sign the DMG.
@@ -135,14 +135,14 @@ Today `build-macos` uploads an ad-hoc-signed `.app` in a zip, which Gatekeeper b
   5. `xcrun stapler staple`.
   6. Verify with `codesign --verify --deep --strict`, `spctl -a -t open --context context:primary-signature -vv` and `stapler validate`.
   7. Upload `NATSClientUI-<version>-macos.dmg` to the release.
-- [ ] **`homebrew` job** (`needs: build-macos`, tags only):
+- [x] **`publish-homebrew` job** (`scripts/ci/homebrew_cask.sh`). Install-tests the cask before pushing; on manual runs it is a dry run. Dry run verified 2026-10-13:
   - Compute the DMG's sha256.
   - Render `Casks/nats-client-ui.rb` with `version`, `sha256`, the GH Release `url`, `app "NATS Client.app"`, `livecheck` with `strategy :github_latest`, and a `depends_on macos:` floor matching `MACOSX_DEPLOYMENT_TARGET`.
   - Commit and push it to the tap with `HOMEBREW_TAP_TOKEN`.
   - Smoke-test `brew install --cask nverbeek/tap/nats-client-ui` on `macos-latest`.
-- [ ] Decide whether Homebrew installs should skip the in-app update popover, like `isStoreManagedInstall()` does for MSIX/Snap. Leaving it on is reasonable: it only links to the release, and `brew upgrade` picks up the new version.
-- [ ] README: add install instructions (`brew` command + DMG). AGENTS.md: document the secrets, how to renew them (the Developer ID cert lasts 5 years, the membership renews yearly), and how to debug a notarization rejection.
-- [ ] Verify end to end on a pre-release tag before announcing. Optionally have someone open the DMG once on a real Mac.
+- [x] Decided 2026-10-13: Homebrew installs **keep** the in-app update popover, unlike MSIX/Snap installs (`isStoreManagedInstall()`). It still usefully tells the user an upgrade is available, and they can install it with `brew upgrade`.
+- [x] README: add install instructions (`brew` command + DMG). AGENTS.md: document the secrets, how to renew them (the Developer ID cert lasts 5 years, the membership renews yearly), and how to debug a notarization rejection.
+- [ ] Confirm the first real release (v1.0.18) end to end: the DMG and zip are on the release page, `Casks/nats-client-ui.rb` lands in `nverbeek/homebrew-tap`, and `brew install --cask nverbeek/tap/nats-client-ui` works from the published tap. Release tags only match `vX.Y.Z`, so there's no pre-release tag path; manual `workflow_dispatch` runs cover pre-release testing. Optionally have someone open the DMG once on a real Mac.
 
 ---
 

@@ -85,6 +85,8 @@ nats_client_flutter/
 │   └── update_checker.dart     # Pure logic/network split for the GitHub Releases update check (fetchLatestRelease, isNewerVersion)
 ├── scripts/                    # Icon generator, mockup testing, and screenshot utilities
 │   ├── ci/drive_macos_file_panel.applescript # Answers the native panels opened by macos_file_picker_sandbox_test.dart in CI
+│   ├── ci/macos_sign_notarize.sh # CI: sign, notarize and staple the macOS app + DMG (see Recipe J)
+│   ├── ci/homebrew_cask.sh     # CI: render, install-test and publish the Homebrew cask (see Recipe J)
 │   ├── generate_icons.js       # Custom Node.js sharp-based cross-platform transparent icon generator
 │   ├── generate_icons.bat      # Helper batch script to run generate_icons.js
 │   ├── jetstream_demo.ps1      # pwsh-only (see Recipe E): seeds demo streams + a publish loop (or -Iterations N for a finite run)
@@ -285,6 +287,35 @@ A first-connect TLS failure (an untrusted server certificate) is handled in `nat
 2. Drive it with a throwaway `integration_test/` file (`app.main()` + `pumpUntil(() => find.text('Update available').evaluate().isNotEmpty)`, same pattern as every other integration test) and run it via `flutter test <file> -d windows`. Don't commit this file — delete it once you're done; there's nothing here a fixture server could stand in for.
 3. Restore `pubspec.yaml`'s real version afterward. Forgetting this step means the shipped build will nag about "updates" that don't exist.
 4. To check the negative path (no popover when already up to date), temporarily set the version to match the real latest tag instead and confirm no popover appears within a few seconds.
+
+### Recipe J: macOS Signing, Notarization & Homebrew (Milestone 35)
+On a release tag, CI ships a Developer ID-signed, notarized DMG and updates the Homebrew cask. Nothing needs a Mac.
+
+- **What runs**:
+  - `build-macos` calls `scripts/ci/macos_sign_notarize.sh`. It signs the app inside-out with the hardened runtime and `macos/Runner/Release.entitlements`, notarizes and staples the app, then builds, signs, notarizes and staples the DMG.
+  - The app gets its own ticket because Homebrew copies it out of the DMG.
+  - The release gets `NATSClientUI-<tag>-macos.dmg` plus a zip of the stapled app.
+  - `publish-homebrew` then calls `scripts/ci/homebrew_cask.sh`. It renders the cask, installs it from a throwaway local tap (downloading through the real release URL), checks `codesign`/`spctl`/`stapler` on the installed app, and only then pushes `Casks/nats-client-ui.rb` to [nverbeek/homebrew-tap](https://github.com/nverbeek/homebrew-tap).
+- **When it runs**: signing runs on release tags and on manual `workflow_dispatch` runs, so you can test it without cutting a release. Run `gh workflow run build.yml --ref <branch>`. A manual run signs and notarizes for real, but `publish-homebrew` is a dry run: it install-tests a `file://` cask built from the DMG artifact and doesn't push. Ordinary pushes, PRs and forks without the secrets keep the old unsigned zip.
+- **Secrets**:
+
+  | Secret | What it holds |
+  |---|---|
+  | `MACOS_CERT_P12_BASE64` / `MACOS_CERT_PASSWORD` | Developer ID Application certificate, exported as `.p12` with `openssl pkcs12 -export -legacy` (macOS `security import` rejects OpenSSL 3's default encryption) |
+  | `MACOS_KEYCHAIN_PASSWORD` | Any random string, used only for the temporary keychain |
+  | `ASC_KEY_P8_BASE64` / `ASC_KEY_ID` / `ASC_ISSUER_ID` | App Store Connect API key (Team key, Developer role), used by `notarytool` |
+  | `APPLE_TEAM_ID` | Not used by the scripts yet; kept for reference |
+  | `HOMEBREW_TAP_TOKEN` | Fine-grained PAT, contents read/write on `nverbeek/homebrew-tap` only |
+
+  On Windows, set them with `gh secret set NAME -R nverbeek/nats_client_flutter`. In Git Bash, prompts need `winpty`, or use PowerShell.
+- **Renewal**:
+  - The Apple Developer Program membership renews yearly. If it lapses, notarization stops working, but already-notarized releases keep working.
+  - The Developer ID certificate lasts 5 years. Make a new one the same way (openssl CSR, then upload at developer.apple.com) and replace the two cert secrets.
+  - The API key doesn't expire unless revoked.
+  - Check the PAT's expiry date when you create it.
+- **Debugging**:
+  - A rejected notarization prints Apple's log in the job output. It names the file and the reason, usually an unsigned nested binary or a missing hardened runtime.
+  - A Homebrew failure before the push leaves the tap untouched.
 
 ---
 

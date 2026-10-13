@@ -11,8 +11,14 @@ This NATS client is a cross-platform desktop & web application written in Flutte
   </picture>
 </a>
 
+On macOS, install it with [Homebrew](https://brew.sh):
+
+```sh
+brew install --cask nverbeek/tap/nats-client-ui
+```
+
 # Platforms
-This application currently supports Windows, Linux, macOS and Web platforms. 
+This application currently supports Windows, Linux, macOS and Web platforms. Downloads for every platform are on the [Releases](https://github.com/nverbeek/nats_client_flutter/releases) page. The macOS DMG is signed and notarized by Apple.
 
 # Main Features
 - Connect to a single NATS server using either plain (`nats://`) or WebSocket (`ws://`) schemes
@@ -48,7 +54,7 @@ This application currently supports Windows, Linux, macOS and Web platforms.
   - Upload, download, and delete objects (blobs/files) of any size — large uploads are chunked automatically, and downloads are verified against the object's SHA-256 digest
   - Object list is a snapshot refreshed on demand (no live-update mechanism, unlike Key-Value Stores)
 - **Service Discovery support** (optional, **off by default** — turn it on in Settings): discovers [NATS Microservices](https://docs.nats.io/using-nats/developer/services) (the ADR-32 "Services API" convention) currently running and reachable on the account, showing each instance's endpoints and per-endpoint request/error/latency stats. Read-only/discovery-only — this app doesn't host services of its own.
-- **Update notifications** (optional, on by default): checks this repo's GitHub Releases on startup and shows a small dismissible popover with a link if a newer version is available. This app only distributes through GitHub, so nothing downloads or installs automatically — it just tells you a new build exists.
+- **Update notifications** (optional, on by default): checks this repo's GitHub Releases on startup and shows a small dismissible popover with a link if a newer version is available. Nothing downloads or installs automatically; it just tells you a new build exists. Microsoft Store installs skip this check, since the Store handles their updates. Homebrew users can also run `brew upgrade`.
 
 # Screenshots
 
@@ -107,7 +113,7 @@ Release bundles are produced by GitHub Actions for tagged builds. The workflow p
 
 - Windows x64 and Windows ARM64 packages
 - Linux bundles
-- macOS bundles
+- macOS: a signed, notarized DMG, plus a Homebrew cask in [nverbeek/homebrew-tap](https://github.com/nverbeek/homebrew-tap)
 - Web builds
 - Docker images
 
