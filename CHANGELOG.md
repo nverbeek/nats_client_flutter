@@ -2,6 +2,7 @@
 
 ## New Features
 
+- **Signed macOS release + Homebrew**: the macOS build is now signed with an Apple Developer ID and notarized by Apple, so it opens without Gatekeeper warnings. It ships as a DMG, and can be installed with `brew install --cask nverbeek/tap/nats-client-ui`.
 - **Permission-denied notices**: when the server refuses a subscribe or publish because of account permissions, a message now names the refused subject, and the refused subscription is flagged on its chip. Previously the refusal went unnoticed.
 - **Expired or revoked credentials**: connecting with credentials the server reports as expired or revoked now shows a specific message instead of a generic connection error.
 - **Heartbeat Interval setting**: a new setting (15 seconds to 2 minutes, default 2 minutes) controls how often the app checks the connection is alive. Each check now also times out after 10 seconds, so a dead connection is noticed after about two intervals plus 10 seconds, instead of three intervals.

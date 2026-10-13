@@ -23,7 +23,7 @@ Welcome! This document is a living, context-bootstrapping architectural and oper
 - **Services Dashboard** (`lib/service_discovery_*.dart`, toggleable via the "Enable Service Discovery" setting, **off by default** unlike the other three): discovers NATS Microservices (ADR-32 `$SRV.*` convention) currently running on the account — Discover fans a request out and collects replies for a bounded window, selecting a result shows its endpoints and per-endpoint request/error/latency stats. Read-only/discovery-only; this app doesn't host services itself. Relies on `discoverServices()`/`getServicesInfo()`/`getServicesStats()`, contributed upstream by this project and merged into mainline `dart_nats` (see the `dart_nats` dependency note below).
 - **Data Syntax Highlighting**: Automatic pretty-printing and syntax highlighting of JSON payloads inside detailed message dialogs.
 - **State & Size Persistence**: Remembers recent connection setups, theme preferences, and window size/position across runs.
-- **Update Notifications** (`lib/update_checker.dart`, toggleable via the "Check for Updates" setting): checks GitHub Releases for this repo on startup and, if newer than the running version, shows a dismissible top-right popover linking to the release. No auto-download/install — this app only distributes via GitHub Releases.
+- **Update Notifications** (`lib/update_checker.dart`, toggleable via the "Check for Updates" setting): checks GitHub Releases for this repo on startup and, if newer than the running version, shows a dismissible top-right popover linking to the release. No auto-download/install. Skipped for store-managed installs (`isStoreManagedInstall()`: Microsoft Store MSIX, or a Snap); kept for Homebrew installs on purpose (decided in ROADMAP M35). Distribution channels: GitHub Releases, the Microsoft Store, and Homebrew (macOS, see Recipe J).
 - **Multi-Select + Clipboard Copy** (Live Messages tab): Shift+Click/Ctrl+Click/Ctrl+Shift+Up/Down select a range or disconnected set of rows; Ctrl+C or the row menu's "Copy Selected (N)" copies them as plain text, one `subject: payload` line per message.
 - **Row Right-Click Context Menu** (all three message list views — Live Messages tab, JetStream Browse Messages, JetStream Consumer Tail — plus KV Store key rows): right-clicking anywhere on a row opens the same action menu as that row's trailing overflow (⋮) button, anchored at the click point via `showMenu`/`RelativeRect` instead of the row's trailing edge. Each view (`lib/main.dart`, `lib/jetstream_message_view.dart`, `lib/jetstream_consumer_tail_view.dart`, `lib/kv_dashboard.dart`) has its own `_buildRowMenuItems`/`_handleRowMenuSelection`/`_showRowContextMenu` trio, shared between the overflow button and the right-click `GestureDetector.onSecondaryTapDown` so the two triggers can't drift out of sync within a view.
 - **Export & Replay** (`lib/message_export.dart`, `lib/replay_config_dialog.dart`, `lib/replay_banner.dart`, `lib/export_confirm_dialog.dart`): bulk-exports captured Live Messages to an NDJSON file (Selected or All, base64 payloads for lossless binary round-tripping, warn-and-proceed past `largeExportWarningThreshold`), and replays a previously exported file by publishing every message back onto the connected server with configurable message-interval/repeat-count/repeat-interval pacing, a live "will send N messages" preview, and a cancelable `ReplayBanner` that can coexist with the Pause banner.
@@ -54,9 +54,12 @@ nats_client_flutter/
 │   ├── help_dialog.dart        # Stateless widget dialog that parses and displays assets/app_help.md
 │   ├── highlight_theme.dart    # Theme configurations for the code highlighter
 │   ├── jetstream_consumer_dialog.dart    # "Create Consumer" dialog (push/pull, ack/deliver policy)
+│   ├── jetstream_consumer_detail_dialog.dart # Consumer Detail dialog: config + live counters with manual Refresh, plus Pause/Resume
 │   ├── jetstream_consumer_tail_view.dart # Live tail of a named consumer with Ack/Nak/Term actions
 │   ├── jetstream_dashboard.dart          # Stream/consumer monitor + mutations (JetStream tab's main widget)
 │   ├── jetstream_manager.dart            # Thin, testable wrapper around client.jetStream() calls
+│   ├── jetstream_pause_dialog.dart       # "Pause consumer for how long?" prompt (pops a Duration)
+│   ├── jetstream_purge_dialog.dart       # Purge Stream options: all / keep newest N / up to sequence, optional subject filter
 │   ├── jetstream_message_view.dart       # Ephemeral ordered-consumer "Browse Messages" tail
 │   ├── jetstream_stream_dialog.dart      # "Create Stream" dialog (name, subjects, max age, replicas)
 │   ├── kv_bucket_dialog.dart    # "Create Bucket" dialog (name, history depth, TTL, replicas)
@@ -71,6 +74,7 @@ nats_client_flutter/
 │   ├── object_store_manager.dart       # Thin, testable wrapper around client.jetStream()/ObjectStore calls
 │   ├── paused_banner.dart      # Sibling banner (never a list item) shown above the message list while Pause is active
 │   ├── regex_text_highlight.dart  # Custom inline text highlighting engine using regex substring matching
+│   ├── reconnect_detector.dart  # Spots a genuine post-bounce reconnect in the Status stream (drives the dashboards' auto-recovery signal)
 │   ├── replay_banner.dart      # Sibling banner shown above the message list while a file-based Replay is running; can coexist with `paused_banner.dart` (orthogonal states)
 │   ├── replay_config_dialog.dart # Replay's file-pick + pacing (message interval, repeat count/interval) dialog, with a live "will send N messages over ~M" preview
 │   ├── security_settings_dialog.dart # TLS config file selector (Trusted Cert, Cert Chain, Private Key paths)
@@ -115,6 +119,12 @@ nats_client_flutter/
 │   ├── kv_lifecycle_test.dart           # Full KV bucket/key mutation lifecycle incl. live external updates + optimistic-concurrency conflict
 │   ├── object_store_lifecycle_test.dart # Full Object Store bucket/object lifecycle incl. explicit-Refresh (no watch()) + byte-for-byte download verification
 │   ├── jetstream_browse_test.dart       # The ephemeral "Browse Messages" ordered-consumer view (Filter/Find, Pause/Resume/Delete)
+│   ├── jetstream_stream_edit_test.dart  # Edit Stream: streamDetail()/updateStream() round trip through the edit dialog
+│   ├── jetstream_consumer_detail_test.dart # consumerDetail() reads ack_wait/max_deliver/max_ack_pending off the raw API response
+│   ├── jetstream_pause_purge_test.dart  # Consumer Pause/Resume and filtered/keep stream purge against a real server
+│   ├── kv_bucket_info_test.dart         # KV Bucket Info reads TTL and history depth back from the server
+│   ├── reconnect_state_test.dart        # JetStream dashboard keeps its selected stream across a reconnect blip
+│   ├── appbar_tooltips_test.dart        # AppBar icon buttons carry tooltips (no server needed)
 │   ├── message_list_pause_test.dart     # Live Messages Pause/Resume, wide buffered-count, scroll-position-stable bursts + row-banding color stability
 │   ├── message_row_extent_test.dart     # Fixed-height row overflow guard (long message, max font size, both line-count settings)
 │   ├── connect_shortcut_test.dart       # Ctrl+Enter in Host/Port/Subjects fires Connect while disconnected

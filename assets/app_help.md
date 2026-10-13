@@ -233,8 +233,8 @@ The bar also shows:
 - **Status**: Current connection status.
 
 # Update Notifications
-This app is only distributed through GitHub Releases — there's no app-store or in-place auto-update mechanism. To help you know when a new version is out, the app checks GitHub's Releases API once on startup (a single anonymous request; no data about you or your connections is sent).
+The app has no in-place auto-update mechanism. To help you know when a new version is out, it checks GitHub's Releases API once on startup (a single anonymous request; no data about you or your connections is sent). If you installed the app from the Microsoft Store, this check is skipped, because the Store updates the app itself.
 
-If a newer version than the one you're running has been published, a small popover appears in the top-right corner with a **View Release** button that opens the release page in your browser, and an **X** to dismiss it for the rest of the session. Nothing downloads or installs automatically — you still grab the new build from GitHub yourself, same as always.
+If a newer version than the one you're running has been published, a small popover appears in the top-right corner with a **View Release** button that opens the release page in your browser, and an **X** to dismiss it for the rest of the session. Nothing downloads or installs automatically. Download the new build from GitHub, or on macOS with Homebrew run `brew upgrade --cask nats-client-ui`.
 
 This check can be turned off entirely via the **Check for Updates** toggle in Settings.
