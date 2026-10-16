@@ -62,6 +62,7 @@ Future<void> pumpConnectedApp(
   // clobber it before `app.main()` ever reads it.
   int maxMessages = constants.defaultMaxMessages,
   bool showTimestamps = constants.defaultShowTimestamps,
+  double messageFontSize = constants.defaultMessageFontSize,
   // Overridable for the same reason as maxMessages/showTimestamps above --
   // a test forcing a real reconnect (e.g. restarting the server container)
   // wants a short interval so it doesn't have to wait out the full 10s
@@ -97,6 +98,11 @@ Future<void> pumpConnectedApp(
   await prefs.setInt(constants.prefRetryInterval, retryInterval);
   await prefs.setInt(constants.prefMaxMessages, maxMessages);
   await prefs.setBool(constants.prefShowTimestamps, showTimestamps);
+  // Display settings too: a font size left at the max by
+  // message_row_extent_test.dart once leaked into the README screenshots.
+  await prefs.setDouble('messageFontSize', messageFontSize);
+  await prefs.setBool(constants.prefShowSubscriptionColors,
+      constants.defaultShowSubscriptionColors);
   await prefs.setString(constants.prefTrustedCertificate, '');
   await prefs.setString(constants.prefTrustedCertificateName, '');
   await prefs.setString(constants.prefCertificateChain, '');

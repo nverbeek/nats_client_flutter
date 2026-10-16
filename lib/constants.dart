@@ -120,6 +120,7 @@ const bool defaultShowSubscriptionColors = true;
 // message list caps/display defaults
 const int defaultMaxMessages = 10000;
 const bool defaultShowTimestamps = false;
+const double defaultMessageFontSize = 14.0;
 
 // authentication preference keys
 const String prefAuthMethod = "AUTH_METHOD";

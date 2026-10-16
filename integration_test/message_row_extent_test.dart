@@ -2,7 +2,6 @@ import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nats_client_flutter/constants.dart' as constants;
 import 'package:nats_client_flutter/regex_text_highlight.dart';
@@ -41,11 +40,7 @@ void main() {
   testWidgets(
       'a long message does not overflow the row extent at max font size',
       (tester) async {
-    final prefs = await SharedPreferences.getInstance();
-    // Read in `initState` when `app.main()` runs inside `pumpConnectedApp`.
-    await prefs.setDouble('messageFontSize', 30.0);
-
-    await pumpConnectedApp(tester);
+    await pumpConnectedApp(tester, messageFontSize: 30.0);
     addTearDown(() => disconnectApp(tester));
 
     final runId = DateTime.now().microsecondsSinceEpoch;
@@ -67,14 +62,11 @@ void main() {
   testWidgets(
       'a long message does not overflow the row extent at max font size '
       'with timestamps on', (tester) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('messageFontSize', 30.0);
-
-    // `showTimestamps` is passed directly to `pumpConnectedApp` (rather
-    // than seeded beforehand, which would just be clobbered by its own
-    // reset-to-default) so this app instance's very first
-    // `loadMessageSettings` read picks it up.
-    await pumpConnectedApp(tester, showTimestamps: true);
+    // Both are passed directly to `pumpConnectedApp` (rather than seeded
+    // beforehand, which would just be clobbered by its own reset-to-default)
+    // so this app instance's very first `loadMessageSettings` read picks
+    // them up.
+    await pumpConnectedApp(tester, messageFontSize: 30.0, showTimestamps: true);
     addTearDown(() => disconnectApp(tester));
 
     final runId = DateTime.now().microsecondsSinceEpoch;

@@ -500,7 +500,7 @@ class _MyHomePageState extends State<MyHomePage>
   // `initializePreferences` has finished assigning `prefs`, which would
   // otherwise be a LateInitializationError from inside an event listener.
   bool _prefsInitialized = false;
-  double messageFontSize = 14.0;
+  double messageFontSize = constants.defaultMessageFontSize;
   int retryInterval = constants.defaultRetryInterval;
   int heartbeatInterval = constants.defaultHeartbeatInterval;
   bool updateCheckEnabled = constants.defaultUpdateCheckEnabled;
@@ -602,7 +602,8 @@ class _MyHomePageState extends State<MyHomePage>
   void loadMessageSettings() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      messageFontSize = prefs.getDouble('messageFontSize') ?? 14.0;
+      messageFontSize = prefs.getDouble('messageFontSize') ??
+          constants.defaultMessageFontSize;
       retryInterval = prefs.getInt(constants.prefRetryInterval) ??
           constants.defaultRetryInterval;
       heartbeatInterval = prefs.getInt(constants.prefHeartbeatInterval) ??
