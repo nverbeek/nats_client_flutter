@@ -41,7 +41,7 @@ nats_client_flutter/
 │                                #   gates every build/release job via `needs: test`, then multi-platform builds & Docker publishing
 ├── assets/
 │   ├── app_help.md             # Standard application markdown help file loaded dynamically in-app
-│   └── app_launcher_icon.svg   # Source SVG launcher icon (used to regenerate platform-native icons)
+│   └── app_launcher_icon.svg   # The official NATS icon from cncf/artwork, unmodified (trademark requirement, see Recipe C); input for regenerating platform-native icons, not bundled in the app
 ├── images/                     # App screenshots used in the main README.md
 ├── lib/                        # Core application source code
 │   ├── account_info_dialog.dart # Read-only JetStream/KV account usage dialog (memory/storage vs. limits, stream/consumer counts, API stats) shared by both dashboards
@@ -153,7 +153,6 @@ nats_client_flutter/
 - **`flutter_highlighter`**: Renders code highlighting for JSON payloads.
 - **`shared_preferences`**: Local local key-value storage engine.
 - **`markdown_widget`**: Parses and displays rich help text from markdown files.
-- **`flutter_svg`**: Renders SVG vector icons.
 - **`file_picker`**: Supports secure file path selection for TLS/MTLS configurations.
 - **`http`**: Used only by `lib/update_checker.dart` to call the GitHub Releases API — this app's sole outbound HTTP dependency beyond the NATS protocol itself.
 - **`url_launcher`**: Opens the GitHub release page in the system browser from the update-available popover.
@@ -205,7 +204,9 @@ nats_client_flutter/
 - Ensure settings are properly hydrated inside `initializePreferences()` and persisted correctly.
 
 ### Recipe C: Regenerating Transparent Launcher Icons
-If you modify the master launcher SVG icon at `assets/app_launcher_icon.svg`, do not use generic launcher icon generation packages as they may break transparent layers. Instead, execute the custom script suite:
+`assets/app_launcher_icon.svg` is the official NATS icon (`projects/nats/icon/color/nats-icon-color.svg` from [cncf/artwork](https://github.com/cncf/artwork)), **unmodified**. Don't redesign, recolor, crop or decorate it. NATS is a CNCF project, and its trademark guidelines forbid altered or look-alike logos; an app named with "NATS" is expected to use the official icon (requested by the NATS maintainers in nats-io/nats-site#1121). The app's UI deliberately doesn't show the logo anywhere (no AppBar logo, plain README heading): it appears only as the launcher icon, plus the Windows title bar, which shows the exe icon automatically.
+
+If the official artwork ever changes, replace the file with the new version, and don't use generic launcher icon generation packages, as they may break transparent layers. Instead, execute the custom script suite:
 ```powershell
 # Navigate to the scripts directory
 cd scripts

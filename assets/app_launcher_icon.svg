@@ -1,17 +1,1 @@
-<svg width="2000" height="2000" viewBox="34 -40 225 225" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid">
-  <defs>
-    <linearGradient id="blue-teal-a" x1="13%" y1="95%" x2="83%" y2="1%">
-      <stop stop-color="#2196F3" offset="0%"/>
-      <stop stop-color="#26C6DA" offset="100%"/>
-    </linearGradient>
-    <linearGradient id="blue-teal-b" x1="87%" y1="5%" x2="17%" y2="99%">
-      <stop stop-color="#2196F3" offset="0%"/>
-      <stop stop-color="#26C6DA" offset="100%"/>
-    </linearGradient>
-  </defs>
-  <g transform="translate(10,10) scale(0.92) skewX(16)">
-    <path d="M232 0c-9 0-16.8 5-20.9 12.3l-.5 1-18.8 37L168 97.2l15.6 30.7.9 1.7c2.4 4.2 6 7.7 10.4 9.8 4.4-2.2 8-5.6 10.4-9.8l.9-1.7 46.7-92 1.1-2.2c1.3-3 2-6.2 2-9.7 0-13.3-10.7-24-24-24z" fill="url(#blue-teal-a)"/>
-    <path d="M24 141.9c9 0 16.9-5 20.9-12.3l.5-1 18.8-37L88 44.7 72.4 14l-.9-1.7c-2.4-4.2-6-7.7-10.4-9.8-4.4 2.2-8 5.6-10.4 9.8l-.8 1.7-46.7 92-1.2 2.3c-1.3 3-2 6.2-2 9.7 0 13.2 10.7 23.9 24 23.9z" fill="url(#blue-teal-b)"/>
-    <path d="M87.9 44.6L72.4 14l-.9-1.7c-2.4-4.2-6-7.7-10.4-9.8 1.4-.7 3-1.3 4.5-1.7 1.9-.5 4-.8 6-.8H104.4c9 .1 16.8 5 20.9 12.3l.7 1.7 42.1 83.3 15.5 30.6.9 1.7c2.4 4.2 6 7.7 10.4 9.8-1.4.7-3 1.3-4.5 1.7-1.9.5-4 .8-6.1.8H151.7c-9-.1-16.8-5-20.9-12.3l-.9-1.7-42-83.3z" fill="#26C6DA"/>
-  </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" role="img" viewBox="2.42 -0.33 280.40 289.90"><style>svg {enable-background:new 0 0 288 288}</style><style>.st3{fill:#375c93}.st4{fill:#8dc63f}</style><path fill="#34a574" d="M142.8 5.3h134.7v109.2H142.8z"/><path fill="#27aae1" d="M8.1 5.3h134.7v109.2H8.1z"/><path d="M142.8 114.6h134.7v109.2H142.8z" class="st4"/><path d="M8.1 114.6h134.7v109.2H8.1z" class="st3"/><path d="M123 223.2l65.9 61v-61z" class="st4"/><path d="M142.8 223.2l.7 19.2-21.1-19.7z" class="st3"/><path fill="#fff" d="M198.6 146.5V56.1h32.2V173H182L83.5 81v92.1H51.2v-117h50.5l96.9 90.4z"/></svg>

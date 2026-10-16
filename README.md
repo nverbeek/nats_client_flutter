@@ -1,4 +1,4 @@
-# <img src="./assets/app_launcher_icon.svg" width="36" height="36" alt="NATS Client Logo" style="vertical-align: text-bottom"> NATS Client UI
+# NATS Client UI
 [![Build](https://github.com/nverbeek/nats_client_flutter/actions/workflows/build.yml/badge.svg)](https://github.com/nverbeek/nats_client_flutter/actions/workflows/build.yml)
 
 This NATS client is a cross-platform desktop & web application written in Flutter. The client allows users to easily watch & manage NATS messages.

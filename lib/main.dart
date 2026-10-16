@@ -16,7 +16,6 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import 'auth_manager.dart';
 import 'connection_history.dart';
@@ -3018,16 +3017,6 @@ class _MyHomePageState extends State<MyHomePage>
             );
           })(),
           scrolledUnderElevation: 0,
-          leadingWidth: 48, // Reduce the default leading width
-          titleSpacing: 0, // Remove the default title spacing
-          leading: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: SvgPicture.asset(
-              'assets/app_launcher_icon.svg',
-              width: 32,
-              height: 32,
-            ),
-          ),
           title: Text(widget.title),
           actions: [
             IconButton(

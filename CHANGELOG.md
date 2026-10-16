@@ -1,3 +1,13 @@
+# 1.0.19
+
+## Changes
+
+- **New app icon**: the app now uses the official NATS icon, as requested by the NATS project under the CNCF trademark guidelines. The logo was removed from the app bar.
+
+## Maintenance & Dependencies
+
+- Removed the now-unused `flutter_svg` dependency
+
 # 1.0.18
 
 ## New Features
