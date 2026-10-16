@@ -443,7 +443,8 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
         onCreate: (config) => _runMutation(
           () async {
             await widget.manager!.createConsumer(streamName, config);
-            await _loadConsumers(streamName);
+            // The stream list too, for the stream's consumer count.
+            await Future.wait([_loadConsumers(streamName), _loadStreams()]);
           },
           successMessage: 'Consumer created.',
         ),
@@ -472,7 +473,9 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
                   if (mounted && _tailingConsumerName == consumerName) {
                     setState(() => _tailingConsumerName = null);
                   }
-                  await _loadConsumers(streamName);
+                  // The stream list too, for the stream's consumer count.
+                  await Future.wait(
+                      [_loadConsumers(streamName), _loadStreams()]);
                 },
                 successMessage: 'Consumer "$consumerName" deleted.',
               );

@@ -181,7 +181,10 @@ class FakeJetStreamManager extends JetStreamManager {
 }
 
 StreamInfo _stream(String name,
-    {int messages = 0, int bytes = 0, List<String>? subjects}) {
+    {int messages = 0,
+    int bytes = 0,
+    List<String>? subjects,
+    int consumerCount = 0}) {
   return StreamInfo(
     type: 'io.nats.jetstream.api.v1.stream_info_response',
     config: StreamConfig(name: name, subjects: subjects ?? ['$name.>']),
@@ -193,7 +196,7 @@ StreamInfo _stream(String name,
       firstTs: DateTime.now().toIso8601String(),
       lastSeq: messages,
       lastTs: DateTime.now().toIso8601String(),
-      consumerCount: 0,
+      consumerCount: consumerCount,
     ),
   );
 }
@@ -473,7 +476,11 @@ void main() {
   testWidgets('Create Consumer dialog creates a consumer via the manager',
       (tester) async {
     final manager = FakeJetStreamManager();
-    manager.listStreamsImpl = () async => [_stream('orders', messages: 5)];
+    // The server's per-stream consumer count, which creating one bumps.
+    var consumerCount = 0;
+    manager.listStreamsImpl = () async =>
+        [_stream('orders', messages: 5, consumerCount: consumerCount)];
+    manager.createConsumerImpl = (streamName, config) async => consumerCount++;
 
     await tester.pumpWidget(
       MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
@@ -481,6 +488,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('orders'));
     await tester.pumpAndSettle();
+    expect(find.text('0 consumers'), findsOneWidget);
 
     await tester.tap(find.text('Create Consumer'));
     await tester.pumpAndSettle();
@@ -493,14 +501,20 @@ void main() {
 
     expect(manager.lastCreatedConsumerConfig?.durable, 'billing-processor');
     expect(find.text('Consumer created.'), findsOneWidget);
+    // The stream's consumer count chip refreshes too, not just the list.
+    expect(find.text('1 consumers'), findsOneWidget);
   });
 
   testWidgets('deleting a consumer confirms then calls the manager',
       (tester) async {
     final manager = FakeJetStreamManager();
-    manager.listStreamsImpl = () async => [_stream('orders', messages: 5)];
+    var consumerCount = 1;
+    manager.listStreamsImpl = () async =>
+        [_stream('orders', messages: 5, consumerCount: consumerCount)];
     manager.listConsumersImpl =
         (streamName) async => [_consumer('billing-processor')];
+    manager.deleteConsumerImpl =
+        (streamName, consumerName) async => consumerCount--;
 
     await tester.pumpWidget(
       MaterialApp(home: Scaffold(body: JetStreamDashboard(manager: manager))),
@@ -519,6 +533,8 @@ void main() {
 
     expect(manager.deleteConsumerCalls, 1);
     expect(find.text('Consumer "billing-processor" deleted.'), findsOneWidget);
+    // The stream's consumer count chip refreshes too, not just the list.
+    expect(find.text('0 consumers'), findsOneWidget);
   });
 
   testWidgets('Refresh streams button re-invokes listStreams', (tester) async {

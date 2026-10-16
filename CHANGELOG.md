@@ -4,6 +4,10 @@
 
 - **New app icon**: the app now uses the official NATS icon, as requested by the NATS project under the CNCF trademark guidelines. The logo was removed from the app bar.
 
+## Bug Fixes
+
+- **JetStream consumer count**: a stream's "N consumers" count now updates after you create or delete a consumer. Previously it kept showing the old count until the stream list was refreshed.
+
 ## Maintenance & Dependencies
 
 - Removed the now-unused `flutter_svg` dependency
