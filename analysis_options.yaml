@@ -19,6 +19,9 @@ analyzer:
     - windows/**
     - macos/**
     - linux/**
+    # A separate package (the Docker image's server), analyzed from its own
+    # directory so this doesn't depend on its `dart pub get` having run.
+    - docker/**
 
 linter:
   # The lint rules applied to this project can be customized in the

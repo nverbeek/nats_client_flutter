@@ -1,0 +1,9 @@
+# Local build output and tool caches: rebuilt inside the image, and large
+build/
+.dart_tool/
+docker/tcp_relay/.dart_tool/
+scripts/node_modules/
+.git/
+.idea/
+.vscode/
+*.iml

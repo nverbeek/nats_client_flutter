@@ -32,6 +32,8 @@ The following schemes are supported:
 
 Additionally, the `nats://` scheme is unavailable when this client is running in a browser. This is because browsers do not support TCP sockets, and thus we cannot use the normal NATS connection scheme. For browsers, we only can use WebSocket connections, which requires enabling the server-side support in the above note.
 
+The exception is the Docker image. Its server relays `nats://` connections for the browser over plain TCP, so `nats://` is offered there too. The host is resolved from inside the container: use `host.docker.internal` for a server on the Docker host, or a container name for a server on the same Docker network. TLS-required servers can't be reached this way; use `ws://` for those.
+
 ## Other Connection Info
 The rest of the connection information is straightforward:
 

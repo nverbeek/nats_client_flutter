@@ -12,7 +12,7 @@ Welcome! This document is a living, context-bootstrapping architectural and oper
 - **Multi-Scheme Connection**: Connect to a single NATS server using plain TCP sockets (`nats://`) or WebSockets (`ws://`).
 - **Platform Limitations**: 
   - Desktop clients (Windows, macOS, Linux) support both `nats://` (TCP) and `ws://` (WebSocket) schemes.
-  - The Web client (running in browsers/Docker) **only** supports the `ws://` scheme due to browser-level TCP socket restrictions.
+  - The Web client **only** supports the `ws://` scheme due to browser-level TCP socket restrictions — except in the Docker image, whose server relays `nats://` over TCP for the browser (plain TCP only, no TLS; see Recipe K).
 - **TLS & Mutual TLS**: Custom TLS authentication support using PEM-formatted trusted CA certificates, client certificate chains, and private keys.
 - **Real-Time Stream**: Subscribe to multiple comma-separated subjects (supporting wildcards like `*` and `>`), filter incoming payloads in real-time, search and highlight text with regex, and send/publish custom messages.
 - **Connection History**: the Host field (`lib/main.dart`) is an editable `Autocomplete` backed by `lib/connection_history.dart` — its dropdown offers up to 10 previously-*successfully*-connected `scheme://host:port` targets (most-recent-first, deduplicated by target), filtering as you type; selecting one fills scheme, host, and port together. Per-entry delete and a "Clear history" action live in the same dropdown. Recorded only on `Status.connected`, not on every connect attempt, so failed/typo'd attempts never pollute the list.
@@ -86,6 +86,7 @@ nats_client_flutter/
 │   ├── subject_chips_row.dart  # Toolbar chip row replacing the old Subjects text field (one chip per subscription, color swatch, overflow "+N more")
 │   ├── subscription_info.dart  # `SubscriptionInfo` model (subject/queueGroup persisted, colorIndex/sid runtime-only) + `resolveSubscriptionColor()`
 │   ├── subscription_manager_dialog.dart # Full subscription list dialog (add/remove/queue-group-edit per row, live unsub/resub)
+│   ├── tcp_relay.dart          # `tcpRelayAvailable` (Docker build's dart-define), `tcpRelayUri()`, `tcpRelayRefusalReason()` — the app side of Recipe K
 │   └── update_checker.dart     # Pure logic/network split for the GitHub Releases update check (fetchLatestRelease, isNewerVersion)
 ├── scripts/                    # Icon generator, mockup testing, and screenshot utilities
 │   ├── ci/drive_macos_file_panel.applescript # Answers the native panels opened by macos_file_picker_sandbox_test.dart in CI
@@ -136,7 +137,13 @@ nats_client_flutter/
 │   ├── service_discovery_test.dart      # A second dart_nats client hosts a fake ADR-32 service via addService(); Discover finds/inspects/stats-checks it, then confirms it vanishes after it stops
 │   ├── macos_file_picker_sandbox_test.dart # macOS-only, CI `test-macos` job: real Open/Save panels grant sandboxed access (see Recipe F)
 │   └── screenshot_tour_test.dart        # Drives the app through the README's screenshots — run via scripts/capture_screenshots.ps1, not directly
-├── Dockerfile                  # Multi-stage Docker container (Debian Flutter builder -> Alpine Nginx host)
+├── docker/tcp_relay/           # The Docker image's server (separate Dart package): serves the web build + relays nats:// WebSocket->TCP (see Recipe K)
+│   ├── lib/relay.dart          # `createHandler()`/`RelayConfig`: static files + the `nats-tcp` relay endpoint (INFO check, TLS refusal, allowlist)
+│   ├── bin/server.dart         # Entry point; env: PORT, WEB_ROOT, NATS_TCP_RELAY, NATS_TCP_ALLOWED_HOSTS
+│   ├── test/relay_test.dart    # Fake-TCP-server tests, no NATS needed
+│   └── tool/smoke.dart         # CI smoke test of a running image against a real nats-server
+├── Dockerfile                  # Multi-stage, multi-arch (amd64+arm64): Flutter web build + cross-compiled relay, both on $BUILDPLATFORM -> `FROM scratch` runtime (no nginx)
+├── .dockerignore               # Keeps build/ and .dart_tool/ (tens of GB locally) out of the build context
 ├── analysis_options.yaml       # Static analysis and lints configuration (extends flutter_lints/flutter.yaml)
 └── pubspec.yaml                # Flutter project specifications and library dependencies
 ```
@@ -146,7 +153,7 @@ nats_client_flutter/
 ## 3. Tech Stack & Architectural Design
 
 ### Core Libraries (from `pubspec.yaml`)
-- **`dart_nats`**: Low-level NATS client protocol handler. A normal `^1.6.1` pub.dev dependency — no `git:`/fork pin. The upstream repo moved to [`dart-nats/dart-nats`](https://github.com/dart-nats/dart-nats) (formerly `chartchuo/dart-nats`), and this project's owner is now an owner of both that GitHub organization and the pub.dev package — so they have full merge rights on the repo and full publish rights on pub.dev, not just contributor PR access. This project has already landed two upstream PRs: PR #44 (services discovery — `Client.discoverServices()`/`getServicesInfo()`/`getServicesStats()`, complementing the maintainer's own hosting-side `addService()`/`MicroService`) and PR #45 (four JetStream/KV bug fixes: list-pagination truncation, swallowed pull-consumer/`OrderedConsumer` errors, KV ephemeral-consumer leaks, fire-and-forget ack/nak/term — replaced by `ackSync()`/`nakSync()`/`termSync()`). Both are merged and released (1.2.1 and 1.2.2 respectively) — see ROADMAP.md's Milestone 18/26 entries. If a future feature needs another package-level change, land it directly upstream and cut a pub.dev release; a `dependency_overrides`/branch pin is only needed transiently while such a change is being verified pre-release.
+- **`dart_nats`**: Low-level NATS client protocol handler. A normal `^1.7.0` pub.dev dependency — no `git:`/fork pin. The upstream repo moved to [`dart-nats/dart-nats`](https://github.com/dart-nats/dart-nats) (formerly `chartchuo/dart-nats`), and this project's owner is now an owner of both that GitHub organization and the pub.dev package — so they have full merge rights on the repo and full publish rights on pub.dev, not just contributor PR access. This project has already landed two upstream PRs: PR #44 (services discovery — `Client.discoverServices()`/`getServicesInfo()`/`getServicesStats()`, complementing the maintainer's own hosting-side `addService()`/`MicroService`) and PR #45 (four JetStream/KV bug fixes: list-pagination truncation, swallowed pull-consumer/`OrderedConsumer` errors, KV ephemeral-consumer leaks, fire-and-forget ack/nak/term — replaced by `ackSync()`/`nakSync()`/`termSync()`). Both are merged and released (1.2.1 and 1.2.2 respectively) — see ROADMAP.md's Milestone 18/26 entries. If a future feature needs another package-level change, land it directly upstream and cut a pub.dev release; a `dependency_overrides`/branch pin is only needed transiently while such a change is being verified pre-release.
 - **`provider`**: Used for lightweight application state, specifically managing dark/light `ThemeModel`.
 - **`window_manager`**: Handles window resizing, positioning, and persistence on Desktop.
 - **`loader_overlay`**: Displays asynchronous loading/connecting modal states.
@@ -328,6 +335,27 @@ On a release tag, CI ships a Developer ID-signed, notarized DMG and updates the 
   - A rejected notarization prints Apple's log in the job output. It names the file and the reason, usually an unsigned nested binary or a missing hardened runtime.
   - A Homebrew failure before the push leaves the tap untouched.
 
+### Recipe K: The Docker Image's `nats://` Relay
+Browsers have no TCP sockets, but NATS over WebSocket uses the same bytes as over TCP. So the Docker image's server (`docker/tcp_relay/`, which replaced nginx) relays a browser WebSocket at `nats-tcp?host=H&port=P` to the NATS server over TCP, and the browser runs the NATS protocol through `dart_nats`'s ordinary `ws` path.
+
+- **Docker-only**: the Dockerfile builds the web app with `--dart-define=NATS_TCP_RELAY=true`. That's what makes `lib/tcp_relay.dart`'s `tcpRelayAvailable` true and keeps `nats://` in the scheme list on web. Any other web build is unchanged (`ws://` only). `natsConnect()` swaps a web `nats://` URI for `tcpRelayUri(Uri.base, ...)`, which is same-origin, `wss` under https, and relative to the page so sub-path reverse proxies work.
+- **Guardrails in the relay**:
+  - It refuses a target whose first line isn't `INFO `, so it can't be used as a general TCP proxy.
+  - It refuses a server with `tls_required`. The browser can't run TLS inside the WebSocket, so TLS has to happen in the relay itself. That's a planned follow-up (ROADMAP Parked Notes, "Docker relay follow-ups").
+  - `NATS_TCP_ALLOWED_HOSTS` is an optional allowlist.
+  - `NATS_TCP_RELAY=off` refuses every relay connection with a reason, rather than dropping the endpoint. `nats://` in the Docker build's scheme list is decided at compile time, so a missing endpoint would leave the app retrying with no explanation.
+- **Refusals**: a refusal is sent as `-ERR 'NATS TCP relay: <reason>'`. `dart_nats` passes it to `onError`, and `natsConnect()` shows it on a first connect (`tcpRelayRefusalReason()`). After a successful connect, it keeps retrying. The marker string is duplicated in `lib/tcp_relay.dart` and `docker/tcp_relay/lib/relay.dart`; keep the two in sync.
+- **Clusters**: relayed connections pass `ignoreDiscoveredServers: true` (added in `dart_nats` 1.7.0), because a cluster's advertised `connect_urls` are TCP addresses the browser would otherwise try directly.
+- **Multi-arch**: the image is `linux/amd64` + `linux/arm64`. Only the relay binary and its runtime libraries differ per architecture. The Flutter and relay build stages run on `$BUILDPLATFORM`, and `dart compile exe --target-arch` cross-compiles the relay, so no stage runs under emulation. `/runtime/` is copied from the target platform's `dart:stable`. Keep any new `RUN` step in a `$BUILDPLATFORM` stage, or the build will need QEMU.
+- **Tests**:
+  - `cd docker/tcp_relay && dart test` (fake TCP servers, no NATS needed) and `test/tcp_relay_test.dart`.
+  - CI's `build-docker` job builds each architecture, smoke-tests both against a real `nats` service (`tool/smoke.dart`; arm64 runs under QEMU there), and only then pushes the multi-arch tag.
+- **Manual end-to-end**:
+  1. `docker network create natsnet`
+  2. `docker run -d --name nats-js --network natsnet nats:latest -js`
+  3. `docker run -d -p 8080:80 --network natsnet nats-client-flutter`
+  4. Open http://localhost:8080 and connect to `nats://nats-js:4222`. The host is resolved inside the container, so `localhost` won't work.
+
 ---
 
 ## 5. Build, Lint & Test Command Reference
@@ -380,7 +408,7 @@ flutter build web
 ```
 
 ### Build Docker Container (Web Flavor)
-To package the web version of the application inside an alpine-nginx container:
+To package the web version of the application, plus its `nats://` relay server (Recipe K), in a container:
 ```bash
 docker build -t nats-client-flutter .
 ```
