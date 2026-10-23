@@ -71,14 +71,25 @@ These are generated automatically — see `scripts/capture_screenshots.ps1` if y
 See the [help documentation](./assets/app_help.md) for more details on how to use the application.
 
 # Docker
-This application is also available via [Docker Hub](https://hub.docker.com/repository/docker/nverbeek/nats-client-flutter). Please note that running the application in Docker means you're running the web flavor. Only the `ws://` scheme is available in the browser as explained in the [help documentation](./assets/app_help.md). Be sure to enable WebSocket support on your target NATS server if you intend to use the Docker version.
+This application is also available via [Docker Hub](https://hub.docker.com/repository/docker/nverbeek/nats-client-flutter). Running it in Docker means you're running the web flavor in your browser. Both schemes are available:
 
-To install and run via Docker:
+- `ws://` connects from the browser straight to the server, which needs WebSocket enabled on your NATS server.
+- `nats://` connects through a small relay inside the container, which opens the TCP connection for the browser, so the server needs no WebSocket configuration. TLS-required servers aren't supported this way; use `ws://`/`wss://` for those.
+
+The image is published for both `linux/amd64` and `linux/arm64`, so it runs natively on Intel/AMD and ARM machines (including Apple Silicon Macs, Windows on ARM and Raspberry Pi). To install and run via Docker:
 ```
 docker run -d -p 8080:80 --name nats-client nverbeek/nats-client-flutter
 ```
 
 You may then access the application in your favorite browser at http://localhost:8080.
+
+With `nats://`, the host is resolved from inside the container, so `localhost` means the container itself. For a server on your machine use `host.docker.internal`; for a server in another container, put both on the same Docker network and use its container name.
+
+If the container is reachable by others, you can restrict which servers the relay connects to with a comma-separated list of hosts or `host:port` entries:
+```
+docker run -d -p 8080:80 -e NATS_TCP_ALLOWED_HOSTS=nats-prod,nats-dev:4222 nverbeek/nats-client-flutter
+```
+The relay only connects to targets that answer like a NATS server. `NATS_TCP_RELAY=off` turns it off, so only `ws://` connections work; `nats://` stays in the app's list, but connecting with it shows that it's turned off.
 
 # Testing
 This project has two test suites:

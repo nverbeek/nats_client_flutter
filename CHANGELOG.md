@@ -1,8 +1,14 @@
 # 1.0.19
 
+## New Features
+
+- **`nats://` in Docker**: the Docker image now supports plain TCP `nats://` connections, not just `ws://`, so the NATS server no longer needs WebSocket enabled. The container's server relays the browser's connection over TCP. TLS-required servers still need `ws://`. `NATS_TCP_ALLOWED_HOSTS` restricts which servers it may reach. See the README's Docker section.
+- **Multi-arch Docker image**: the image is now published for `linux/arm64` as well as `linux/amd64`, so it runs natively on Apple Silicon Macs, Windows on ARM and ARM Linux instead of under emulation (or not at all).
+
 ## Changes
 
 - **New app icon**: the app now uses the official NATS icon, as requested by the NATS project under the CNCF trademark guidelines. The logo was removed from the app bar.
+- **Docker image no longer uses nginx**: a small built-in server now serves the app (and relays `nats://`). It still listens on port 80, so existing `docker run -p 8080:80 ...` commands work unchanged, but a custom nginx config mounted into the old image no longer has any effect. The image is also smaller.
 
 ## Bug Fixes
 
@@ -11,6 +17,7 @@
 ## Maintenance & Dependencies
 
 - Removed the now-unused `flutter_svg` dependency
+- Upgraded `dart_nats` to 1.7.0, which adds the `ignoreDiscoveredServers` connect option the Docker `nats://` relay relies on.
 
 # 1.0.18
 

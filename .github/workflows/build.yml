@@ -43,6 +43,14 @@ jobs:
         run: flutter config --enable-linux-desktop
       - name: Run fast widget/unit test suite
         run: flutter test test/
+      - name: Test the Docker image's TCP relay server
+        # A separate Dart package (docker/tcp_relay), excluded from the app's
+        # own analysis, so it gets its own analyze and test run here.
+        working-directory: docker/tcp_relay
+        run: |
+          dart pub get
+          dart analyze --fatal-infos
+          dart test
       - name: Start auth fixture servers
         # integration_test/authentication_test.dart needs one server per auth
         # method (NATS's simple user/pass, token, and bare-nkey auth blocks,
@@ -479,6 +487,12 @@ jobs:
     runs-on: ubuntu-latest
     env:
       IMG_NAME: nverbeek/nats-client-flutter
+    services:
+      # For the image smoke test: the relay has to reach a real NATS server
+      nats:
+        image: nats:latest
+        ports:
+          - 4222:4222
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -502,10 +516,56 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build and push Docker image
+      # QEMU only runs the arm64 image for its smoke test; the build itself
+      # cross-compiles and needs no emulation (see the Dockerfile header)
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build Docker image (amd64)
         uses: docker/build-push-action@v7
         with:
           context: .
-          push: ${{ github.ref_type == 'tag' && !startsWith(github.ref, 'refs/tags/v0.')}}
+          platforms: linux/amd64
+          load: true
+          tags: nats-client-flutter:smoke-amd64
+
+      - name: Build Docker image (arm64)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/arm64
+          load: true
+          tags: nats-client-flutter:smoke-arm64
+
+      - uses: dart-lang/setup-dart@v1
+
+      - name: Smoke-test the images
+        # Each serves the web build and relays a nats:// connection to the
+        # service container above (host networking, so 127.0.0.1:4222 is it)
+        run: |
+          cd docker/tcp_relay
+          dart pub get
+          for arch in amd64 arm64; do
+            echo "::group::linux/$arch"
+            docker run -d --name smoke --platform "linux/$arch" --network host \
+              -e PORT=8080 "nats-client-flutter:smoke-$arch"
+            for i in $(seq 1 30); do
+              curl -sf http://127.0.0.1:8080/ > /dev/null && break
+              sleep 1
+            done
+            dart run tool/smoke.dart http://127.0.0.1:8080 127.0.0.1 4222 \
+              || { docker logs smoke; exit 1; }
+            docker rm -f smoke
+            echo "::endgroup::"
+          done
+
+      - name: Push Docker image
+        # Both architectures as one multi-arch tag, from the builds' cache
+        uses: docker/build-push-action@v7
+        if: ${{ github.ref_type == 'tag' && !startsWith(github.ref, 'refs/tags/v0.')}}
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}

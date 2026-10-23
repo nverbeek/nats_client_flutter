@@ -43,6 +43,7 @@ import 'security_settings_dialog.dart';
 import 'subject_chips_row.dart';
 import 'subscription_info.dart';
 import 'subscription_manager_dialog.dart';
+import 'tcp_relay.dart';
 import 'update_checker.dart';
 
 void main() async {
@@ -1117,9 +1118,21 @@ class _MyHomePageState extends State<MyHomePage>
     natsClient.onError = (dynamic error) {
       debugPrint('NATS client error: $error');
       if (error == null) return;
-      if (error is NatsPermissionsViolation) {
+      final relayRefusal = tcpRelayRefusalReason(error as Object);
+      if (relayRefusal != null) {
+        // The Docker image's TCP relay refused the target (unreachable, not
+        // a NATS server, TLS-required, not allowed). Like the TLS case below,
+        // stop on a first connect and say why; once connected, a refusal on
+        // reconnect is just the server being down, so keep retrying.
+        if (!_hasEverConnectedThisSession && identical(client, natsClient)) {
+          failureReported = true;
+          showSnackBar('${constants.connectionFailureGenericPrefix}: '
+              '$relayRefusal');
+          client.forceClose();
+        }
+      } else if (error is NatsPermissionsViolation) {
         _handlePermissionsViolation(error);
-      } else if (isAuthenticationError(error as Object)) {
+      } else if (isAuthenticationError(error)) {
         // A bad password/token/nkey/creds file: dart_nats stops retrying and
         // closes the client itself (and connect() below rethrows it on a
         // first connect).
@@ -1159,7 +1172,12 @@ class _MyHomePageState extends State<MyHomePage>
       await prefs.setString(
           constants.prefSubscriptions, encodeSubscriptionList(subscriptions));
 
-      Uri uri = Uri.parse(fullUri);
+      // The browser has no TCP sockets, so in the Docker image a nats://
+      // connection goes over a WebSocket to the image's own relay, which
+      // opens the TCP connection (see lib/tcp_relay.dart).
+      final viaTcpRelay = kIsWeb && scheme == 'nats://';
+      Uri uri =
+          viaTcpRelay ? tcpRelayUri(Uri.base, host, port) : Uri.parse(fullUri);
       _statusSub = natsClient.statusStream.listen((Status event) {
         debugPrint('Connection status event $event');
         currentStatus = event;
@@ -1260,6 +1278,9 @@ class _MyHomePageState extends State<MyHomePage>
           pingInterval: Duration(seconds: heartbeatInterval),
           pingTimeout: constants.heartbeatPingTimeout,
           connectOption: authConnectOption,
+          // A cluster's advertised peers are TCP addresses the browser can't
+          // reach; every reconnect has to go back through the relay.
+          ignoreDiscoveredServers: viaTcpRelay,
           securityContext: securityContext as dynamic);
     } catch (e) {
       if (!failureReported) {
@@ -2846,10 +2867,14 @@ class _MyHomePageState extends State<MyHomePage>
 
     // if running in a browser, remove the option for nats://.
     // browsers only support web sockets, so TCP connections aren't possible.
-    // to avoid confusion, only offer web socket connection variants.
-    if (kIsWeb) {
-      scheme = 'ws://';
+    // to avoid confusion, only offer web socket connection variants -- unless
+    // this is the Docker image's build, whose server relays nats:// over a
+    // WebSocket (see lib/tcp_relay.dart).
+    if (kIsWeb && !tcpRelayAvailable) {
       availableSchemes.remove('nats://');
+    }
+    if (!availableSchemes.contains(scheme)) {
+      scheme = availableSchemes.first;
     }
 
     // Define custom colors for message list rows based on theme
