@@ -32,7 +32,9 @@ The following schemes are supported:
 
 Additionally, the `nats://` scheme is unavailable when this client is running in a browser. This is because browsers do not support TCP sockets, and thus we cannot use the normal NATS connection scheme. For browsers, we only can use WebSocket connections, which requires enabling the server-side support in the above note.
 
-The exception is the Docker image. Its server relays `nats://` connections for the browser over plain TCP, so `nats://` is offered there too. The host is resolved from inside the container: use `host.docker.internal` for a server on the Docker host, or a container name for a server on the same Docker network. TLS-required servers can't be reached this way; use `ws://` for those.
+The exception is the Docker image. Its server relays `nats://` connections for the browser over TCP, including TLS, so `nats://` is offered there too. The host is resolved from inside the container: use `host.docker.internal` for a server on the Docker host, or a container name for a server on the same Docker network.
+
+**NATS contexts (Docker only):** if the container was given NATS CLI contexts, they're listed at the top of the Host dropdown as **Context: name**, and the selected one is filled in when the page opens. Connecting with a context selected (the Host label shows *Host (context: name)*) uses the context's server, credentials and TLS settings, all held by the container; your Authentication settings here aren't used. Editing the host or port turns it back into a normal connection. A context the container can't use, such as one whose `.creds` file is missing, is listed with the reason and can't be picked. Contexts are only offered when the page is opened at `localhost`, an IP address, or an address the container lists in `NATS_UI_ALLOWED_ORIGINS`; otherwise a message says so when the page opens.
 
 ## Other Connection Info
 The rest of the connection information is straightforward:

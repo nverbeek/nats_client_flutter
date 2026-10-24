@@ -8,10 +8,16 @@ class ConnectionHistoryEntry {
   final String host; // e.g. '127.0.0.1'
   final String port; // e.g. '4222'
 
+  /// Set on the Docker image's NATS CLI contexts, which the Host dropdown
+  /// lists above the history (see `lib/tcp_relay.dart`). Never persisted:
+  /// contexts come from the container each time.
+  final String? contextName;
+
   const ConnectionHistoryEntry({
     required this.scheme,
     required this.host,
     required this.port,
+    this.contextName,
   });
 
   /// Full URI shown in the dropdown rows, e.g. 'nats://127.0.0.1:4222'.

@@ -12,7 +12,7 @@ Welcome! This document is a living, context-bootstrapping architectural and oper
 - **Multi-Scheme Connection**: Connect to a single NATS server using plain TCP sockets (`nats://`) or WebSockets (`ws://`).
 - **Platform Limitations**: 
   - Desktop clients (Windows, macOS, Linux) support both `nats://` (TCP) and `ws://` (WebSocket) schemes.
-  - The Web client **only** supports the `ws://` scheme due to browser-level TCP socket restrictions — except in the Docker image, whose server relays `nats://` over TCP for the browser (plain TCP only, no TLS; see Recipe K).
+  - The Web client **only** supports the `ws://` scheme due to browser-level TCP socket restrictions — except in the Docker image, whose server relays `nats://` over TCP (including TLS) for the browser, and can connect as mounted NATS CLI contexts (see Recipe K).
 - **TLS & Mutual TLS**: Custom TLS authentication support using PEM-formatted trusted CA certificates, client certificate chains, and private keys.
 - **Real-Time Stream**: Subscribe to multiple comma-separated subjects (supporting wildcards like `*` and `>`), filter incoming payloads in real-time, search and highlight text with regex, and send/publish custom messages.
 - **Connection History**: the Host field (`lib/main.dart`) is an editable `Autocomplete` backed by `lib/connection_history.dart` — its dropdown offers up to 10 previously-*successfully*-connected `scheme://host:port` targets (most-recent-first, deduplicated by target), filtering as you type; selecting one fills scheme, host, and port together. Per-entry delete and a "Clear history" action live in the same dropdown. Recorded only on `Status.connected`, not on every connect attempt, so failed/typo'd attempts never pollute the list.
@@ -86,7 +86,7 @@ nats_client_flutter/
 │   ├── subject_chips_row.dart  # Toolbar chip row replacing the old Subjects text field (one chip per subscription, color swatch, overflow "+N more")
 │   ├── subscription_info.dart  # `SubscriptionInfo` model (subject/queueGroup persisted, colorIndex/sid runtime-only) + `resolveSubscriptionColor()`
 │   ├── subscription_manager_dialog.dart # Full subscription list dialog (add/remove/queue-group-edit per row, live unsub/resub)
-│   ├── tcp_relay.dart          # `tcpRelayAvailable` (Docker build's dart-define), `tcpRelayUri()`, `tcpRelayRefusalReason()` — the app side of Recipe K
+│   ├── tcp_relay.dart          # `tcpRelayAvailable` (Docker build's dart-define), `tcpRelayUri()`/`tcpRelayContextUri()`, `tcpRelayRefusalReason()`, `RelayContext` + `fetchRelayContexts()` — the app side of Recipe K
 │   └── update_checker.dart     # Pure logic/network split for the GitHub Releases update check (fetchLatestRelease, isNewerVersion)
 ├── scripts/                    # Icon generator, mockup testing, and screenshot utilities
 │   ├── ci/drive_macos_file_panel.applescript # Answers the native panels opened by macos_file_picker_sandbox_test.dart in CI
@@ -138,9 +138,10 @@ nats_client_flutter/
 │   ├── macos_file_picker_sandbox_test.dart # macOS-only, CI `test-macos` job: real Open/Save panels grant sandboxed access (see Recipe F)
 │   └── screenshot_tour_test.dart        # Drives the app through the README's screenshots — run via scripts/capture_screenshots.ps1, not directly
 ├── docker/tcp_relay/           # The Docker image's server (separate Dart package): serves the web build + relays nats:// WebSocket->TCP (see Recipe K)
-│   ├── lib/relay.dart          # `createHandler()`/`RelayConfig`: static files + the `nats-tcp` relay endpoint (INFO check, TLS refusal, allowlist)
-│   ├── bin/server.dart         # Entry point; env: PORT, WEB_ROOT, NATS_TCP_RELAY, NATS_TCP_ALLOWED_HOSTS
-│   ├── test/relay_test.dart    # Fake-TCP-server tests, no NATS needed
+│   ├── lib/relay.dart          # `createHandler()`/`RelayConfig`: static files, the `nats-tcp` relay endpoint (INFO check, TLS, CONNECT auth injection, allowlist, page-origin check) and the `contexts` list
+│   ├── lib/context.dart        # `NatsContext`/`ContextSet`: NATS CLI contexts from a mounted dir + the CLI's env vars, `applyAuth()` (nonce signing via dart_nats `Nkeys`)
+│   ├── bin/server.dart         # Entry point; env: PORT, WEB_ROOT, NATS_TCP_RELAY, NATS_TCP_ALLOWED_HOSTS, NATS_UI_ALLOWED_ORIGINS, NATS_CONTEXTS, NATS_CONTEXT, NATS_URL & co.
+│   ├── test/                   # relay_test (relaying), context_test (parsing, auth), relay_context_test (contexts end to end, TLS with openssl-made certs); no NATS needed
 │   └── tool/smoke.dart         # CI smoke test of a running image against a real nats-server
 ├── Dockerfile                  # Multi-stage, multi-arch (amd64+arm64): Flutter web build + cross-compiled relay, both on $BUILDPLATFORM -> `FROM scratch` runtime (no nginx)
 ├── .dockerignore               # Keeps build/ and .dart_tool/ (tens of GB locally) out of the build context
@@ -341,19 +342,31 @@ Browsers have no TCP sockets, but NATS over WebSocket uses the same bytes as ove
 - **Docker-only**: the Dockerfile builds the web app with `--dart-define=NATS_TCP_RELAY=true`. That's what makes `lib/tcp_relay.dart`'s `tcpRelayAvailable` true and keeps `nats://` in the scheme list on web. Any other web build is unchanged (`ws://` only). `natsConnect()` swaps a web `nats://` URI for `tcpRelayUri(Uri.base, ...)`, which is same-origin, `wss` under https, and relative to the page so sub-path reverse proxies work.
 - **Guardrails in the relay**:
   - It refuses a target whose first line isn't `INFO `, so it can't be used as a general TCP proxy.
-  - It refuses a server with `tls_required`. The browser can't run TLS inside the WebSocket, so TLS has to happen in the relay itself. That's a planned follow-up (ROADMAP Parked Notes, "Docker relay follow-ups").
-  - `NATS_TCP_ALLOWED_HOSTS` is an optional allowlist.
+  - `NATS_TCP_ALLOWED_HOSTS` is an optional allowlist for connecting by host (empty = any NATS server, `RelayConfig.allows`). Connecting *as* a context is always allowed. Loading contexts deliberately doesn't narrow it: the credentials only ever go to a context's own servers either way, and users expect to reach anything they have credentials for.
+  - **Which page may use it** (`RelayConfig.pageRefusal`, for both `nats-tcp` and `contexts`): a browser's `Origin` must be the relay's own page (`Host`, or a proxy's `X-Forwarded-Host`) or listed in `NATS_UI_ALLOWED_ORIGINS`. Only a missing `Origin` means a non-browser client; `Origin: null` (sandboxed iframes, local files, which any site can produce) is always refused and can't be listed. With contexts loaded, the `Host` header's name must also be `localhost`, `*.localhost`, an IP literal or a listed origin's host, against DNS rebinding (a rebinding page's `Origin` matches its `Host`). That check uses `Host` alone, never `X-Forwarded-Host`: browsers forbid scripts from setting `Host`, but a same-origin `fetch` may set `X-Forwarded-Host`, so a proxy in front must preserve `Host`. The check runs after the WebSocket upgrade and refuses with `-ERR`, not a 403, so the app shows why; `contexts` answers 403 `{"error"}`, which the app shows as a SnackBar.
+  - The browser may send at most 64 KiB before the server answers, and the first `CONNECT` line must be under 64 KiB and valid UTF-8 (`_maxBrowserBuffer`). Query values in logs and refusals go through `_printable` (no control characters, no `'`).
+  - The relay pings the browser every 30 s (`RelayConfig.pingInterval`), so ingress idle timeouts (nginx: 60 s) don't drop quiet sessions. Log lines name the client (`X-Forwarded-For`, else the peer).
   - `NATS_TCP_RELAY=off` refuses every relay connection with a reason, rather than dropping the endpoint. `nats://` in the Docker build's scheme list is decided at compile time, so a missing endpoint would leave the app retrying with no explanation.
 - **Refusals**: a refusal is sent as `-ERR 'NATS TCP relay: <reason>'`. `dart_nats` passes it to `onError`, and `natsConnect()` shows it on a first connect (`tcpRelayRefusalReason()`). After a successful connect, it keeps retrying. The marker string is duplicated in `lib/tcp_relay.dart` and `docker/tcp_relay/lib/relay.dart`; keep the two in sync.
+- **TLS**: the browser can't run TLS inside the WebSocket, so the relay does it (`_Relay._open`). After a plain INFO it upgrades in place with `SecureSocket.secure` when INFO says `tls_required`, the URL is `tls://`, or the context names TLS files; with the context's `tls_first` it connects TLS-first. Trust is the system roots (the `scratch` image gets `/etc/ssl/certs` from the Dart runtime) plus the context's `ca`; `cert`/`key` give mTLS. INFO is forwarded unchanged, so `tls_required` still drives the app's lock icon; `dart_nats`'s `ws` path never attempts its own upgrade.
+- **Contexts** (`lib/context.dart`): every `*.json` in `/nats-contexts` (or `NATS_CONTEXTS`) is a NATS CLI context named by its file, and `NATS_URL` & co. add one named `default` (the CLI reads `NATS_URL/USER/PASSWORD/CREDS/NKEY/CERT/KEY/CA`; `NATS_TOKEN/JWT/SEED` are this image's own).
+  - A file a context names (creds, nkey, cert, key, ca) is found at its path (`~` expanded, `file://` stripped) or by file name next to the contexts, so a context made on another machine works when its files are dropped beside it.
+  - `password`/`token`/`user_jwt`/`user_seed` may be `env://VAR` or `file://path`, like jsm.go's `resolveLiteral`; other schemes make the context unusable. Credentials in the URL (`user:pass@`, `token@`) apply when the context has none of its own, and never appear in `ContextServer.toString()`.
+  - Problems found at load (a missing or unreadable file, a JWT without a seed, cert without key, a bad PEM) make the context unusable, with a reason that names files but not paths, since `NatsContext.error` reaches the browser. Paths and OS errors only go to the startup log. A JSON parse failure logs only its position, because `FormatException.toString()` quotes the failing line, which can hold a password.
+  - `GET contexts` lists name/description/server/selected/error for the app, never secrets.
+  - `nats-tcp?context=NAME` calls `resolveAuth()`, which re-reads the credential files (`NatsContext.files`) so a rotated Secret is used on the next connect. It then connects to the context's servers in order, and `_ConnectRewriter` replaces the auth in the browser's first `CONNECT` with the context's (user/pass, token, or jwt/nkey plus the nonce signed with `Nkeys`). The secrets never reach the browser.
+- **App side**: on the Docker web build, `_loadRelayContexts()` fetches the list and preselects the selected context (`NATS_CONTEXT`, else `context.txt`, else the only one). Contexts are `ConnectionHistoryEntry`s with a runtime-only `contextName`, listed above the history in the Host dropdown. `selectedRelayContext` marks the Host label, and editing scheme/host/port clears it (`_dropRelayContextIfChanged`). With a context selected, `natsConnect()` uses `tcpRelayContextUri`, skips the page's own auth, and doesn't record history.
 - **Clusters**: relayed connections pass `ignoreDiscoveredServers: true` (added in `dart_nats` 1.7.0), because a cluster's advertised `connect_urls` are TCP addresses the browser would otherwise try directly.
+- **Image user and port**: the runtime image runs as uid 65532 (numeric `USER`; `scratch` has no `/etc/passwd`) on port 8080, for Kubernetes' restricted Pod Security Standard. Mounted files must be readable by that user, so the README's contexts example adds `--user "$(id -u):$(id -g)"` (NATS CLI files are `0600`), and its Kubernetes manifest uses `fsGroup` + `defaultMode: 0440`. The server binds IPv6 (dual-stack), falling back to IPv4.
 - **Multi-arch**: the image is `linux/amd64` + `linux/arm64`. Only the relay binary and its runtime libraries differ per architecture. The Flutter and relay build stages run on `$BUILDPLATFORM`, and `dart compile exe --target-arch` cross-compiles the relay, so no stage runs under emulation. `/runtime/` is copied from the target platform's `dart:stable`. Keep any new `RUN` step in a `$BUILDPLATFORM` stage, or the build will need QEMU.
 - **Tests**:
-  - `cd docker/tcp_relay && dart test` (fake TCP servers, no NATS needed) and `test/tcp_relay_test.dart`.
-  - CI's `build-docker` job builds each architecture, smoke-tests both against a real `nats` service (`tool/smoke.dart`; arm64 runs under QEMU there), and only then pushes the multi-arch tag.
+  - `cd docker/tcp_relay && dart test` (fake TCP servers, no NATS needed; the TLS tests skip if `openssl` isn't on `PATH`), plus `test/tcp_relay_test.dart` and `test/relay_context_host_field_test.dart`.
+  - CI's `build-docker` job builds each architecture and smoke-tests both (`tool/smoke.dart`; arm64 runs under QEMU there): by host against a real `nats` service, as a `default` context from `NATS_URL`, as a mounted context for each of Recipe H's four auth fixtures (user/pass, token, NKey, `.creds`), and with a foreign `--origin` that must be refused. Only then does it push the multi-arch tag.
+  - mTLS against a real server (manual): a `nats:latest` with `tls { ... verify: true }` and a throwaway CA from openssl, on one Docker network with the image. Mount a context naming the CA and a client cert/key, and run `dart run tool/smoke.dart <url> --context <name>`.
 - **Manual end-to-end**:
   1. `docker network create natsnet`
   2. `docker run -d --name nats-js --network natsnet nats:latest -js`
-  3. `docker run -d -p 8080:80 --network natsnet nats-client-flutter`
+  3. `docker run -d -p 8080:8080 --network natsnet nats-client-flutter`
   4. Open http://localhost:8080 and connect to `nats://nats-js:4222`. The host is resolved inside the container, so `localhost` won't work.
 
 ---

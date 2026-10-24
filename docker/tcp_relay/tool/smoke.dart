@@ -2,19 +2,38 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:web_socket_channel/io.dart';
 
 /// Smoke-tests a running image: the web build is served, and a nats://
-/// connection relayed to a real NATS server completes a PING/PONG.
+/// connection relayed to a real NATS server completes a PING/PONG, either to
+/// a host and port or as one of the image's contexts (which the relay
+/// authenticates as, so a PONG proves the server accepted its credentials).
 ///
 ///     dart run tool/smoke.dart <image base url> <nats host> <nats port>
+///     dart run tool/smoke.dart <image base url> --context <name>
 ///     dart run tool/smoke.dart http://127.0.0.1:8080 127.0.0.1 4222
-Future<void> main(List<String> args) async {
+///
+/// `--origin <url>` connects as a page from that origin would, and
+/// `--expect-refusal` passes only if the relay refuses the connection.
+Future<void> main(List<String> arguments) async {
+  final args = [...arguments];
+  String? origin;
+  final originAt = args.indexOf('--origin');
+  if (originAt >= 0 && originAt + 1 < args.length) {
+    origin = args[originAt + 1];
+    args.removeRange(originAt, originAt + 2);
+  }
+  final expectRefusal = args.remove('--expect-refusal');
   if (args.length != 3) {
-    stderr.writeln('usage: smoke.dart <base url> <nats host> <nats port>');
+    stderr.writeln('usage: smoke.dart <base url> <nats host> <nats port>\n'
+        '       smoke.dart <base url> --context <name>\n'
+        '  [--origin <url>] [--expect-refusal]');
     exit(64);
   }
   final base = Uri.parse(args[0]);
+  final query = args[1] == '--context'
+      ? {'context': args[2]}
+      : {'host': args[1], 'port': args[2]};
 
   final http = HttpClient();
   final request = await http.getUrl(base.resolve('/'));
@@ -27,9 +46,10 @@ Future<void> main(List<String> args) async {
   }
   print('web build served');
 
-  final relay = base.resolve('/nats-tcp').replace(
-      scheme: 'ws', queryParameters: {'host': args[1], 'port': args[2]});
-  final ws = WebSocketChannel.connect(relay);
+  final relay =
+      base.resolve('/nats-tcp').replace(scheme: 'ws', queryParameters: query);
+  final ws = IOWebSocketChannel.connect(relay,
+      headers: {if (origin != null) 'Origin': origin});
   await ws.ready;
   final received = StringBuffer();
   final pong = Completer<void>();
@@ -40,13 +60,24 @@ Future<void> main(List<String> args) async {
       received.write('PING_SENT');
       ws.sink.add(utf8.encode('CONNECT {"verbose":false}\r\nPING\r\n'));
     }
+    if (text.contains('-ERR') && !pong.isCompleted) {
+      pong.completeError(StateError('refused: $received'));
+    }
     if (text.contains('PONG') && !pong.isCompleted) pong.complete();
   }, onDone: () {
     if (!pong.isCompleted) {
       pong.completeError(StateError('relay closed: $received'));
     }
   });
-  await pong.future.timeout(const Duration(seconds: 10));
-  await ws.sink.close();
+  try {
+    await pong.future.timeout(const Duration(seconds: 10));
+  } on StateError catch (e) {
+    if (!expectRefusal || !'$e'.contains('NATS TCP relay:')) rethrow;
+    print('refused as expected: $received');
+    return;
+  } finally {
+    await ws.sink.close();
+  }
+  if (expectRefusal) throw StateError('expected a refusal, got: $received');
   print('relayed PING/PONG with $relay');
 }

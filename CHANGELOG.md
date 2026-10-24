@@ -1,3 +1,19 @@
+# 1.0.20
+
+## New Features
+
+- **NATS contexts in Docker**: mount your NATS CLI contexts (`-v ~/.config/nats/context:/nats-contexts:ro`) and the app lists them at the top of the Host dropdown, with the selected one filled in on load. Connecting as a context uses its server, credentials and TLS settings. The container authenticates (user/password, token, NKey, `.creds`, or credentials in the URL), so the browser never sees the secrets. Credential files are read again for every connection, so rotated ones (such as a Kubernetes Secret) work without a restart. For a single connection, the NATS CLI's own environment variables (`NATS_URL`, `NATS_CREDS`, ...) work without any files. Anyone who can open the page can connect as the contexts, so keep it private; see the README's Docker section.
+- **TLS through the Docker relay**: `nats://` in the Docker image now reaches servers that require TLS, and `tls://` URLs. Publicly trusted certificates work out of the box; a context can add its own CA, a client certificate for mutual TLS, and `tls_first`.
+- **Kubernetes**: the README has a minimal Secret + Deployment + Service setup, and the image runs under the restricted Pod Security Standard.
+
+## Breaking Changes
+
+- **The Docker image listens on port 8080 and doesn't run as root** (uid 65532). Change `-p 8080:80` to `-p 8080:8080`, or set `-e PORT=80`. Files mounted into it must be readable by that user; for NATS CLI files on Linux, add `--user "$(id -u):$(id -g)"`.
+
+## Changes
+
+- **Docker relay hardening**: only the app's own page may use the relay, so another website can't use it through your browser. With contexts loaded, the page must also be opened at `localhost`, a `*.localhost` name or an IP address, or be listed in the new `NATS_UI_ALLOWED_ORIGINS`. The relay also pings the browser every 30 seconds (so ingress idle timeouts don't drop quiet sessions), limits what a browser may send before connecting, keeps context file contents and paths out of its log and the browser, logs who connects, and listens on IPv6 as well as IPv4.
+
 # 1.0.19
 
 ## New Features

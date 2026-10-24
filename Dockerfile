@@ -61,5 +61,8 @@ FROM scratch
 COPY --from=relay-runtime /runtime/ /
 COPY --from=relay-build /relay/server /app/server
 COPY --from=build-env /app/build/web /app/web
-EXPOSE 80
+# Not root (numeric: scratch has no /etc/passwd), so the image runs under
+# Kubernetes' restricted Pod Security Standard. Hence the unprivileged port.
+USER 65532:65532
+EXPOSE 8080
 ENTRYPOINT ["/app/server"]
