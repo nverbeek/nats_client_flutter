@@ -74,22 +74,109 @@ See the [help documentation](./assets/app_help.md) for more details on how to us
 This application is also available via [Docker Hub](https://hub.docker.com/repository/docker/nverbeek/nats-client-flutter). Running it in Docker means you're running the web flavor in your browser. Both schemes are available:
 
 - `ws://` connects from the browser straight to the server, which needs WebSocket enabled on your NATS server.
-- `nats://` connects through a small relay inside the container, which opens the TCP connection for the browser, so the server needs no WebSocket configuration. TLS-required servers aren't supported this way; use `ws://`/`wss://` for those.
+- `nats://` connects through a small relay inside the container, which opens the TCP connection for the browser, so the server needs no WebSocket configuration. The relay handles TLS too: servers that require it, and `tls://` URLs, are verified against the publicly trusted certificate authorities.
 
 The image is published for both `linux/amd64` and `linux/arm64`, so it runs natively on Intel/AMD and ARM machines (including Apple Silicon Macs, Windows on ARM and Raspberry Pi). To install and run via Docker:
 ```
-docker run -d -p 8080:80 --name nats-client nverbeek/nats-client-flutter
+docker run -d -p 8080:8080 --name nats-client nverbeek/nats-client-flutter
 ```
 
 You may then access the application in your favorite browser at http://localhost:8080.
 
+The container listens on port 8080 and doesn't run as root (it runs as uid 65532). Before 1.0.20 it listened on port 80; `-e PORT=80` brings that back if you can't change your port mapping.
+
 With `nats://`, the host is resolved from inside the container, so `localhost` means the container itself. For a server on your machine use `host.docker.internal`; for a server in another container, put both on the same Docker network and use its container name.
 
-If the container is reachable by others, you can restrict which servers the relay connects to with a comma-separated list of hosts or `host:port` entries:
+## NATS contexts
+If you use the [NATS CLI](https://github.com/nats-io/natscli), mount your contexts and the app can connect as any of them, with no credentials typed into the browser:
 ```
-docker run -d -p 8080:80 -e NATS_TCP_ALLOWED_HOSTS=nats-prod,nats-dev:4222 nverbeek/nats-client-flutter
+docker run -d -p 8080:8080 --user "$(id -u):$(id -g)" \
+  -v ~/.config/nats/context:/nats-contexts:ro nverbeek/nats-client-flutter
 ```
-The relay only connects to targets that answer like a NATS server. `NATS_TCP_RELAY=off` turns it off, so only `ws://` connections work; `nats://` stays in the app's list, but connecting with it shows that it's turned off.
+> [!WARNING]
+> **Anyone who can open the page can connect as your contexts**, with their permissions. The secrets never reach the browser, but the container uses them for whoever asks. Keep the page private: open it from your own machine, through `kubectl port-forward`, or behind a proxy that makes people sign in. Contexts with read-only or otherwise limited users are a good idea.
+
+- Each `*.json` file in the directory is a context, named after its file. They appear at the top of the Host dropdown. The selected one (`NATS_CONTEXT`, else the CLI's `context.txt`, else the only context) is filled in when the page opens, so you can just press Connect.
+- The container authenticates as the context: user/password, token, NKey, or a `.creds` file, or credentials in its URL (`nats://user:password@host`). It also does the context's TLS: its CA, a client certificate and key for mutual TLS, and `tls_first`. Credentials and keys stay in the container; the browser only sees each context's name, description and server.
+- Files a context refers to (`.creds`, NKey seed, certificates) must be readable inside the container: either mount them at the same path, or put them next to the context files and the container finds them by file name (so give them different names).
+- The NATS CLI writes these files readable only by you. `--user "$(id -u):$(id -g)"` runs the container as you, so it can read them through the mount.
+- Credential files are read again for every connection, so a rotated `.creds` file (or Kubernetes Secret) is used from the next connection on, without a restart.
+- A password, token, `user_jwt` or `user_seed` can also be `env://VARIABLE` or `file://path`, as with the NATS CLI. Other references (`op://`, `nsc://`) aren't supported.
+- Only the app's own page can use the container, so other websites can't use it through your browser. Once contexts are loaded, the page must also be opened at `localhost`, a `*.localhost` name, or an IP address, and that applies to every `nats://` connection, including ones to a host you type in. To open the page under another name, such as behind an ingress, list it: `-e NATS_UI_ALLOWED_ORIGINS=https://nats-ui.example.com`. A proxy in front must pass the browser's `Host` header through; ingress-nginx, Traefik and oauth2-proxy do by default.
+- `NATS_CONTEXTS` points at a different directory than `/nats-contexts`.
+
+For a single connection, the NATS CLI's own environment variables work without any files. They define a context named `default`:
+```
+docker run -d -p 8080:8080 -e NATS_URL=tls://connect.ngs.global -e NATS_CREDS=/creds/app.creds \
+  -v ~/app.creds:/creds/app.creds:ro nverbeek/nats-client-flutter
+```
+Supported: the CLI's `NATS_URL`, `NATS_USER`, `NATS_PASSWORD`, `NATS_CREDS`, `NATS_NKEY`, `NATS_CERT`, `NATS_KEY` and `NATS_CA`, plus `NATS_TOKEN`, `NATS_JWT` and `NATS_SEED`, which only this image reads. The container logs which contexts it loaded, and why any of them can't be used.
+
+## Kubernetes
+The image runs under the restricted Pod Security Standard as is. A minimal setup, with contexts from a Secret, reached through `kubectl port-forward svc/nats-ui 8080:8080`:
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nats-ui-contexts
+stringData:
+  prod.json: |
+    {"description": "Production", "url": "nats://nats.nats.svc:4222", "creds": "prod.creds"}
+  prod.creds: |
+    -----BEGIN NATS USER JWT-----
+    ...
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nats-ui
+spec:
+  selector:
+    matchLabels: {app: nats-ui}
+  template:
+    metadata:
+      labels: {app: nats-ui}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: nats-ui
+          image: nverbeek/nats-client-flutter
+          ports: [{containerPort: 8080}]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          readinessProbe:
+            httpGet: {path: /, port: 8080}
+          volumeMounts:
+            - {name: contexts, mountPath: /nats-contexts, readOnly: true}
+      volumes:
+        - name: contexts
+          secret: {secretName: nats-ui-contexts, defaultMode: 0440}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats-ui
+spec:
+  selector: {app: nats-ui}
+  ports: [{port: 8080}]
+```
+- Mount the Secret as a directory, not with `subPath`: only a directory mount picks up a rotated Secret.
+- `NATS_URL` and friends work from a Secret through `env`/`envFrom` as well.
+- Behind an ingress: put sign-in in front of it (for example oauth2-proxy or your ingress's own auth), and with contexts set `NATS_UI_ALLOWED_ORIGINS` to the page's address. A k3d `*.localhost` host name needs no setting. The relay pings the browser every 30 seconds, so ingress idle timeouts don't drop quiet sessions.
+
+## Which servers the relay connects to
+- It connects to any server that answers like a NATS server, and to every context's servers.
+- `NATS_TCP_ALLOWED_HOSTS` limits the servers you can reach by typing a host: a comma-separated list of hosts or `host:port` entries. Contexts are always allowed.
+  ```
+  docker run -d -p 8080:8080 -e NATS_TCP_ALLOWED_HOSTS=nats-prod,nats-dev:4222 nverbeek/nats-client-flutter
+  ```
+- `NATS_TCP_RELAY=off` turns the relay off, so only `ws://` connections work; `nats://` stays in the app's list, but connecting with it shows that it's turned off.
 
 # Testing
 This project has two test suites:

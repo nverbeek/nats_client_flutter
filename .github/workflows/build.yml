@@ -539,22 +539,58 @@ jobs:
 
       - uses: dart-lang/setup-dart@v1
 
+      - name: Start the auth fixture servers and their contexts
+        # Recipe H's servers (one per auth method), and a NATS CLI context
+        # for each, so the smoke test proves the relay authenticates as a
+        # context against a real server. The nkey and creds paths name
+        # another machine's files, to exercise the "next to the context"
+        # lookup.
+        run: |
+          fixtures="$PWD/integration_test/fixtures/auth"
+          for entry in userpass:4300 token:4301 nkey:4302 creds:4303; do
+            name="${entry%%:*}"; port="${entry##*:}"
+            docker run -d --name "fixture-$name" -p "$port:4222" \
+              -v "$fixtures/$name.conf:/etc/nats/nats-server.conf:ro" \
+              nats:latest -c /etc/nats/nats-server.conf
+          done
+          ctx="$RUNNER_TEMP/contexts"
+          mkdir -p "$ctx"
+          cp "$fixtures/test-user.creds" "$ctx/"
+          # The throwaway seed from nkey.conf's comment
+          echo SUAN72GFFNFVMKDW5GG4JY6LSRCH6BRGSPCS624MMITENFHOXMXYELOZI4 > "$ctx/user.nk"
+          printf '%s\n' '{"url": "nats://127.0.0.1:4300", "user": "integration-test-user", "password": "integration-test-pass"}' > "$ctx/userpass.json"
+          printf '%s\n' '{"url": "nats://127.0.0.1:4301", "token": "integration-test-token"}' > "$ctx/token.json"
+          printf '%s\n' '{"url": "nats://127.0.0.1:4302", "nkey": "/home/someone/.nkeys/user.nk"}' > "$ctx/nkey.json"
+          printf '%s\n' '{"url": "nats://127.0.0.1:4303", "creds": "~/.local/share/nats/nsc/keys/creds/integrationtest/test-user.creds"}' > "$ctx/creds.json"
+          chmod -R a+rX "$ctx"
+
       - name: Smoke-test the images
-        # Each serves the web build and relays a nats:// connection to the
-        # service container above (host networking, so 127.0.0.1:4222 is it)
+        # Each serves the web build and relays nats:// connections: by host
+        # to the service container above (host networking, so 127.0.0.1:4222
+        # is it), and as each context
         run: |
           cd docker/tcp_relay
           dart pub get
+          base=http://127.0.0.1:8080
+          fail() { docker logs smoke; exit 1; }
           for arch in amd64 arm64; do
             echo "::group::linux/$arch"
+            # NATS_URL also defines a "default" context for the service
             docker run -d --name smoke --platform "linux/$arch" --network host \
-              -e PORT=8080 "nats-client-flutter:smoke-$arch"
+              -e NATS_URL=nats://127.0.0.1:4222 \
+              -v "$RUNNER_TEMP/contexts:/nats-contexts:ro" \
+              "nats-client-flutter:smoke-$arch"
             for i in $(seq 1 30); do
-              curl -sf http://127.0.0.1:8080/ > /dev/null && break
+              curl -sf "$base/" > /dev/null && break
               sleep 1
             done
-            dart run tool/smoke.dart http://127.0.0.1:8080 127.0.0.1 4222 \
-              || { docker logs smoke; exit 1; }
+            dart run tool/smoke.dart "$base" 127.0.0.1 4222 || fail
+            for name in default userpass token nkey creds; do
+              dart run tool/smoke.dart "$base" --context "$name" || fail
+            done
+            # Another site's page can't use the contexts
+            dart run tool/smoke.dart "$base" --context default \
+              --origin https://evil.example --expect-refusal || fail
             docker rm -f smoke
             echo "::endgroup::"
           done

@@ -289,6 +289,13 @@ class _MyHomePageState extends State<MyHomePage>
   List<SubscriptionInfo> subscriptions = [];
   // Previously-used connection targets, offered by the Host field's dropdown.
   List<ConnectionHistoryEntry> connectionHistory = [];
+  // The Docker image's NATS CLI contexts (empty everywhere else), and the one
+  // the connection fields are set to, if any -- see lib/tcp_relay.dart.
+  List<RelayContext> relayContexts = [];
+  RelayContext? selectedRelayContext;
+  // Bumped to rebuild the Host field with a new initial value when a context
+  // is preselected after the field was first built.
+  int _hostFieldGeneration = 0;
   // Controller (rather than initialValue) so a history selection can push a
   // new value into the Port field visibly -- see _selectHistoryEntry.
   late TextEditingController portController;
@@ -534,6 +541,9 @@ class _MyHomePageState extends State<MyHomePage>
     portController = TextEditingController(text: widget.port);
     _nextColorIndex = subscriptions.length;
     updateFullUri();
+    if (kIsWeb && tcpRelayAvailable) {
+      _loadRelayContexts();
+    }
     _tabController = TabController(length: _visibleTabCount, vsync: this);
     _listScrollController.addListener(_updateJumpToTopVisibility);
     super.initState();
@@ -1176,8 +1186,14 @@ class _MyHomePageState extends State<MyHomePage>
       // connection goes over a WebSocket to the image's own relay, which
       // opens the TCP connection (see lib/tcp_relay.dart).
       final viaTcpRelay = kIsWeb && scheme == 'nats://';
-      Uri uri =
-          viaTcpRelay ? tcpRelayUri(Uri.base, host, port) : Uri.parse(fullUri);
+      // Connecting as one of the image's contexts: the relay supplies the
+      // server, credentials and TLS, so none of this page's auth applies.
+      final relayContext = viaTcpRelay ? selectedRelayContext : null;
+      Uri uri = relayContext != null
+          ? tcpRelayContextUri(Uri.base, relayContext.name)
+          : viaTcpRelay
+              ? tcpRelayUri(Uri.base, host, port)
+              : Uri.parse(fullUri);
       _statusSub = natsClient.statusStream.listen((Status event) {
         debugPrint('Connection status event $event');
         currentStatus = event;
@@ -1190,7 +1206,10 @@ class _MyHomePageState extends State<MyHomePage>
         switch (event) {
           case Status.connected:
             setStateConnected();
-            _recordConnectionHistory(scheme, host, port);
+            // A context is always listed, so it isn't added to the history.
+            if (relayContext == null) {
+              _recordConnectionHistory(scheme, host, port);
+            }
             _hasEverConnectedThisSession = true;
             stateString = constants.connected;
             if (natsClient.info?.tlsRequired == true) {
@@ -1245,25 +1264,30 @@ class _MyHomePageState extends State<MyHomePage>
       // needs `client.seed` set so dart_nats can sign the server's nonce
       // challenge); credentials files are loaded directly on the client,
       // which derives its own jwt/sig from them.
-      ConnectOption? authConnectOption = buildAuthConnectOption(
-        method: authMethod,
-        username: authUsername,
-        password: authPassword,
-        token: authToken,
-        nkeySeed: authNkeySeed,
-      );
-      if (authMethod == AuthMethod.token && authToken.isNotEmpty) {
-        // Read the token afresh on every connect attempt rather than only
-        // the one captured now, so a token changed in Security Settings
-        // (e.g. a rotated one) is used by the next reconnect without a
-        // manual Disconnect/Connect.
-        natsClient.authTokenHandler = () => authToken;
-      }
-      if (authMethod == AuthMethod.nkeySeed && authNkeySeed.isNotEmpty) {
-        natsClient.seed = authNkeySeed;
-      } else if (authMethod == AuthMethod.credentialsFile &&
-          authCredsFileBytes != null) {
-        natsClient.loadCredentials(utf8.decode(authCredsFileBytes!));
+      ConnectOption? authConnectOption = relayContext != null
+          ? null
+          : buildAuthConnectOption(
+              method: authMethod,
+              username: authUsername,
+              password: authPassword,
+              token: authToken,
+              nkeySeed: authNkeySeed,
+            );
+      // As a context, the relay authenticates; this page's auth stays unused.
+      if (relayContext == null) {
+        if (authMethod == AuthMethod.token && authToken.isNotEmpty) {
+          // Read the token afresh on every connect attempt rather than only
+          // the one captured now, so a token changed in Security Settings
+          // (e.g. a rotated one) is used by the next reconnect without a
+          // manual Disconnect/Connect.
+          natsClient.authTokenHandler = () => authToken;
+        }
+        if (authMethod == AuthMethod.nkeySeed && authNkeySeed.isNotEmpty) {
+          natsClient.seed = authNkeySeed;
+        } else if (authMethod == AuthMethod.credentialsFile &&
+            authCredsFileBytes != null) {
+          natsClient.loadCredentials(utf8.decode(authCredsFileBytes!));
+        }
       }
 
       // finally, make the connection attempt. The heartbeat PING interval
@@ -1438,11 +1462,72 @@ class _MyHomePageState extends State<MyHomePage>
     _persistConnectionHistory();
   }
 
+  /// Loads the Docker image's NATS CLI contexts and preselects the one the
+  /// container chose, so Connect works without typing anything.
+  Future<void> _loadRelayContexts() async {
+    final before = (scheme, host, port);
+    final (:contexts, :refusal) = await fetchRelayContexts(Uri.base);
+    if (!mounted) return;
+    if (refusal != null) {
+      // A setup problem to fix, so it stays long enough to read.
+      showSnackBar('NATS contexts are not available on this page: $refusal',
+          duration: const Duration(seconds: 15),
+          action: SnackBarAction(label: 'Dismiss', onPressed: () {}));
+    }
+    if (contexts.isEmpty) return;
+    setState(() => relayContexts = contexts);
+    final preselect =
+        contexts.where((c) => c.selected && c.error == null).firstOrNull;
+    // Not over anything typed while the list was loading.
+    if (preselect != null &&
+        currentStatus == Status.disconnected &&
+        (scheme, host, port) == before) {
+      _useRelayContext(preselect, rebuildHostField: true);
+    }
+  }
+
+  /// Points the connection fields at [context]: connecting then goes through
+  /// the relay as that context, with its credentials and TLS settings.
+  void _useRelayContext(RelayContext context, {bool rebuildHostField = false}) {
+    setState(() {
+      selectedRelayContext = context;
+      scheme = 'nats://';
+      host = context.host;
+      port = context.port;
+      if (rebuildHostField) _hostFieldGeneration++;
+    });
+    portController.text = context.port;
+    updateFullUri();
+  }
+
+  /// Editing the connection fields away from the selected context's server
+  /// turns them back into a plain connection.
+  void _dropRelayContextIfChanged() {
+    final context = selectedRelayContext;
+    if (context == null) return;
+    if (scheme != 'nats://' || host != context.host || port != context.port) {
+      setState(() => selectedRelayContext = null);
+    }
+  }
+
   /// Fills scheme + host + port from a chosen history entry. The Autocomplete
   /// writes the host into its own field; the scheme dropdown picks up the new
   /// value via its ValueKey(scheme), and the Port field via portController.
   void _selectHistoryEntry(ConnectionHistoryEntry entry) {
+    final context =
+        relayContexts.where((c) => c.name == entry.contextName).firstOrNull;
+    if (context != null && context.error != null) {
+      // Unusable (picked with the keyboard: its row can't be tapped). Put
+      // back the host Autocomplete already wrote into the field.
+      setState(() => _hostFieldGeneration++);
+      return;
+    }
+    if (context != null) {
+      _useRelayContext(context);
+      return;
+    }
     setState(() {
+      selectedRelayContext = null;
       scheme = entry.scheme;
       host = entry.host;
       port = entry.port;
@@ -1458,9 +1543,17 @@ class _MyHomePageState extends State<MyHomePage>
   /// the options iterable Autocomplete passes in, in lock-step with its
   /// built-in highlight (see [_ConnectionHistoryOptions]).
   Widget _buildHostField() {
+    // The Docker image's contexts are listed first, then the history.
+    final contextEntries = [
+      for (final c in relayContexts)
+        ConnectionHistoryEntry(
+            scheme: 'nats://', host: c.host, port: c.port, contextName: c.name),
+    ];
+    final relayContext = selectedRelayContext;
     return Autocomplete<ConnectionHistoryEntry>(
+      key: ValueKey('host-$_hostFieldGeneration'),
       displayStringForOption: (entry) => entry.host,
-      initialValue: TextEditingValue(text: widget.host),
+      initialValue: TextEditingValue(text: host),
       optionsBuilder: (TextEditingValue value) {
         // No history while connected -- the field is disabled too.
         if (currentStatus != Status.disconnected) {
@@ -1470,11 +1563,12 @@ class _MyHomePageState extends State<MyHomePage>
         // Show the whole list on focus / while the box still shows the
         // committed host; otherwise substring-filter on host or full URI.
         if (query.isEmpty || query == host.toLowerCase()) {
-          return connectionHistory;
+          return [...contextEntries, ...connectionHistory];
         }
-        return connectionHistory.where((e) =>
+        return [...contextEntries, ...connectionHistory].where((e) =>
             e.host.toLowerCase().contains(query) ||
-            e.fullUri.toLowerCase().contains(query));
+            e.fullUri.toLowerCase().contains(query) ||
+            (e.contextName?.toLowerCase().contains(query) ?? false));
       },
       onSelected: _selectHistoryEntry,
       fieldViewBuilder: (context, textController, focusNode, onFieldSubmitted) {
@@ -1485,19 +1579,23 @@ class _MyHomePageState extends State<MyHomePage>
           onChanged: (value) {
             host = value;
             updateFullUri();
+            _dropRelayContextIfChanged();
           },
           // Plain Enter selects the highlighted history row.
           onFieldSubmitted: (_) => onFieldSubmitted(),
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
+          decoration: InputDecoration(
+            border: const OutlineInputBorder(),
             hintText: 'Host',
-            labelText: 'Host',
+            labelText: relayContext == null
+                ? 'Host'
+                : 'Host (context: ${relayContext.name})',
           ),
         );
       },
       optionsViewBuilder: (context, onSelected, options) {
         return _ConnectionHistoryOptions(
           options: options.toList(),
+          contexts: relayContexts,
           onSelected: onSelected,
           onDelete: _deleteHistoryEntry,
           onClear: _clearConnectionHistory,
@@ -3109,6 +3207,7 @@ class _MyHomePageState extends State<MyHomePage>
                             : (value) {
                                 scheme = value!;
                                 updateFullUri();
+                                _dropRelayContextIfChanged();
                               },
                         hint: const Text('Scheme'),
                       ),
@@ -3139,6 +3238,7 @@ class _MyHomePageState extends State<MyHomePage>
                         onChanged: (value) {
                           port = value;
                           updateFullUri();
+                          _dropRelayContextIfChanged();
                         },
                         decoration: const InputDecoration(
                           border: OutlineInputBorder(),
@@ -3690,12 +3790,16 @@ class _MyHomePageState extends State<MyHomePage>
 class _ConnectionHistoryOptions extends StatefulWidget {
   const _ConnectionHistoryOptions({
     required this.options,
+    this.contexts = const [],
     required this.onSelected,
     required this.onDelete,
     required this.onClear,
   });
 
   final List<ConnectionHistoryEntry> options;
+
+  /// The Docker image's contexts, to describe the context rows in [options].
+  final List<RelayContext> contexts;
   final AutocompleteOnSelected<ConnectionHistoryEntry> onSelected;
   final ValueChanged<ConnectionHistoryEntry> onDelete;
   final VoidCallback onClear;
@@ -3741,6 +3845,36 @@ class _ConnectionHistoryOptionsState extends State<_ConnectionHistoryOptions> {
     super.dispose();
   }
 
+  bool get _hasHistory => _visibleOptions.any((e) => e.contextName == null);
+
+  RelayContext? _contextOf(ConnectionHistoryEntry entry) =>
+      widget.contexts.where((c) => c.name == entry.contextName).firstOrNull;
+
+  Widget _contextTitle(ConnectionHistoryEntry entry) => Row(children: [
+        const Icon(Icons.badge_outlined, size: 16),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text('Context: ${entry.contextName}',
+              overflow: TextOverflow.ellipsis),
+        ),
+      ]);
+
+  Widget _contextSubtitle(
+      ConnectionHistoryEntry entry, ColorScheme colorScheme) {
+    final context = _contextOf(entry);
+    final error = context?.error;
+    if (error != null) {
+      return Text('Unusable: $error',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: colorScheme.error));
+    }
+    final description = context?.description ?? '';
+    final server = context?.server ?? entry.fullUri;
+    return Text(description.isEmpty ? server : '$description - $server',
+        overflow: TextOverflow.ellipsis);
+  }
+
   void _handleDelete(ConnectionHistoryEntry entry) {
     widget.onDelete(entry);
     setState(() {
@@ -3750,7 +3884,9 @@ class _ConnectionHistoryOptionsState extends State<_ConnectionHistoryOptions> {
 
   void _handleClear() {
     widget.onClear();
-    setState(() => _visibleOptions = []);
+    // Contexts aren't history: they stay.
+    setState(() => _visibleOptions =
+        _visibleOptions.where((e) => e.contextName != null).toList());
   }
 
   @override
@@ -3809,18 +3945,27 @@ class _ConnectionHistoryOptionsState extends State<_ConnectionHistoryOptions> {
                       selected: highlight,
                       selectedTileColor:
                           colorScheme.onSurface.withValues(alpha: 0.08),
-                      title:
-                          Text(entry.fullUri, overflow: TextOverflow.ellipsis),
+                      title: entry.contextName == null
+                          ? Text(entry.fullUri, overflow: TextOverflow.ellipsis)
+                          : _contextTitle(entry),
+                      subtitle: entry.contextName == null
+                          ? null
+                          : _contextSubtitle(entry, colorScheme),
+                      // An unusable context is listed with its reason, but
+                      // can't be picked.
+                      enabled: _contextOf(entry)?.error == null,
                       onTap: () => widget.onSelected(entry),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.close, size: 18),
-                        tooltip: 'Remove',
-                        onPressed: () => _handleDelete(entry),
-                      ),
+                      trailing: entry.contextName != null
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.close, size: 18),
+                              tooltip: 'Remove',
+                              onPressed: () => _handleDelete(entry),
+                            ),
                     );
                   }),
-                if (_visibleOptions.isNotEmpty) const Divider(height: 1),
-                if (_visibleOptions.isNotEmpty)
+                if (_hasHistory) const Divider(height: 1),
+                if (_hasHistory)
                   ListTile(
                     dense: true,
                     leading: Icon(Icons.delete_sweep, color: colorScheme.error),

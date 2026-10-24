@@ -15,7 +15,7 @@ Future<ServerSocket> fakeServer(String? greeting) async {
   server.listen((socket) {
     if (greeting != null) socket.add(utf8.encode(greeting));
     socket.listen((data) {
-      if (utf8.decode(data).contains('PING')) {
+      if (utf8.decode(data, allowMalformed: true).contains('PING')) {
         socket.add(utf8.encode('PONG\r\n'));
       }
     }, onError: (Object _) {});
@@ -31,7 +31,7 @@ void main() {
   late HttpServer relayServer;
   final servers = <ServerSocket>[];
 
-  Future<void> startRelay([RelayConfig config = const RelayConfig()]) async {
+  Future<void> startRelay([RelayConfig? config]) async {
     relayServer = await shelf_io.serve(
         createHandler(webRoot: webRoot.path, relay: config, log: (_) {}),
         InternetAddress.loopbackIPv4,
@@ -103,18 +103,20 @@ void main() {
   });
 
   test('refuses a silent target after the INFO timeout', () async {
-    await startRelay(
-        const RelayConfig(infoTimeout: Duration(milliseconds: 200)));
+    await startRelay(RelayConfig(infoTimeout: Duration(milliseconds: 200)));
     final port = await target(null);
     final received = await receive('host=127.0.0.1&port=$port');
     expect(received, contains('did not answer like a NATS server'));
   });
 
-  test('refuses a TLS-required server', () async {
+  test('attempts TLS with a TLS-required server, and reports failure',
+      () async {
     await startRelay();
+    // Asks for TLS, then never does the handshake.
     final port = await target('INFO {"tls_required":true}\r\n');
-    final received = await receive('host=127.0.0.1&port=$port');
-    expect(received, contains('requires TLS'));
+    final received = await receive('host=127.0.0.1&port=$port',
+        wait: const Duration(seconds: 8));
+    expect(received, contains('TLS with 127.0.0.1:$port'));
   });
 
   test('refuses an unreachable target', () async {
@@ -164,7 +166,7 @@ void main() {
 
   test('refuses every relay connection, with a reason, when disabled',
       () async {
-    await startRelay(const RelayConfig(enabled: false));
+    await startRelay(RelayConfig(enabled: false));
     final port = await target(natsInfo);
     final received = await receive('host=127.0.0.1&port=$port');
     expect(received, startsWith('-ERR'));
