@@ -169,6 +169,7 @@ spec:
 - Mount the Secret as a directory, not with `subPath`: only a directory mount picks up a rotated Secret.
 - `NATS_URL` and friends work from a Secret through `env`/`envFrom` as well.
 - Behind an ingress: put sign-in in front of it (for example oauth2-proxy or your ingress's own auth), and with contexts set `NATS_UI_ALLOWED_ORIGINS` to the page's address. A k3d `*.localhost` host name needs no setting. The relay pings the browser every 30 seconds, so ingress idle timeouts don't drop quiet sessions.
+- Under a path, such as `http://localhost/nats/`: route the prefix to the container and strip it (Traefik's StripPrefix, or ingress-nginx's `rewrite-target`). The page uses only relative URLs, so no other setting is needed. Redirect `/nats` to `/nats/`, because without the trailing slash the browser resolves those URLs from `/`.
 
 ## Which servers the relay connects to
 - It connects to any server that answers like a NATS server, and to every context's servers.

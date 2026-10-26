@@ -13,6 +13,9 @@ import 'package:web_socket_channel/io.dart';
 ///     dart run tool/smoke.dart <image base url> --context <name>
 ///     dart run tool/smoke.dart http://127.0.0.1:8080 127.0.0.1 4222
 ///
+/// Under a path prefix, give the base URL with a trailing slash, e.g.
+/// `http://localhost/nats/`.
+///
 /// `--origin <url>` connects as a page from that origin would, and
 /// `--expect-refusal` passes only if the relay refuses the connection.
 Future<void> main(List<String> arguments) async {
@@ -36,7 +39,7 @@ Future<void> main(List<String> arguments) async {
       : {'host': args[1], 'port': args[2]};
 
   final http = HttpClient();
-  final request = await http.getUrl(base.resolve('/'));
+  final request = await http.getUrl(base.resolve('./'));
   final response = await request.close();
   final body = await response.transform(utf8.decoder).join();
   http.close();
@@ -44,10 +47,16 @@ Future<void> main(List<String> arguments) async {
     throw StateError('GET / returned ${response.statusCode}, '
         'not the Flutter web build');
   }
+  // An absolute <base href> would send the page's requests outside a proxy's
+  // path prefix; see web/index.html.
+  if (body.contains('<base href="/')) {
+    throw StateError('the page has an absolute <base href>, so it would '
+        'break when served under a path prefix');
+  }
   print('web build served');
 
   final relay =
-      base.resolve('/nats-tcp').replace(scheme: 'ws', queryParameters: query);
+      base.resolve('nats-tcp').replace(scheme: 'ws', queryParameters: query);
   final ws = IOWebSocketChannel.connect(relay,
       headers: {if (origin != null) 'Origin': origin});
   await ws.ready;
