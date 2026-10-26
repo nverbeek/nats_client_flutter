@@ -1,3 +1,14 @@
+# 1.0.21
+
+## Bug Fixes
+
+- **Docker image under a path prefix**: the web app now works behind a reverse proxy that serves it under a path, such as Traefik at `http://localhost/nats/`, with no changes. Before, the page loaded its scripts and assets from the site root instead and stayed blank, unless you mounted a patched `index.html`; that override is no longer needed. Redirect `/nats` to `/nats/` in the proxy, since the trailing slash matters. See the README's Kubernetes section.
+
+## Maintenance & Dependencies
+
+- The web app's `index.html` uses Flutter's current startup script (`flutter_bootstrap.js`) instead of the deprecated `loadEntrypoint` code.
+- The Docker smoke test can test an image under a path prefix, and fails if the page gets an absolute `<base href>` back.
+
 # 1.0.20
 
 ## New Features
