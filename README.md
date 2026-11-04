@@ -54,6 +54,7 @@ This application currently supports Windows, Linux, macOS and Web platforms. Dow
   - Upload, download, and delete objects (blobs/files) of any size — large uploads are chunked automatically, and downloads are verified against the object's SHA-256 digest
   - Object list is a snapshot refreshed on demand (no live-update mechanism, unlike Key-Value Stores)
 - **Service Discovery support** (optional, **off by default** — turn it on in Settings): discovers [NATS Microservices](https://docs.nats.io/using-nats/developer/services) (the ADR-32 "Services API" convention) currently running and reachable on the account, showing each instance's endpoints and per-endpoint request/error/latency stats. Read-only/discovery-only — this app doesn't host services of its own.
+- **Server monitoring** (optional, **off by default** — turn it on in Settings): a Server tab that polls the connected server's HTTP monitoring endpoint (`/varz`, `/connz`) for its identity, load, a live throughput chart and a server-sorted, paged list of client connections. Needs the server's monitoring port (`-m 8222`).
 - **Update notifications** (optional, on by default): checks this repo's GitHub Releases on startup and shows a small dismissible popover with a link if a newer version is available. Nothing downloads or installs automatically; it just tells you a new build exists. Microsoft Store installs skip this check, since the Store handles their updates. Homebrew users can also run `brew upgrade`.
 
 # Screenshots
@@ -173,7 +174,7 @@ spec:
 
 ## Which servers the relay connects to
 - It connects to any server that answers like a NATS server, and to every context's servers.
-- `NATS_TCP_ALLOWED_HOSTS` limits the servers you can reach by typing a host: a comma-separated list of hosts or `host:port` entries. Contexts are always allowed.
+- `NATS_TCP_ALLOWED_HOSTS` limits the servers you can reach by typing a host: a comma-separated list of hosts or `host:port` entries. Contexts are always allowed. It also applies to the Server tab, which the image fetches through its own server: a bare host covers both ports, but a `host:port` entry only covers that port, so list the monitoring port too (`nats-prod:4222,nats-prod:8222`).
   ```
   docker run -d -p 8080:8080 -e NATS_TCP_ALLOWED_HOSTS=nats-prod,nats-dev:4222 nverbeek/nats-client-flutter
   ```
@@ -186,7 +187,7 @@ This project has two test suites:
   ```
   flutter test test/
   ```
-- **`integration_test/`** — end-to-end tests that drive the real app against a real, locally-running `nats-server`: messaging, JetStream, Key-Value, Object Store, Services, Export/Replay, and each authentication method. See [integration_test/README.md](./integration_test/README.md) for starting the servers, then run each file on its own, e.g.:
+- **`integration_test/`** — end-to-end tests that drive the real app against a real, locally-running `nats-server`: messaging, JetStream, Key-Value, Object Store, Services, Server monitoring, Export/Replay, and each authentication method. See [integration_test/README.md](./integration_test/README.md) for starting the servers, then run each file on its own, e.g.:
   ```
   flutter test integration_test/live_messages_test.dart -d windows
   ```

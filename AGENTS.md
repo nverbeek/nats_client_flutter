@@ -1,6 +1,6 @@
 # AGENTS.md
 
-NATS Client UI: a Flutter desktop (Windows, macOS, Linux) and web app for watching and publishing NATS messages and managing JetStream, Key-Value, Object Store and Services. Desktop supports `nats://` (TCP) and `ws://`. Web supports `ws://` only, except in the Docker image, whose server relays `nats://` over TCP.
+NATS Client UI: a Flutter desktop (Windows, macOS, Linux) and web app for watching and publishing NATS messages and managing JetStream, Key-Value, Object Store and Services, plus a Server tab that reads nats-server's HTTP monitoring endpoint. Desktop supports `nats://` (TCP) and `ws://`. Web supports `ws://` only, except in the Docker image, whose server relays `nats://` over TCP.
 
 ## Commands
 
@@ -18,7 +18,7 @@ CI (`.github/workflows/build.yml`) runs all of the above on every push and gates
 
 ## Where things are
 
-`lib/` is flat. Files are named by feature prefix (`jetstream_`, `kv_`, `object_store_`, `service_discovery_`) and role:
+`lib/` is flat. Files are named by feature prefix (`jetstream_`, `kv_`, `object_store_`, `service_discovery_`, `server_monitor_`) and role:
 
 - `*_manager.dart`: thin, testable wrapper around `dart_nats` calls. Tests fake these.
 - `*_dashboard.dart`: a feature tab's main widget. Each feature tab has a Settings toggle.
@@ -47,6 +47,7 @@ Other docs (read the one that matches your task before starting):
 - **Shared chip styling** lives in `subject_chip_style.dart`. The subscription-color setting only gates rendering: `colorIndex` assignment stays untouched, and a hidden color reserves no space.
 - **Connection history** is recorded only on `Status.connected`, never on an attempt.
 - **Dashboards don't keep state** across tab switches. They re-sync after a real reconnect through `reconnectSignal` (`reconnect_detector.dart`). Otherwise listings use explicit Refresh. Object Store and Services have no live watch.
+- **The Server tab** (`server_monitor.dart`, no `dart_nats`: plain HTTP to the monitoring port) polls only while mounted, so leaving the tab stops it. Its chart history lives in `ServerMonitorSession`, which `main.dart` creates per connection only while the tab is enabled. `/connz` is fetched every 5th poll because it's expensive for the server; sorting and paging are the server's, so don't add client-side sort or filter on a single page.
 - **When typed `dart_nats` classes drop fields the server sends** (e.g. `ack_wait`, KV TTL, `pause_until`), the managers read the raw `$JS.API.*` JSON. See `JetStreamManager.consumerDetail()`.
 - **Update docs alongside UI changes.** A user-visible change updates `assets/app_help.md`, and the README's feature list if it's a feature.
 

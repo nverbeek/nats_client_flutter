@@ -5,7 +5,7 @@
 #
 # Requires the `nats` CLI (https://github.com/nats-io/natscli) on PATH,
 # pointed at a JetStream-enabled server, e.g.:
-#   docker run -d --name nats-js -p 4222:4222 -p 8222:8222 nats:latest -js
+#   docker run -d --name nats-js -p 4222:4222 -p 8222:8222 nats:latest -js -m 8222
 #
 # Must run under PowerShell 7+ (`pwsh`), not Windows PowerShell 5.1
 # (`powershell.exe`): Windows PowerShell's Desktop edition prepends a UTF-8

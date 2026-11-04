@@ -7,7 +7,7 @@
 #
 # Requires the `nats` CLI (https://github.com/nats-io/natscli) on PATH,
 # pointed at a JetStream-enabled server, e.g.:
-#   docker run -d --name nats-js -p 4222:4222 -p 8222:8222 nats:latest -js
+#   docker run -d --name nats-js -p 4222:4222 -p 8222:8222 nats:latest -js -m 8222
 #
 # Must run under PowerShell 7+ (`pwsh`), not Windows PowerShell 5.1 — see
 # jetstream_demo.ps1's identical note on why (BOM corruption of values piped

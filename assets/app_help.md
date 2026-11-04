@@ -17,6 +17,9 @@ The application provides a settings dialog (⚙️ button in the toolbar) with t
 - **Enable Key-Value Stores**: Shows or hides the Key-Value Stores tab (see below). On by default; same "just hides the UI" behavior as the JetStream toggle.
 - **Enable Object Store**: Shows or hides the Object Store tab (see below). On by default; same "just hides the UI" behavior as the JetStream toggle.
 - **Enable Service Discovery**: Shows or hides the Services tab (see below). **Off by default**, unlike the other three toggles — discovery actively publishes requests onto the account rather than just reading passively, and not every account has any services to find.
+- **Enable Server Monitoring**: Shows or hides the Server tab (see below). **Off by default**: it talks to the server's separate HTTP monitoring port, which has no authentication and is often not turned on. While it's on, two more settings appear:
+    - **Monitoring Port**: The server's monitoring port. Defaults to 8222. The host is always the one you're connected to.
+    - **Poll Every**: How often the Server tab refreshes while it's showing (1, 2, 5, 10 or 30 seconds). Defaults to 2 seconds.
 - **Check for Updates**: Controls whether the app checks GitHub for a newer release on startup (see Update Notifications below). On by default.
 - **Max Messages Kept**: Caps how many messages the Live Messages list holds at once (1k/5k/10k/25k/50k/100k, or **Unlimited**). Once the cap is reached, the oldest messages are dropped to make room for new ones. Defaults to 10k.
 - **Show Message Timestamps**: Shows a small arrival-time stamp on each Live Messages row. Off by default.
@@ -171,6 +174,26 @@ Discovery works by publishing a request to well-known `$SRV.*` subjects and coll
 - **Discover**: Fans a request out to every running service and populates the list as replies arrive.
 - Selecting a service instance fetches its endpoints (name and subject) and, alongside them, its request/error counts and average processing time per endpoint.
 - **Refresh** (in the detail pane): Re-fetches the selected instance's detail. If it no longer responds, the app tells you it may have stopped since the last Discover, rather than silently leaving stale data on screen.
+
+# Server
+When **Enable Server Monitoring** is turned on in Settings and you're connected, a **Server** tab appears. It shows the NATS server process itself, read from its HTTP monitoring endpoint (`/varz`, `/connz`, `/healthz`, `/gatewayz`) on the port set in Settings:
+
+- **Identity**: name, ID, version, Go version, uptime, JetStream, cluster, max payload, and whether auth and TLS are required. **Account Info** opens the same dialog as the JetStream tab.
+- **Load**: connections, subscriptions, CPU and memory, plus routes, gateways and leaf nodes.
+- **Throughput**: messages (or bytes) per second in and out over the last two minutes. The server only reports running totals, so each rate is the change between two polls; the chart fills in over its first two minutes.
+- **Connections**: one page of the server's client connections at a time. Sorting is done by the server, so only CID, Subs, Pending, Msgs in, Msgs out and Uptime can be sorted, and the server picks the direction (CID ascending, the rest largest first).
+
+The tab only polls while it's showing, and **Pause** stops it. The connections list refreshes every fifth poll (or right away when you sort or change page), because listing connections is the expensive call on a busy server.
+
+On a narrow window the identity panel moves behind a **Details** button, and on a very narrow one the connections become rows you tap to see the address, client and uptime.
+
+## Turning monitoring on
+nats-server only opens its monitoring port when asked: start it with `-m 8222`, or set `http_port: 8222` in its config. Without that, the tab shows **Can't reach the monitoring endpoint**; your NATS connection itself is unaffected.
+
+The monitoring endpoint has **no authentication**: anyone who can reach that port can read what this tab shows. Keep it off networks you don't trust.
+
+## In a browser
+The web version can reach the monitoring port directly, since nats-server allows any page to read it. The exception is a page loaded over https, which browsers don't let call a plain http address. The Docker image fetches through its own server instead (for `nats://` connections, contexts, and https pages), so the host you typed is resolved inside the container, the same as the NATS connection.
 
 # Keyboard Shortcuts
 
