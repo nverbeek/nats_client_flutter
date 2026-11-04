@@ -518,7 +518,7 @@ class ServerMonitorDashboardState extends State<ServerMonitorDashboard> {
     return ListView(
       padding: EdgeInsets.fromLTRB(padding, 16, padding, 20),
       children: [
-        _header(context, varz, compact),
+        _header(context, varz, layout),
         if (compact && _detailsOpen) ...[
           const SizedBox(height: 12),
           _detailsCard(context, session, varz, layout),
@@ -533,11 +533,15 @@ class ServerMonitorDashboardState extends State<ServerMonitorDashboard> {
     );
   }
 
-  Widget _header(BuildContext context, ServerVarz varz, bool compact) {
+  /// The server's name and status pills on the left, and how fresh the data
+  /// is plus the actions on the right. On a narrow tab the actions get a row
+  /// of their own, with "Updated" at its left.
+  Widget _header(BuildContext context, ServerVarz varz, _Layout layout) {
     final theme = Theme.of(context);
+    final compact = layout != _Layout.wide;
     final health = _health;
     final error = _error;
-    return Wrap(
+    final status = Wrap(
       spacing: 10,
       runSpacing: 8,
       crossAxisAlignment: WrapCrossAlignment.center,
@@ -564,38 +568,58 @@ class ServerMonitorDashboardState extends State<ServerMonitorDashboard> {
               ? 'Polling paused'
               : 'Polling every ${widget.pollInterval.inSeconds}s',
         ),
-        if (error != null)
-          Tooltip(
+      ],
+    );
+    final freshness = error != null
+        ? Tooltip(
             message: describeMonitorError(error, widget.session!.endpoint),
             child: Text('Last update failed',
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.error)),
           )
-        else
-          _UpdatedText(updatedAt: _updatedAt),
-        if (compact)
-          TextButton.icon(
-            key: const ValueKey('serverDetailsToggle'),
-            onPressed: () => setState(() => _detailsOpen = !_detailsOpen),
-            icon: Icon(_detailsOpen ? Icons.expand_less : Icons.expand_more),
-            label: const Text('Details'),
-          ),
-        if (compact && _accountInfoAvailable(varz))
-          IconButton(
-            tooltip: 'Account info',
-            onPressed: _showAccountInfo,
-            icon: const Icon(Icons.bar_chart),
-          ),
-        IconButton(
-          tooltip: _paused ? 'Resume polling' : 'Pause polling',
-          onPressed: _togglePause,
-          icon: Icon(_paused ? Icons.play_arrow : Icons.pause),
+        : _UpdatedText(updatedAt: _updatedAt);
+    final actions = <Widget>[
+      if (compact)
+        TextButton.icon(
+          key: const ValueKey('serverDetailsToggle'),
+          onPressed: () => setState(() => _detailsOpen = !_detailsOpen),
+          icon: Icon(_detailsOpen ? Icons.expand_less : Icons.expand_more),
+          label: const Text('Details'),
         ),
+      if (compact && _accountInfoAvailable(varz))
         IconButton(
-          tooltip: 'Refresh now',
-          onPressed: () => _poll(connzNow: true),
-          icon: const Icon(Icons.refresh),
+          tooltip: 'Account info',
+          onPressed: _showAccountInfo,
+          icon: const Icon(Icons.bar_chart),
         ),
+      IconButton(
+        tooltip: _paused ? 'Resume polling' : 'Pause polling',
+        onPressed: _togglePause,
+        icon: Icon(_paused ? Icons.play_arrow : Icons.pause),
+      ),
+      IconButton(
+        tooltip: 'Refresh now',
+        onPressed: () => _poll(connzNow: true),
+        icon: const Icon(Icons.refresh),
+      ),
+    ];
+    if (layout == _Layout.narrow) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          status,
+          const SizedBox(height: 4),
+          Row(children: [freshness, const Spacer(), ...actions]),
+        ],
+      );
+    }
+    return Row(
+      children: [
+        Expanded(child: status),
+        const SizedBox(width: 12),
+        freshness,
+        const SizedBox(width: 6),
+        ...actions,
       ],
     );
   }
@@ -746,28 +770,18 @@ class ServerMonitorDashboardState extends State<ServerMonitorDashboard> {
   }
 
   Widget _connectionsCard(BuildContext context, _Layout layout) {
-    final theme = Theme.of(context);
     return Card.outlined(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-            child: Text('Connections', style: theme.textTheme.titleSmall),
-          ),
-          ConnectionsTable(
-            page: _connz,
-            sort: _sort,
-            offset: _offset,
-            limit: _limit,
-            narrow: layout == _Layout.narrow,
-            onSort: (s) => _setConnzQuery(sort: s),
-            onOffset: (o) => _setConnzQuery(offset: o),
-            onLimit: (l) => _setConnzQuery(limit: l),
-          ),
-        ],
+      child: ConnectionsTable(
+        page: _connz,
+        sort: _sort,
+        offset: _offset,
+        limit: _limit,
+        narrow: layout == _Layout.narrow,
+        onSort: (s) => _setConnzQuery(sort: s),
+        onOffset: (o) => _setConnzQuery(offset: o),
+        onLimit: (l) => _setConnzQuery(limit: l),
       ),
     );
   }

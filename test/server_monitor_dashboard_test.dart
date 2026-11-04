@@ -237,6 +237,60 @@ void main() {
     await unmount(tester);
   });
 
+  testWidgets('the connections table is never narrower than its card',
+      (tester) async {
+    await pump(tester);
+    final card = tester.getRect(find
+        .ancestor(of: find.byType(DataTable), matching: find.byType(Card))
+        .first);
+    final table = tester.getRect(find.byType(DataTable));
+    // At least the card's width. The test font draws every letter as a wide
+    // square, so the exact fit is checked with real fonts in
+    // integration_test/server_monitor_test.dart instead.
+    expect(table.width, greaterThanOrEqualTo(card.width - 4));
+    await unmount(tester);
+  });
+
+  testWidgets('page controls are at the top of the connections card',
+      (tester) async {
+    await pump(tester);
+    final heading =
+        tester.getRect(find.byKey(const ValueKey('connectionsHeading')));
+    final next = tester.getRect(find.byTooltip('Next page'));
+    final table = tester.getRect(find.byType(DataTable));
+    expect(next.center.dy, closeTo(heading.center.dy, 12));
+    expect(next.bottom, lessThanOrEqualTo(table.top));
+    await unmount(tester);
+  });
+
+  testWidgets('updated, pause and refresh sit at the right of the header',
+      (tester) async {
+    await pump(tester);
+    final name = tester.getRect(find.text('v2.11.4'));
+    final refresh = tester.getRect(find.byTooltip('Refresh now'));
+    final pause = tester.getRect(find.byTooltip('Pause polling'));
+    final updated = tester.getRect(find.text('Updated just now'));
+    // Same row as the pills, pushed to the right edge of the main panel.
+    expect(refresh.center.dy, closeTo(name.center.dy, 12));
+    expect(refresh.right, greaterThan(1400 - 40));
+    expect(pause.right, lessThanOrEqualTo(refresh.left));
+    expect(updated.right, lessThanOrEqualTo(pause.left));
+    expect(updated.left, greaterThan(name.right + 200));
+    await unmount(tester);
+  });
+
+  testWidgets('narrow: the actions get a row of their own', (tester) async {
+    await pump(tester, width: 600);
+    final pill = tester.getRect(find.text('v2.11.4'));
+    final refresh = tester.getRect(find.byTooltip('Refresh now'));
+    final updated = tester.getRect(find.text('Updated just now'));
+    expect(refresh.top, greaterThan(pill.bottom));
+    expect(updated.center.dy, closeTo(refresh.center.dy, 12));
+    expect(updated.left, lessThan(100));
+    expect(refresh.right, greaterThan(600 - 40));
+    await unmount(tester);
+  });
+
   testWidgets('wide: identity panel on the left, no Details toggle',
       (tester) async {
     await pump(tester, width: 1400);

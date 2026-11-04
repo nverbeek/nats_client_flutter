@@ -47,10 +47,27 @@ class ConnectionsTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final page = this.page;
+    // Title and page controls share the top row, so paging never means
+    // scrolling past a page of rows first.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 6, 6, 2),
+          child: Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            runSpacing: 4,
+            children: [
+              Text('Connections',
+                  key: const ValueKey('connectionsHeading'),
+                  style: theme.textTheme.titleSmall),
+              _pager(context, page),
+            ],
+          ),
+        ),
         if (narrow) _sortPicker(context),
         if (page == null)
           const Padding(
@@ -66,8 +83,16 @@ class ConnectionsTable extends StatelessWidget {
           _list(context, page)
         else
           _table(context, page),
-        const Divider(height: 1),
-        _pager(context, page),
+        if (!narrow)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 6, 14, 8),
+            child: Text(
+              '/connz?sort=${sort.apiValue}&offset=$offset&limit=$limit',
+              style: theme.textTheme.bodySmall?.copyWith(
+                  fontFamily: 'monospace',
+                  color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ),
       ],
     );
   }
@@ -118,36 +143,48 @@ class ConnectionsTable extends StatelessWidget {
       ConnzSort.msgsTo,
       ConnzSort.uptime,
     ];
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        sortColumnIndex: columns.indexOf(sort),
-        sortAscending: sort.ascending,
-        headingRowHeight: 40,
-        dataRowMinHeight: 36,
-        dataRowMaxHeight: 40,
-        columnSpacing: 24,
-        columns: [
-          for (final c in columns)
-            c is ConnzSort ? sortable(c) : DataColumn(label: Text(c as String)),
-        ],
-        rows: [
-          for (final c in page.connections)
-            DataRow(cells: [
-              DataCell(Text('${c.cid}', style: mono)),
-              DataCell(Text(c.name.isEmpty ? '—' : c.name)),
-              DataCell(Text(c.address, style: mono)),
-              DataCell(Text(c.client)),
-              DataCell(Text(formatGroupedCount(c.subscriptions))),
-              DataCell(Text(formatBytes(c.pendingBytes))),
-              DataCell(Text(formatGroupedCount(c.inMsgs))),
-              DataCell(Text(formatGroupedCount(c.outMsgs))),
-              DataCell(Text(c.uptime == null
-                  ? '—'
-                  : formatConfiguredDuration(c.uptime!))),
-            ]),
-        ],
+    // At least as wide as the card, and scrolls sideways only when the
+    // columns need more room than that.
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minWidth: constraints.maxWidth),
+          child: _dataTable(context, page, columns, sortable, mono),
+        ),
       ),
+    );
+  }
+
+  Widget _dataTable(BuildContext context, ConnzPage page, List<Object> columns,
+      DataColumn Function(ConnzSort) sortable, TextStyle mono) {
+    return DataTable(
+      sortColumnIndex: columns.indexOf(sort),
+      sortAscending: sort.ascending,
+      headingRowHeight: 40,
+      dataRowMinHeight: 36,
+      dataRowMaxHeight: 40,
+      columnSpacing: 16,
+      horizontalMargin: 16,
+      columns: [
+        for (final c in columns)
+          c is ConnzSort ? sortable(c) : DataColumn(label: Text(c as String)),
+      ],
+      rows: [
+        for (final c in page.connections)
+          DataRow(cells: [
+            DataCell(Text('${c.cid}', style: mono)),
+            DataCell(Text(c.name.isEmpty ? '—' : c.name)),
+            DataCell(Text(c.address, style: mono)),
+            DataCell(Text(c.client)),
+            DataCell(Text(formatGroupedCount(c.subscriptions))),
+            DataCell(Text(formatBytes(c.pendingBytes))),
+            DataCell(Text(formatGroupedCount(c.inMsgs))),
+            DataCell(Text(formatGroupedCount(c.outMsgs))),
+            DataCell(Text(
+                c.uptime == null ? '—' : formatConfiguredDuration(c.uptime!))),
+          ]),
+      ],
     );
   }
 
@@ -186,7 +223,6 @@ class ConnectionsTable extends StatelessWidget {
   }
 
   Widget _pager(BuildContext context, ConnzPage? page) {
-    final theme = Theme.of(context);
     final total = page?.total ?? 0;
     final shown = page?.connections.length ?? 0;
     final range = total == 0
@@ -194,49 +230,39 @@ class ConnectionsTable extends StatelessWidget {
         : '${formatGroupedCount(offset + 1)}–'
             '${formatGroupedCount(offset + shown)} of '
             '${formatGroupedCount(total)}';
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      child: Wrap(
-        alignment: WrapAlignment.end,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 8,
-        children: [
-          if (!narrow)
-            Text(
-              '/connz?sort=${sort.apiValue}&offset=$offset&limit=$limit',
-              style: theme.textTheme.bodySmall?.copyWith(
-                  fontFamily: 'monospace',
-                  color: theme.colorScheme.onSurfaceVariant),
-            ),
-          const Text('Rows'),
-          DropdownButton<int>(
-            key: const ValueKey('connzPageSize'),
-            value: limit,
-            isDense: true,
-            items: [
-              for (final n in connzPageSizes)
-                DropdownMenuItem(value: n, child: Text('$n')),
-            ],
-            onChanged: (n) {
-              if (n != null) onLimit(n);
-            },
-          ),
-          Text(range),
-          IconButton(
-            tooltip: 'Previous page',
-            icon: const Icon(Icons.chevron_left),
-            onPressed: offset == 0
-                ? null
-                : () => onOffset((offset - limit).clamp(0, offset)),
-          ),
-          IconButton(
-            tooltip: 'Next page',
-            icon: const Icon(Icons.chevron_right),
-            onPressed:
-                offset + shown >= total ? null : () => onOffset(offset + limit),
-          ),
-        ],
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('Rows'),
+        const SizedBox(width: 8),
+        DropdownButton<int>(
+          key: const ValueKey('connzPageSize'),
+          value: limit,
+          isDense: true,
+          items: [
+            for (final n in connzPageSizes)
+              DropdownMenuItem(value: n, child: Text('$n')),
+          ],
+          onChanged: (n) {
+            if (n != null) onLimit(n);
+          },
+        ),
+        const SizedBox(width: 12),
+        Text(range),
+        IconButton(
+          tooltip: 'Previous page',
+          icon: const Icon(Icons.chevron_left),
+          onPressed: offset == 0
+              ? null
+              : () => onOffset((offset - limit).clamp(0, offset)),
+        ),
+        IconButton(
+          tooltip: 'Next page',
+          icon: const Icon(Icons.chevron_right),
+          onPressed:
+              offset + shown >= total ? null : () => onOffset(offset + limit),
+        ),
+      ],
     );
   }
 }

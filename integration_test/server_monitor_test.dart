@@ -39,6 +39,23 @@ void main() {
     expect(find.byType(DataTable), findsOneWidget);
     expect(tester.widget<DataTable>(find.byType(DataTable)).rows, isNotEmpty);
 
+    // With real fonts the table fits the card exactly at this width: it
+    // fills it, and needs no sideways scrolling.
+    final card = tester.getRect(find
+        .ancestor(of: find.byType(DataTable), matching: find.byType(Card))
+        .first);
+    expect(
+        tester.getRect(find.byType(DataTable)).width, closeTo(card.width, 4));
+    // Paging is at the top of the card, next to its title.
+    expect(
+        tester.getRect(find.byTooltip('Next page')).center.dy,
+        closeTo(
+            tester
+                .getRect(find.byKey(const ValueKey('connectionsHeading')))
+                .center
+                .dy,
+            12));
+
     // Sorting is the server's: the query line shows the new sort.
     final msgsIn = find.descendant(
         of: find.byType(DataTable), matching: find.text('Msgs in'));
