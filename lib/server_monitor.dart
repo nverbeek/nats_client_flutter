@@ -344,11 +344,16 @@ String describeMonitorError(Object error, MonitorEndpoint endpoint) {
   }
   final detail = error.detail;
   switch (error.kind) {
+    // Through the relay, its own words name the server it tried.
     case MonitorErrorKind.unreachable:
-      return 'No response from ${endpoint.label}.';
+      return endpoint is RelayMonitorEndpoint && detail != null
+          ? 'The relay reports: $detail.'
+          : 'No response from ${endpoint.label}.';
     case MonitorErrorKind.notMonitoring:
-      return '${endpoint.label} answered, but not as a NATS monitoring '
-          'endpoint. Check the port in Settings.';
+      return endpoint is RelayMonitorEndpoint && detail != null
+          ? 'The relay reports: $detail. Check the port in Settings.'
+          : '${endpoint.label} answered, but not as a NATS monitoring '
+              'endpoint. Check the port in Settings.';
     case MonitorErrorKind.mixedContent:
       return 'This page was loaded over https, so the browser blocks plain '
           'http requests to ${endpoint.label}.';
@@ -441,8 +446,16 @@ class ServerMonitorClient {
         json != null &&
         json['error'] is String &&
         json['status'] == null) {
+      // The relay answers 504 when the server didn't answer it, and 502
+      // when something else did; anything else is the relay saying no.
+      final reason = json['error'] as String;
       throw MonitorException(
-          MonitorErrorKind.relayRefused, json['error'] as String);
+          switch (response.statusCode) {
+            504 => MonitorErrorKind.unreachable,
+            502 => MonitorErrorKind.notMonitoring,
+            _ => MonitorErrorKind.relayRefused,
+          },
+          reason);
     }
     final healthAnswer = unhealthyIsAnswer && response.statusCode == 503;
     if (response.statusCode != 200 && !healthAnswer) {

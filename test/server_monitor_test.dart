@@ -279,6 +279,35 @@ void main() {
                   contains('NATS_TCP_ALLOWED_HOSTS'))));
     });
 
+    test("the relay's 504 and 502 mean unreachable and not monitoring", () {
+      final relay = RelayMonitorEndpoint.host(
+          Uri.parse('http://localhost:8080/'), 'nats-js', 8222);
+      expect(
+          clientFor(
+                  (_) async => http.Response(
+                      jsonEncode({'error': 'could not reach nats-js:8222'}),
+                      504),
+                  endpoint: relay)
+              .fetchVarz(),
+          throwsA(isA<MonitorException>()
+              .having((e) => e.kind, 'kind', MonitorErrorKind.unreachable)
+              .having((e) => e.detail, 'detail', contains('nats-js'))));
+      expect(
+          clientFor(
+                  (_) async => http.Response(
+                      jsonEncode({'error': 'not a monitoring endpoint'}), 502),
+                  endpoint: relay)
+              .fetchVarz(),
+          throwsMonitor(MonitorErrorKind.notMonitoring));
+      expect(
+          describeMonitorError(
+              const MonitorException(MonitorErrorKind.unreachable,
+                  'could not reach nats-js:8222 (Connection refused)'),
+              relay),
+          'The relay reports: could not reach nats-js:8222 '
+          '(Connection refused).');
+    });
+
     test('healthz: 200 is healthy, 503 is an answer with the reason', () async {
       final healthy =
           await clientFor((_) async => http.Response('{"status":"ok"}', 200))

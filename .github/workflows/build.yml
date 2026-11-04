@@ -488,11 +488,14 @@ jobs:
     env:
       IMG_NAME: nverbeek/nats-client-flutter
     services:
-      # For the image smoke test: the relay has to reach a real NATS server
+      # For the image smoke test: the relay has to reach a real NATS server,
+      # and its monitoring port for the nats-monitor proxy
       nats:
         image: nats:latest
         ports:
           - 4222:4222
+          - 8222:8222
+        command: -m 8222
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -584,7 +587,9 @@ jobs:
               curl -sf "$base/" > /dev/null && break
               sleep 1
             done
-            dart run tool/smoke.dart "$base" 127.0.0.1 4222 || fail
+            # Also /varz through nats-monitor, by host and as a context
+            dart run tool/smoke.dart "$base" 127.0.0.1 4222 --monitor 8222 || fail
+            dart run tool/smoke.dart "$base" --context default --monitor 8222 || fail
             for name in default userpass token nkey creds; do
               dart run tool/smoke.dart "$base" --context "$name" || fail
             done
