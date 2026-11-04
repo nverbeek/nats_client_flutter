@@ -4,7 +4,10 @@ import 'package:nats_client_flutter/settings_dialog.dart';
 
 void main() {
   SettingsValues initialValues(
-          {int maxMessages = 10000, int heartbeatInterval = 120}) =>
+          {int maxMessages = 10000,
+          int heartbeatInterval = 120,
+          bool serverMonitorEnabled = false,
+          int serverMonitorInterval = 2}) =>
       SettingsValues(
         fontSize: 14,
         retryInterval: 5,
@@ -13,6 +16,9 @@ void main() {
         kvEnabled: true,
         objectStoreEnabled: true,
         serviceDiscoveryEnabled: true,
+        serverMonitorEnabled: serverMonitorEnabled,
+        serverMonitorPort: 8222,
+        serverMonitorInterval: serverMonitorInterval,
         updateCheckEnabled: true,
         showSubscriptionColors: true,
         maxMessages: maxMessages,
@@ -20,18 +26,25 @@ void main() {
       );
 
   Widget buildDialog(void Function(SettingsValues) onSave,
-      {int initialMaxMessages = 10000, int initialHeartbeatInterval = 120}) {
+      {int initialMaxMessages = 10000,
+      int initialHeartbeatInterval = 120,
+      bool serverMonitorEnabled = false,
+      int serverMonitorInterval = 2}) {
     return MaterialApp(
       home: Scaffold(
         body: SettingsDialog(
           initial: initialValues(
               maxMessages: initialMaxMessages,
-              heartbeatInterval: initialHeartbeatInterval),
+              heartbeatInterval: initialHeartbeatInterval,
+              serverMonitorEnabled: serverMonitorEnabled,
+              serverMonitorInterval: serverMonitorInterval),
           onSave: onSave,
         ),
       ),
     );
   }
+
+  Finder saveButton() => find.widgetWithText(TextButton, 'Save');
 
   void noopSave(SettingsValues _) {}
 
@@ -48,15 +61,106 @@ void main() {
     final kvSwitch = switches[2];
     final objectStoreSwitch = switches[3];
     final serviceDiscoverySwitch = switches[4];
-    final updateCheckSwitch = switches[5];
-    final showTimestampsSwitch = switches[6];
+    final serverMonitorSwitch = switches[5];
+    final updateCheckSwitch = switches[6];
+    final showTimestampsSwitch = switches[7];
     expect(showSubscriptionColorsSwitch.value, isTrue);
     expect(jetStreamSwitch.value, isTrue);
     expect(kvSwitch.value, isTrue);
     expect(objectStoreSwitch.value, isTrue);
     expect(serviceDiscoverySwitch.value, isTrue);
+    expect(serverMonitorSwitch.value, isFalse);
     expect(updateCheckSwitch.value, isTrue);
     expect(showTimestampsSwitch.value, isFalse);
+    // The port and interval only show while monitoring is on.
+    expect(find.byKey(const ValueKey('monitorPortField')), findsNothing);
+  });
+
+  testWidgets('turning on Server Monitoring shows its port and interval',
+      (tester) async {
+    await tester.pumpWidget(buildDialog(noopSave));
+
+    final serverMonitorSwitchFinder = find.byType(Switch).at(5);
+    await tester.ensureVisible(serverMonitorSwitchFinder);
+    await tester.tap(serverMonitorSwitchFinder);
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('monitorPortField')), findsOneWidget);
+    expect(find.text('8222'), findsOneWidget);
+    expect(find.text('2 seconds'), findsOneWidget);
+  });
+
+  testWidgets('an invalid monitoring port disables Save until fixed',
+      (tester) async {
+    SettingsValues? saved;
+    await tester
+        .pumpWidget(buildDialog((v) => saved = v, serverMonitorEnabled: true));
+
+    final portField = find.byKey(const ValueKey('monitorPortField'));
+    await tester.ensureVisible(portField);
+    await tester.enterText(portField, '70000');
+    await tester.pump();
+    expect(find.text('Enter a port from 1 to 65535.'), findsOneWidget);
+    expect(tester.widget<TextButton>(saveButton()).onPressed, isNull);
+
+    await tester.enterText(portField, '9222');
+    await tester.pump();
+    expect(find.text('Enter a port from 1 to 65535.'), findsNothing);
+    await tester.ensureVisible(saveButton());
+    await tester.tap(saveButton());
+    await tester.pumpAndSettle();
+    expect(saved!.serverMonitorEnabled, isTrue);
+    expect(saved!.serverMonitorPort, 9222);
+  });
+
+  testWidgets('a bad port does not block Save once monitoring is off again',
+      (tester) async {
+    SettingsValues? saved;
+    await tester
+        .pumpWidget(buildDialog((v) => saved = v, serverMonitorEnabled: true));
+
+    final portField = find.byKey(const ValueKey('monitorPortField'));
+    await tester.ensureVisible(portField);
+    await tester.enterText(portField, 'abc');
+    await tester.pump();
+    final serverMonitorSwitchFinder = find.byType(Switch).at(5);
+    await tester.ensureVisible(serverMonitorSwitchFinder);
+    await tester.tap(serverMonitorSwitchFinder);
+    await tester.pump();
+
+    await tester.ensureVisible(saveButton());
+    await tester.tap(saveButton());
+    await tester.pumpAndSettle();
+    expect(saved!.serverMonitorEnabled, isFalse);
+    // The saved port is left as it was.
+    expect(saved!.serverMonitorPort, 8222);
+  });
+
+  testWidgets('saves a changed poll interval', (tester) async {
+    SettingsValues? saved;
+    await tester
+        .pumpWidget(buildDialog((v) => saved = v, serverMonitorEnabled: true));
+
+    await tester.ensureVisible(find.text('2 seconds'));
+    await tester.tap(find.text('2 seconds'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('10 seconds').last);
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(saveButton());
+    await tester.tap(saveButton());
+    await tester.pumpAndSettle();
+    expect(saved!.serverMonitorInterval, 10);
+  });
+
+  testWidgets(
+      'a persisted poll interval outside the standard options still shows '
+      'up as a selected item', (tester) async {
+    await tester.pumpWidget(buildDialog(noopSave,
+        serverMonitorEnabled: true, serverMonitorInterval: 7));
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('7 seconds'), findsOneWidget);
   });
 
   testWidgets('toggling Show Subscription Colors flips its switch',
@@ -127,7 +231,7 @@ void main() {
   testWidgets('toggling Check for Updates flips its switch', (tester) async {
     await tester.pumpWidget(buildDialog(noopSave));
 
-    final updateCheckSwitchFinder = find.byType(Switch).at(5);
+    final updateCheckSwitchFinder = find.byType(Switch).at(6);
     await tester.ensureVisible(updateCheckSwitchFinder);
     await tester.tap(updateCheckSwitchFinder);
     await tester.pump();
@@ -140,7 +244,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(buildDialog(noopSave));
 
-    final showTimestampsSwitchFinder = find.byType(Switch).at(6);
+    final showTimestampsSwitchFinder = find.byType(Switch).at(7);
     await tester.ensureVisible(showTimestampsSwitchFinder);
     await tester.tap(showTimestampsSwitchFinder);
     await tester.pump();
@@ -285,7 +389,7 @@ void main() {
     // occupies index 0 — see the widget-order comment in settings_dialog.dart.
     await tester.tap(find.byType(Switch).at(1));
     await tester.pump();
-    final showTimestampsSwitchFinder = find.byType(Switch).at(6);
+    final showTimestampsSwitchFinder = find.byType(Switch).at(7);
     await tester.ensureVisible(showTimestampsSwitchFinder);
     await tester.tap(showTimestampsSwitchFinder);
     await tester.pump();

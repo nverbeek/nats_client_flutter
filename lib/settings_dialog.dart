@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'constants.dart' as constants;
+
 /// Options offered by the "Max Messages Kept" dropdown, in display order.
 /// `0` is a sentinel meaning unlimited. If a persisted value isn't in this
 /// list (e.g. it was set by a future version, or migrated oddly), the
@@ -26,6 +28,15 @@ String formatHeartbeatInterval(int seconds) {
   return minutes == 1 ? '1 minute' : '$minutes minutes';
 }
 
+/// Why [value] isn't a usable monitoring port, or null if it is.
+String? validateMonitorPort(String value) {
+  final port = int.tryParse(value.trim());
+  if (port == null || port < 1 || port > 65535) {
+    return 'Enter a port from 1 to 65535.';
+  }
+  return null;
+}
+
 /// Every value the Settings dialog edits: what it opens with, and what it
 /// hands back to `onSave`.
 class SettingsValues {
@@ -36,6 +47,9 @@ class SettingsValues {
   final bool kvEnabled;
   final bool objectStoreEnabled;
   final bool serviceDiscoveryEnabled;
+  final bool serverMonitorEnabled;
+  final int serverMonitorPort;
+  final int serverMonitorInterval;
   final bool updateCheckEnabled;
   final bool showSubscriptionColors;
   final int maxMessages;
@@ -49,6 +63,9 @@ class SettingsValues {
     required this.kvEnabled,
     required this.objectStoreEnabled,
     required this.serviceDiscoveryEnabled,
+    required this.serverMonitorEnabled,
+    required this.serverMonitorPort,
+    required this.serverMonitorInterval,
     required this.updateCheckEnabled,
     required this.showSubscriptionColors,
     required this.maxMessages,
@@ -78,6 +95,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late bool tempKvEnabled;
   late bool tempObjectStoreEnabled;
   late bool tempServiceDiscoveryEnabled;
+  late bool tempServerMonitorEnabled;
+  late int tempServerMonitorInterval;
+  late final TextEditingController _monitorPortController;
+  String? _monitorPortError;
   late bool tempUpdateCheckEnabled;
   late bool tempShowSubscriptionColors;
   late int tempMaxMessages;
@@ -90,6 +111,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
   // heartbeatIntervalOptions plus, if needed, the persisted value (same
   // reasoning as _maxMessagesItems).
   late List<int> _heartbeatItems;
+  // serverMonitorIntervalOptions plus, if needed, the persisted value.
+  late List<int> _monitorIntervalItems;
 
   @override
   void initState() {
@@ -107,6 +130,16 @@ class _SettingsDialogState extends State<SettingsDialog> {
     tempKvEnabled = initial.kvEnabled;
     tempObjectStoreEnabled = initial.objectStoreEnabled;
     tempServiceDiscoveryEnabled = initial.serviceDiscoveryEnabled;
+    tempServerMonitorEnabled = initial.serverMonitorEnabled;
+    tempServerMonitorInterval = initial.serverMonitorInterval;
+    _monitorIntervalItems = [
+      ...constants.serverMonitorIntervalOptions,
+      if (!constants.serverMonitorIntervalOptions
+          .contains(tempServerMonitorInterval))
+        tempServerMonitorInterval,
+    ]..sort();
+    _monitorPortController =
+        TextEditingController(text: '${initial.serverMonitorPort}');
     tempUpdateCheckEnabled = initial.updateCheckEnabled;
     tempShowSubscriptionColors = initial.showSubscriptionColors;
     tempMaxMessages = initial.maxMessages;
@@ -119,6 +152,16 @@ class _SettingsDialogState extends State<SettingsDialog> {
             ...maxMessagesOptions.where((v) => v == 0 || v > tempMaxMessages),
           ];
   }
+
+  @override
+  void dispose() {
+    _monitorPortController.dispose();
+    super.dispose();
+  }
+
+  // A bad port only blocks Save while monitoring is on; with it off the
+  // field is hidden and the saved port is left as it was.
+  bool get _canSave => !tempServerMonitorEnabled || _monitorPortError == null;
 
   String _maxMessagesLabel(int value) {
     if (value == 0) return 'Unlimited';
@@ -309,6 +352,77 @@ class _SettingsDialogState extends State<SettingsDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                const Tooltip(
+                  message: "Shows a Server tab that polls the server's HTTP "
+                      'monitoring port (/varz, /connz). That port has no '
+                      'authentication and is off unless the server was '
+                      'started with -m or http_port.',
+                  child: Text('Enable Server Monitoring'),
+                ),
+                Switch(
+                  value: tempServerMonitorEnabled,
+                  onChanged: (v) {
+                    setState(() {
+                      tempServerMonitorEnabled = v;
+                    });
+                  },
+                ),
+              ],
+            ),
+            if (tempServerMonitorEnabled) ...[
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      key: const ValueKey('monitorPortField'),
+                      controller: _monitorPortController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: 'Monitoring Port',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                        errorText: _monitorPortError,
+                      ),
+                      onChanged: (v) {
+                        setState(() {
+                          _monitorPortError = validateMonitorPort(v);
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: DropdownButtonFormField<int>(
+                      key: const ValueKey('monitorIntervalField'),
+                      initialValue: tempServerMonitorInterval,
+                      decoration: const InputDecoration(
+                        labelText: 'Poll Every',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      items: [
+                        for (final seconds in _monitorIntervalItems)
+                          DropdownMenuItem(
+                              value: seconds,
+                              child: Text(seconds == 1
+                                  ? '1 second'
+                                  : '$seconds seconds')),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          tempServerMonitorInterval = value!;
+                        });
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
                 const Text('Check for Updates'),
                 Switch(
                   value: tempUpdateCheckEnabled,
@@ -375,23 +489,31 @@ class _SettingsDialogState extends State<SettingsDialog> {
           },
         ),
         TextButton(
+          onPressed: !_canSave
+              ? null
+              : () {
+                  widget.onSave(SettingsValues(
+                    fontSize: tempFontSize,
+                    retryInterval: tempRetryInterval,
+                    heartbeatInterval: tempHeartbeatInterval,
+                    jetStreamEnabled: tempJetStreamEnabled,
+                    kvEnabled: tempKvEnabled,
+                    objectStoreEnabled: tempObjectStoreEnabled,
+                    serviceDiscoveryEnabled: tempServiceDiscoveryEnabled,
+                    serverMonitorEnabled: tempServerMonitorEnabled,
+                    serverMonitorPort:
+                        validateMonitorPort(_monitorPortController.text) == null
+                            ? int.parse(_monitorPortController.text.trim())
+                            : widget.initial.serverMonitorPort,
+                    serverMonitorInterval: tempServerMonitorInterval,
+                    updateCheckEnabled: tempUpdateCheckEnabled,
+                    showSubscriptionColors: tempShowSubscriptionColors,
+                    maxMessages: tempMaxMessages,
+                    showTimestamps: tempShowTimestamps,
+                  ));
+                  Navigator.of(context).pop();
+                },
           child: const Text('Save'),
-          onPressed: () {
-            widget.onSave(SettingsValues(
-              fontSize: tempFontSize,
-              retryInterval: tempRetryInterval,
-              heartbeatInterval: tempHeartbeatInterval,
-              jetStreamEnabled: tempJetStreamEnabled,
-              kvEnabled: tempKvEnabled,
-              objectStoreEnabled: tempObjectStoreEnabled,
-              serviceDiscoveryEnabled: tempServiceDiscoveryEnabled,
-              updateCheckEnabled: tempUpdateCheckEnabled,
-              showSubscriptionColors: tempShowSubscriptionColors,
-              maxMessages: tempMaxMessages,
-              showTimestamps: tempShowTimestamps,
-            ));
-            Navigator.of(context).pop();
-          },
         ),
       ],
     );

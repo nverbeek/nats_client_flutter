@@ -17,6 +17,11 @@ const String tcpRelayPath = 'nats-tcp';
 /// Must match `contextsPath` in `docker/tcp_relay/lib/relay.dart`.
 const String tcpRelayContextsPath = 'contexts';
 
+/// The path of the relay's proxy to a NATS server's HTTP monitoring port,
+/// relative to the page. Must match `monitorPath` in
+/// `docker/tcp_relay/lib/relay.dart`.
+const String tcpRelayMonitorPath = 'nats-monitor';
+
 /// Prefix of every `-ERR` the relay sends when it refuses a target. Must
 /// match `relayErrorMarker` in `docker/tcp_relay/lib/relay.dart`.
 const String tcpRelayErrorMarker = 'NATS TCP relay:';
@@ -58,6 +63,29 @@ Uri tcpRelayContextUri(Uri pageBase, String name) {
     scheme: endpoint.scheme == 'https' ? 'wss' : 'ws',
     queryParameters: {'context': name},
   );
+}
+
+/// The relay URL that fetches monitoring [path] (`varz`, `connz`, …) from
+/// port [port] of [host], or of the server of the context named [context].
+/// Page-relative, like [tcpRelayUri]. [query] goes along for the relay to
+/// forward; it only passes on parameters it knows.
+Uri tcpRelayMonitorUri(Uri pageBase,
+    {String? host,
+    String? context,
+    required int port,
+    required String path,
+    Map<String, String> query = const {}}) {
+  assert((host == null) != (context == null));
+  final bareHost = host != null && host.startsWith('[') && host.endsWith(']')
+      ? host.substring(1, host.length - 1)
+      : host;
+  return pageBase.resolve(tcpRelayMonitorPath).replace(queryParameters: {
+    ...query,
+    'path': path,
+    if (bareHost != null) 'host': bareHost,
+    if (context != null) 'context': context,
+    'port': '$port',
+  });
 }
 
 /// A NATS CLI context the Docker image's relay can connect as. Only what's

@@ -82,6 +82,9 @@ const String prefJetStreamEnabled = "JETSTREAM_ENABLED";
 const String prefKvEnabled = "KV_ENABLED";
 const String prefObjectStoreEnabled = "OBJECT_STORE_ENABLED";
 const String prefServiceDiscoveryEnabled = "SERVICE_DISCOVERY_ENABLED";
+const String prefServerMonitorEnabled = "SERVER_MONITOR_ENABLED";
+const String prefServerMonitorPort = "SERVER_MONITOR_PORT";
+const String prefServerMonitorInterval = "SERVER_MONITOR_INTERVAL";
 const String prefUpdateCheckEnabled = "UPDATE_CHECK_ENABLED";
 const String prefShowSubscriptionColors = "SHOW_SUBSCRIPTION_COLORS";
 const String prefMaxMessages = "MAX_MESSAGES";
@@ -110,6 +113,15 @@ const bool defaultObjectStoreEnabled = true;
 // account rather than just reading passively, and not every account has any
 // ADR-32 services running to find.
 const bool defaultServiceDiscoveryEnabled = false;
+
+// Server tab defaults — off by default: it calls the server's HTTP
+// monitoring port, a different port from the NATS connection that's often
+// not enabled, and that port has no authentication of its own.
+const bool defaultServerMonitorEnabled = false;
+const int defaultServerMonitorPort = 8222;
+// Seconds between `/varz` polls while the Server tab is showing.
+const int defaultServerMonitorInterval = 2;
+const List<int> serverMonitorIntervalOptions = [1, 2, 5, 10, 30];
 
 // update check defaults
 const bool defaultUpdateCheckEnabled = true;

@@ -35,6 +35,8 @@ import 'reconnect_detector.dart';
 import 'replay_banner.dart';
 import 'replay_config_dialog.dart';
 import 'send_message_dialog.dart';
+import 'server_monitor.dart';
+import 'server_monitor_dashboard.dart';
 import 'help_dialog.dart';
 import 'service_discovery_dashboard.dart';
 import 'service_discovery_manager.dart';
@@ -427,6 +429,13 @@ class _MyHomePageState extends State<MyHomePage>
   final GlobalKey<ServiceDiscoveryDashboardState>
       _serviceDiscoveryDashboardKey = GlobalKey();
 
+  // Server tab
+  bool serverMonitorEnabled = constants.defaultServerMonitorEnabled;
+  int serverMonitorPort = constants.defaultServerMonitorPort;
+  int serverMonitorInterval = constants.defaultServerMonitorInterval;
+  final GlobalKey<ServerMonitorDashboardState> _serverMonitorDashboardKey =
+      GlobalKey();
+
   // Add a ScrollController for the ListView
   final ScrollController _listScrollController = ScrollController();
 
@@ -477,6 +486,9 @@ class _MyHomePageState extends State<MyHomePage>
   KvManager? _kvManager;
   ObjectStoreManager? _objectStoreManager;
   ServiceDiscoveryManager? _serviceDiscoveryManager;
+  // Only exists while the Server tab is enabled; see
+  // `_updateServerMonitorSession`.
+  ServerMonitorSession? _serverMonitorSession;
   bool isConnected = false;
   String connectionStateString = constants.disconnected;
   // Cancelled and reassigned on every `natsConnect` -- without this, a
@@ -575,6 +587,7 @@ class _MyHomePageState extends State<MyHomePage>
     }
     _pendingCount.dispose();
     _reconnectSignal.dispose();
+    _serverMonitorSession?.dispose();
     _filterFocusNode.dispose(); // Dispose focus nodes
     _findFocusNode.dispose();
     _messageListFocusNode.dispose();
@@ -628,6 +641,14 @@ class _MyHomePageState extends State<MyHomePage>
       serviceDiscoveryEnabled =
           prefs.getBool(constants.prefServiceDiscoveryEnabled) ??
               constants.defaultServiceDiscoveryEnabled;
+      serverMonitorEnabled =
+          prefs.getBool(constants.prefServerMonitorEnabled) ??
+              constants.defaultServerMonitorEnabled;
+      serverMonitorPort = prefs.getInt(constants.prefServerMonitorPort) ??
+          constants.defaultServerMonitorPort;
+      serverMonitorInterval =
+          prefs.getInt(constants.prefServerMonitorInterval) ??
+              constants.defaultServerMonitorInterval;
       updateCheckEnabled = prefs.getBool(constants.prefUpdateCheckEnabled) ??
           constants.defaultUpdateCheckEnabled;
       showSubscriptionColors =
@@ -800,6 +821,9 @@ class _MyHomePageState extends State<MyHomePage>
     prefs.setBool(constants.prefObjectStoreEnabled, objectStoreEnabled);
     prefs.setBool(
         constants.prefServiceDiscoveryEnabled, serviceDiscoveryEnabled);
+    prefs.setBool(constants.prefServerMonitorEnabled, serverMonitorEnabled);
+    prefs.setInt(constants.prefServerMonitorPort, serverMonitorPort);
+    prefs.setInt(constants.prefServerMonitorInterval, serverMonitorInterval);
     prefs.setBool(constants.prefUpdateCheckEnabled, updateCheckEnabled);
     prefs.setBool(constants.prefShowSubscriptionColors, showSubscriptionColors);
     prefs.setInt(constants.prefMaxMessages, maxMessages);
@@ -1023,15 +1047,49 @@ class _MyHomePageState extends State<MyHomePage>
     }
   }
 
-  /// Live Messages is always tab 0; JetStream, Key-Value, Object Store, and
-  /// Services each add one more tab, in that order, when their respective
-  /// settings toggle is on.
+  /// Live Messages is always tab 0; JetStream, Key-Value, Object Store,
+  /// Services and Server each add one more tab, in that order, when their
+  /// respective settings toggle is on.
   int get _visibleTabCount =>
       1 +
       (jetStreamEnabled ? 1 : 0) +
       (kvEnabled ? 1 : 0) +
       (objectStoreEnabled ? 1 : 0) +
-      (serviceDiscoveryEnabled ? 1 : 0);
+      (serviceDiscoveryEnabled ? 1 : 0) +
+      (serverMonitorEnabled ? 1 : 0);
+
+  /// Where the Server tab fetches from, for the connection in use. The Host,
+  /// Port and Scheme fields are locked while connected, so they still
+  /// describe it.
+  MonitorEndpoint _serverMonitorEndpoint() {
+    // In the Docker image a nats:// host is resolved inside the container,
+    // and a context's servers are never sent to the page, so the relay has
+    // to fetch for us; it also gets around an https page's mixed-content
+    // block.
+    final relay = kIsWeb &&
+        tcpRelayAvailable &&
+        (scheme == 'nats://' || Uri.base.scheme == 'https');
+    if (relay) {
+      final context = scheme == 'nats://' ? selectedRelayContext : null;
+      return context != null
+          ? RelayMonitorEndpoint.context(
+              Uri.base, context.name, serverMonitorPort)
+          : RelayMonitorEndpoint.host(Uri.base, host, serverMonitorPort);
+    }
+    return DirectMonitorEndpoint(host, serverMonitorPort,
+        blockedByMixedContent: kIsWeb && Uri.base.scheme == 'https');
+  }
+
+  /// Creates the Server tab's session for the current client, or drops it
+  /// while the tab is off, so a turned-off tab costs nothing. Called on every
+  /// connect and whenever the tab's settings change.
+  void _updateServerMonitorSession() {
+    _serverMonitorSession?.dispose();
+    _serverMonitorSession = null;
+    if (!serverMonitorEnabled || !_hasNatsClient) return;
+    _serverMonitorSession =
+        ServerMonitorSession(ServerMonitorClient(_serverMonitorEndpoint()));
+  }
 
   /// `TabController.length` is fixed at construction, but which tabs are
   /// visible can change at runtime (the JetStream/KV/Object Store/Services
@@ -1116,6 +1174,7 @@ class _MyHomePageState extends State<MyHomePage>
     _kvManager = KvManager(natsClient);
     _objectStoreManager = ObjectStoreManager(natsClient);
     _serviceDiscoveryManager = ServiceDiscoveryManager(natsClient);
+    _updateServerMonitorSession();
 
     // Set once a specific failure message has already been shown from
     // `onError` below, so the `connect()` failure that follows it doesn't
@@ -2346,6 +2405,9 @@ class _MyHomePageState extends State<MyHomePage>
             kvEnabled: kvEnabled,
             objectStoreEnabled: objectStoreEnabled,
             serviceDiscoveryEnabled: serviceDiscoveryEnabled,
+            serverMonitorEnabled: serverMonitorEnabled,
+            serverMonitorPort: serverMonitorPort,
+            serverMonitorInterval: serverMonitorInterval,
             updateCheckEnabled: updateCheckEnabled,
             showSubscriptionColors: showSubscriptionColors,
             maxMessages: maxMessages,
@@ -2354,7 +2416,14 @@ class _MyHomePageState extends State<MyHomePage>
           onSave: (values) {
             final updateCheckJustEnabled =
                 values.updateCheckEnabled && !updateCheckEnabled;
+            final serverMonitorChanged =
+                values.serverMonitorEnabled != serverMonitorEnabled ||
+                    values.serverMonitorPort != serverMonitorPort;
             setState(() {
+              serverMonitorEnabled = values.serverMonitorEnabled;
+              serverMonitorPort = values.serverMonitorPort;
+              serverMonitorInterval = values.serverMonitorInterval;
+              if (serverMonitorChanged) _updateServerMonitorSession();
               messageFontSize = values.fontSize;
               retryInterval = values.retryInterval;
               heartbeatInterval = values.heartbeatInterval;
@@ -3295,6 +3364,7 @@ class _MyHomePageState extends State<MyHomePage>
                   if (kvEnabled) const Tab(text: 'Key-Value Stores'),
                   if (objectStoreEnabled) const Tab(text: 'Object Store'),
                   if (serviceDiscoveryEnabled) const Tab(text: 'Services'),
+                  if (serverMonitorEnabled) const Tab(text: 'Server'),
                 ],
               ),
             Expanded(
@@ -3335,6 +3405,18 @@ class _MyHomePageState extends State<MyHomePage>
                                 ? _serviceDiscoveryManager
                                 : null,
                             reconnectSignal: _reconnectSignal,
+                          ),
+                        if (serverMonitorEnabled)
+                          ServerMonitorDashboard(
+                            key: _serverMonitorDashboardKey,
+                            session: _hasEverConnectedThisSession
+                                ? _serverMonitorSession
+                                : null,
+                            reconnectSignal: _reconnectSignal,
+                            pollInterval:
+                                Duration(seconds: serverMonitorInterval),
+                            accountInfoManager: _jetStreamManager,
+                            onOpenSettings: showSettingsDialog,
                           ),
                       ],
                     )

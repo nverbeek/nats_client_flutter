@@ -37,6 +37,15 @@ void main() {
     });
   });
 
+  group('tcpRelayMonitorUri', () {
+    test('is relative to the page, keeps its scheme, and strips brackets', () {
+      final uri = tcpRelayMonitorUri(Uri.parse('https://example.com/nats/'),
+          host: '[::1]', port: 8222, path: 'varz');
+      expect(uri.toString(),
+          'https://example.com/nats/nats-monitor?path=varz&host=%3A%3A1&port=8222');
+    });
+  });
+
   group('tcpRelayRefusalReason', () {
     test('extracts the reason from a relay -ERR', () {
       final error = NatsException.fromServerError(
