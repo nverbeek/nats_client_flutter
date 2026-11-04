@@ -38,6 +38,11 @@ void main() {
             .isNotEmpty);
     expect(find.byType(DataTable), findsOneWidget);
     expect(tester.widget<DataTable>(find.byType(DataTable)).rows, isNotEmpty);
+    // The app's own connection is there under its name.
+    expect(
+        find.descendant(
+            of: find.byType(DataTable), matching: find.text('NATS Client UI')),
+        findsOneWidget);
 
     // With real fonts the table fits the card exactly at this width: it
     // fills it, and needs no sideways scrolling.

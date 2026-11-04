@@ -65,6 +65,7 @@ This application currently supports Windows, Linux, macOS and Web platforms. Dow
 ![JetStream Dashboard](./images/JetStream.png)
 ![Key-Value Stores](./images/Key-Value%20Stores.png)
 ![Object Store](./images/Object%20Store.png)
+![Server Monitoring](./images/Server.png)
 
 These are generated automatically — see `scripts/capture_screenshots.ps1` if you're regenerating them after a UI change.
 

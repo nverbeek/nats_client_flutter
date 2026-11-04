@@ -55,6 +55,10 @@ final List<Color> subscriptionPaletteLight = [
   Colors.cyan[800]!,
 ];
 
+// The connection name this app sends in CONNECT, shown by servers in their
+// connection lists.
+const String connectionName = 'NATS Client UI';
+
 // preference keys
 const String prefScheme = "SCHEME";
 const String prefHost = "HOST";

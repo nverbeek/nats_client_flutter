@@ -4,7 +4,9 @@ import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nats_client_flutter/constants.dart' as constants;
+import 'package:nats_client_flutter/server_monitor_dashboard.dart';
 
+import 'helpers/demo_traffic.dart';
 import 'helpers/nats_test_app.dart';
 import 'helpers/screenshot_signal.dart';
 
@@ -34,7 +36,10 @@ void main() {
     await prefs.setDouble(constants.prefLastPositionX, 60);
     await prefs.setDouble(constants.prefLastPositionY, 60);
 
-    await pumpConnectedApp(tester);
+    // Server tab on (it's off by default) for screenshot 7; the earlier
+    // screenshots then show it in the tab bar, as a user who turned it on
+    // would see.
+    await pumpConnectedApp(tester, serverMonitorEnabled: true);
     addTearDown(() => disconnectApp(tester));
 
     Finder fieldWithPrefixIcon(IconData icon) => find.ancestor(
@@ -144,5 +149,33 @@ void main() {
     await pumpUntil(tester,
         () => find.text('diagnostics-bundle.tar.gz').evaluate().isNotEmpty);
     await signaler.capture(tester, 'Object Store');
+
+    // 7. Server: start some named services trading messages (see
+    // `helpers/demo_traffic.dart`), then stay on the tab until the
+    // throughput chart's two-minute window is full. The tab only polls
+    // while it's showing, so this wait can't happen anywhere else.
+    final traffic = DemoTraffic();
+    await traffic.start();
+    addTearDown(traffic.stop);
+    await tester.tap(find.text('Server'));
+    await tester.pumpAndSettle();
+    // Full when the samples span (nearly) the chart's two minutes.
+    bool chartFull() {
+      final samples = tester
+          .widget<ServerMonitorDashboard>(find.byType(ServerMonitorDashboard))
+          .session!
+          .history
+          .samples;
+      return samples.length > 1 &&
+          samples.last.time.difference(samples.first.time) >=
+              const Duration(seconds: 115);
+    }
+
+    await pumpUntil(tester, chartFull, timeout: const Duration(minutes: 3));
+    // Wait for a fresh connections page, so it lists the demo services.
+    await pumpUntil(
+        tester, () => find.text('billing-worker').evaluate().isNotEmpty,
+        timeout: const Duration(seconds: 30));
+    await signaler.capture(tester, 'Server');
   });
 }

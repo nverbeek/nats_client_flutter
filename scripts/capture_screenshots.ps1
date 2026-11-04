@@ -97,7 +97,7 @@ if (Test-PortOpen -TestPort $Port) {
 else {
     Write-Host "Starting disposable JetStream-enabled nats-server ('$ContainerName')..." -ForegroundColor Cyan
     docker rm -f $ContainerName *> $null
-    docker run -d --name $ContainerName -p "${Port}:4222" -p "${MonitorPort}:8222" nats:latest -js -m 8222 | Out-Null
+    docker run -d --name $ContainerName -p "${Port}:4222" -p "${MonitorPort}:8222" nats:latest -js -m 8222 --name nats-demo-1 | Out-Null
     $managedContainer = $true
 
     $deadline = (Get-Date).AddSeconds(20)

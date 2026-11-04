@@ -1368,7 +1368,11 @@ class _MyHomePageState extends State<MyHomePage>
           retryInterval: retryInterval,
           pingInterval: Duration(seconds: heartbeatInterval),
           pingTimeout: constants.heartbeatPingTimeout,
-          connectOption: authConnectOption,
+          // Named, so this app's connection is recognizable in a server's
+          // /connz (the Server tab's Connections list, `nats server report
+          // connections`). dart_nats adds any JWT/signature to it itself.
+          connectOption: (authConnectOption ?? ConnectOption())
+            ..name = constants.connectionName,
           // A cluster's advertised peers are TCP addresses the browser can't
           // reach; every reconnect has to go back through the relay.
           ignoreDiscoveredServers: viaTcpRelay,

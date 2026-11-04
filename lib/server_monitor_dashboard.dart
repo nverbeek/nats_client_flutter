@@ -484,8 +484,7 @@ class ServerMonitorDashboardState extends State<ServerMonitorDashboard> {
         row('Version', Text(varz.version)),
         row('Go', Text(varz.goVersion)),
         row('Host', Text('${varz.host}:${varz.port}')),
-        if (start != null)
-          row('Started', Text(formatFullTimestamp(start.toLocal()))),
+        if (start != null) row('Started', Text(_startedLabel(start.toLocal()))),
         row('Uptime', _UptimeText(varz: varz, fetchedAt: _updatedAt)),
         row(
             'JetStream',
@@ -785,6 +784,13 @@ class ServerMonitorDashboardState extends State<ServerMonitorDashboard> {
       ),
     );
   }
+}
+
+/// `2026-11-04 07:44`: when the server started, to the minute. Uptime
+/// below it carries the seconds.
+String _startedLabel(DateTime t) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${t.year}-${two(t.month)}-${two(t.day)} ${two(t.hour)}:${two(t.minute)}';
 }
 
 class _Tile extends StatelessWidget {
