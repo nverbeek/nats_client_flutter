@@ -7,7 +7,7 @@ Two suites with different patterns. Don't mix them up.
 | `test/` | Nothing; fakes only | `flutter test test/` |
 | `integration_test/` | A JetStream-enabled `nats-server` (plus the auth fixtures for `authentication_test.dart`) | `flutter test integration_test/<file>.dart -d windows` |
 
-Run integration tests **one file per invocation**. Passing several files to one `flutter test` fails to relaunch the app for the second file, at least on Windows. CI (`.github/workflows/build.yml`) loops over the files the same way on Linux under Xvfb, skipping `screenshot_tour_test.dart` and `macos_file_picker_sandbox_test.dart`.
+Run integration tests **one file per invocation**. Passing several files to one `flutter test` fails to relaunch the app for the second file, at least on Windows. CI (`.github/workflows/build.yml`) loops over the files the same way on Linux under Xvfb, dealt round-robin across 4 parallel `integration` shard jobs, skipping `screenshot_tour_test.dart` and `macos_file_picker_sandbox_test.dart`.
 
 ## Servers
 

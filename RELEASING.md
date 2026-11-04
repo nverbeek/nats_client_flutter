@@ -6,7 +6,7 @@
 2. After it merges, push a lightweight tag `vX.Y.Z` on the merge commit. Only `vX.Y.Z` tags trigger a release.
 3. The tag run's `release-notes` job fails unless the tag matches the pubspec version and the CHANGELOG section exists. That section becomes the GitHub release body.
 
-Every build job is gated on the `test` job, so a red test suite blocks the release.
+Every build job is gated on the `unit` and `integration` jobs, so a red test suite blocks the release.
 
 ## What the tag run publishes
 
