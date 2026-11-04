@@ -26,34 +26,43 @@ String formatHeartbeatInterval(int seconds) {
   return minutes == 1 ? '1 minute' : '$minutes minutes';
 }
 
+/// Every value the Settings dialog edits: what it opens with, and what it
+/// hands back to `onSave`.
+class SettingsValues {
+  final double fontSize;
+  final int retryInterval;
+  final int heartbeatInterval;
+  final bool jetStreamEnabled;
+  final bool kvEnabled;
+  final bool objectStoreEnabled;
+  final bool serviceDiscoveryEnabled;
+  final bool updateCheckEnabled;
+  final bool showSubscriptionColors;
+  final int maxMessages;
+  final bool showTimestamps;
+
+  const SettingsValues({
+    required this.fontSize,
+    required this.retryInterval,
+    required this.heartbeatInterval,
+    required this.jetStreamEnabled,
+    required this.kvEnabled,
+    required this.objectStoreEnabled,
+    required this.serviceDiscoveryEnabled,
+    required this.updateCheckEnabled,
+    required this.showSubscriptionColors,
+    required this.maxMessages,
+    required this.showTimestamps,
+  });
+}
+
 class SettingsDialog extends StatefulWidget {
-  final double initialFontSize;
-  final int initialRetryInterval;
-  final int initialHeartbeatInterval;
-  final bool initialJetStreamEnabled;
-  final bool initialKvEnabled;
-  final bool initialObjectStoreEnabled;
-  final bool initialServiceDiscoveryEnabled;
-  final bool initialUpdateCheckEnabled;
-  final bool initialShowSubscriptionColors;
-  final int initialMaxMessages;
-  final bool initialShowTimestamps;
-  final void Function(
-      double, int, int, bool, bool, bool, bool, bool, bool, int, bool) onSave;
+  final SettingsValues initial;
+  final void Function(SettingsValues values) onSave;
 
   const SettingsDialog({
     super.key,
-    required this.initialFontSize,
-    required this.initialRetryInterval,
-    required this.initialHeartbeatInterval,
-    required this.initialJetStreamEnabled,
-    required this.initialKvEnabled,
-    required this.initialObjectStoreEnabled,
-    required this.initialServiceDiscoveryEnabled,
-    required this.initialUpdateCheckEnabled,
-    required this.initialShowSubscriptionColors,
-    required this.initialMaxMessages,
-    required this.initialShowTimestamps,
+    required this.initial,
     required this.onSave,
   });
 
@@ -85,22 +94,23 @@ class _SettingsDialogState extends State<SettingsDialog> {
   @override
   void initState() {
     super.initState();
-    tempFontSize = widget.initialFontSize;
-    tempRetryInterval = widget.initialRetryInterval;
-    tempHeartbeatInterval = widget.initialHeartbeatInterval;
+    final initial = widget.initial;
+    tempFontSize = initial.fontSize;
+    tempRetryInterval = initial.retryInterval;
+    tempHeartbeatInterval = initial.heartbeatInterval;
     _heartbeatItems = [
       ...heartbeatIntervalOptions,
       if (!heartbeatIntervalOptions.contains(tempHeartbeatInterval))
         tempHeartbeatInterval,
     ]..sort();
-    tempJetStreamEnabled = widget.initialJetStreamEnabled;
-    tempKvEnabled = widget.initialKvEnabled;
-    tempObjectStoreEnabled = widget.initialObjectStoreEnabled;
-    tempServiceDiscoveryEnabled = widget.initialServiceDiscoveryEnabled;
-    tempUpdateCheckEnabled = widget.initialUpdateCheckEnabled;
-    tempShowSubscriptionColors = widget.initialShowSubscriptionColors;
-    tempMaxMessages = widget.initialMaxMessages;
-    tempShowTimestamps = widget.initialShowTimestamps;
+    tempJetStreamEnabled = initial.jetStreamEnabled;
+    tempKvEnabled = initial.kvEnabled;
+    tempObjectStoreEnabled = initial.objectStoreEnabled;
+    tempServiceDiscoveryEnabled = initial.serviceDiscoveryEnabled;
+    tempUpdateCheckEnabled = initial.updateCheckEnabled;
+    tempShowSubscriptionColors = initial.showSubscriptionColors;
+    tempMaxMessages = initial.maxMessages;
+    tempShowTimestamps = initial.showTimestamps;
     _maxMessagesItems = maxMessagesOptions.contains(tempMaxMessages)
         ? maxMessagesOptions
         : [
@@ -367,18 +377,19 @@ class _SettingsDialogState extends State<SettingsDialog> {
         TextButton(
           child: const Text('Save'),
           onPressed: () {
-            widget.onSave(
-                tempFontSize,
-                tempRetryInterval,
-                tempHeartbeatInterval,
-                tempJetStreamEnabled,
-                tempKvEnabled,
-                tempObjectStoreEnabled,
-                tempServiceDiscoveryEnabled,
-                tempUpdateCheckEnabled,
-                tempShowSubscriptionColors,
-                tempMaxMessages,
-                tempShowTimestamps);
+            widget.onSave(SettingsValues(
+              fontSize: tempFontSize,
+              retryInterval: tempRetryInterval,
+              heartbeatInterval: tempHeartbeatInterval,
+              jetStreamEnabled: tempJetStreamEnabled,
+              kvEnabled: tempKvEnabled,
+              objectStoreEnabled: tempObjectStoreEnabled,
+              serviceDiscoveryEnabled: tempServiceDiscoveryEnabled,
+              updateCheckEnabled: tempUpdateCheckEnabled,
+              showSubscriptionColors: tempShowSubscriptionColors,
+              maxMessages: tempMaxMessages,
+              showTimestamps: tempShowTimestamps,
+            ));
             Navigator.of(context).pop();
           },
         ),

@@ -3,35 +3,37 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nats_client_flutter/settings_dialog.dart';
 
 void main() {
-  Widget buildDialog(
-      void Function(
-              double, int, int, bool, bool, bool, bool, bool, bool, int, bool)
-          onSave,
-      {int initialMaxMessages = 10000,
-      int initialHeartbeatInterval = 120,
-      bool initialShowTimestamps = false}) {
+  SettingsValues initialValues(
+          {int maxMessages = 10000, int heartbeatInterval = 120}) =>
+      SettingsValues(
+        fontSize: 14,
+        retryInterval: 5,
+        heartbeatInterval: heartbeatInterval,
+        jetStreamEnabled: true,
+        kvEnabled: true,
+        objectStoreEnabled: true,
+        serviceDiscoveryEnabled: true,
+        updateCheckEnabled: true,
+        showSubscriptionColors: true,
+        maxMessages: maxMessages,
+        showTimestamps: false,
+      );
+
+  Widget buildDialog(void Function(SettingsValues) onSave,
+      {int initialMaxMessages = 10000, int initialHeartbeatInterval = 120}) {
     return MaterialApp(
       home: Scaffold(
         body: SettingsDialog(
-          initialFontSize: 14,
-          initialRetryInterval: 5,
-          initialHeartbeatInterval: initialHeartbeatInterval,
-          initialJetStreamEnabled: true,
-          initialKvEnabled: true,
-          initialObjectStoreEnabled: true,
-          initialServiceDiscoveryEnabled: true,
-          initialUpdateCheckEnabled: true,
-          initialShowSubscriptionColors: true,
-          initialMaxMessages: initialMaxMessages,
-          initialShowTimestamps: initialShowTimestamps,
+          initial: initialValues(
+              maxMessages: initialMaxMessages,
+              heartbeatInterval: initialHeartbeatInterval),
           onSave: onSave,
         ),
       ),
     );
   }
 
-  void noopSave(double a, int b, int heartbeat, bool c, bool d, bool e, bool f,
-      bool g, bool h, int i, bool j) {}
+  void noopSave(SettingsValues _) {}
 
   testWidgets('shows the initial values', (tester) async {
     await tester.pumpWidget(buildDialog(noopSave));
@@ -163,9 +165,8 @@ void main() {
   testWidgets('shows the Heartbeat Interval and saves a changed one',
       (tester) async {
     int? saved;
-    await tester.pumpWidget(buildDialog((_, __, heartbeat, ___, ____, _____,
-            ______, _______, ________, _________, __________) =>
-        saved = heartbeat));
+    await tester
+        .pumpWidget(buildDialog((values) => saved = values.heartbeatInterval));
 
     expect(find.text('2 minutes'), findsOneWidget);
     await tester.ensureVisible(find.text('2 minutes'));
@@ -234,20 +235,8 @@ void main() {
               onPressed: () => showDialog<void>(
                 context: context,
                 builder: (context) => SettingsDialog(
-                  initialFontSize: 14,
-                  initialRetryInterval: 5,
-                  initialHeartbeatInterval: 120,
-                  initialJetStreamEnabled: true,
-                  initialKvEnabled: true,
-                  initialObjectStoreEnabled: true,
-                  initialServiceDiscoveryEnabled: true,
-                  initialUpdateCheckEnabled: true,
-                  initialShowSubscriptionColors: true,
-                  initialMaxMessages: 10000,
-                  initialShowTimestamps: false,
-                  onSave: (_, __, ___, ____, _____, ______, _______, ________,
-                          _________, __________, ___________) =>
-                      saveCalled = true,
+                  initial: initialValues(),
+                  onSave: (_) => saveCalled = true,
                 ),
               ),
               child: const Text('Open'),
@@ -268,17 +257,7 @@ void main() {
 
   testWidgets('Save calls onSave with the current values then pops',
       (tester) async {
-    double? savedFontSize;
-    int? savedRetryInterval;
-    int? savedHeartbeatInterval;
-    bool? savedJetStreamEnabled;
-    bool? savedKvEnabled;
-    bool? savedObjectStoreEnabled;
-    bool? savedServiceDiscoveryEnabled;
-    bool? savedUpdateCheckEnabled;
-    bool? savedShowSubscriptionColors;
-    int? savedMaxMessages;
-    bool? savedShowTimestamps;
+    SettingsValues? saved;
 
     await tester.pumpWidget(MaterialApp(
       home: Builder(
@@ -288,40 +267,8 @@ void main() {
               onPressed: () => showDialog<void>(
                 context: context,
                 builder: (context) => SettingsDialog(
-                  initialFontSize: 14,
-                  initialRetryInterval: 5,
-                  initialHeartbeatInterval: 120,
-                  initialJetStreamEnabled: true,
-                  initialKvEnabled: true,
-                  initialObjectStoreEnabled: true,
-                  initialServiceDiscoveryEnabled: true,
-                  initialUpdateCheckEnabled: true,
-                  initialShowSubscriptionColors: true,
-                  initialMaxMessages: 10000,
-                  initialShowTimestamps: false,
-                  onSave: (fontSize,
-                      retryInterval,
-                      heartbeatInterval,
-                      jetStream,
-                      kv,
-                      objectStore,
-                      serviceDiscovery,
-                      updateCheck,
-                      showSubscriptionColors,
-                      maxMessages,
-                      showTimestamps) {
-                    savedFontSize = fontSize;
-                    savedRetryInterval = retryInterval;
-                    savedHeartbeatInterval = heartbeatInterval;
-                    savedJetStreamEnabled = jetStream;
-                    savedKvEnabled = kv;
-                    savedObjectStoreEnabled = objectStore;
-                    savedServiceDiscoveryEnabled = serviceDiscovery;
-                    savedUpdateCheckEnabled = updateCheck;
-                    savedShowSubscriptionColors = showSubscriptionColors;
-                    savedMaxMessages = maxMessages;
-                    savedShowTimestamps = showTimestamps;
-                  },
+                  initial: initialValues(),
+                  onSave: (values) => saved = values,
                 ),
               ),
               child: const Text('Open'),
@@ -345,17 +292,17 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'Save'));
     await tester.pumpAndSettle();
 
-    expect(savedFontSize, 14);
-    expect(savedRetryInterval, 5);
-    expect(savedHeartbeatInterval, 120);
-    expect(savedJetStreamEnabled, isFalse);
-    expect(savedKvEnabled, isTrue);
-    expect(savedObjectStoreEnabled, isTrue);
-    expect(savedServiceDiscoveryEnabled, isTrue);
-    expect(savedUpdateCheckEnabled, isTrue);
-    expect(savedShowSubscriptionColors, isTrue);
-    expect(savedMaxMessages, 10000);
-    expect(savedShowTimestamps, isTrue);
+    expect(saved!.fontSize, 14);
+    expect(saved!.retryInterval, 5);
+    expect(saved!.heartbeatInterval, 120);
+    expect(saved!.jetStreamEnabled, isFalse);
+    expect(saved!.kvEnabled, isTrue);
+    expect(saved!.objectStoreEnabled, isTrue);
+    expect(saved!.serviceDiscoveryEnabled, isTrue);
+    expect(saved!.updateCheckEnabled, isTrue);
+    expect(saved!.showSubscriptionColors, isTrue);
+    expect(saved!.maxMessages, 10000);
+    expect(saved!.showTimestamps, isTrue);
     expect(find.byType(SettingsDialog), findsNothing);
   });
 }

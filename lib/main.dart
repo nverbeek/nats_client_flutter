@@ -2338,44 +2338,34 @@ class _MyHomePageState extends State<MyHomePage>
       context: context,
       builder: (BuildContext context) {
         return SettingsDialog(
-          initialFontSize: messageFontSize,
-          initialRetryInterval: retryInterval,
-          initialHeartbeatInterval: heartbeatInterval,
-          initialJetStreamEnabled: jetStreamEnabled,
-          initialKvEnabled: kvEnabled,
-          initialObjectStoreEnabled: objectStoreEnabled,
-          initialServiceDiscoveryEnabled: serviceDiscoveryEnabled,
-          initialUpdateCheckEnabled: updateCheckEnabled,
-          initialShowSubscriptionColors: showSubscriptionColors,
-          initialMaxMessages: maxMessages,
-          initialShowTimestamps: showTimestamps,
-          onSave: (
-            fontSize,
-            retryIntervalValue,
-            heartbeatIntervalValue,
-            jetStreamEnabledValue,
-            kvEnabledValue,
-            objectStoreEnabledValue,
-            serviceDiscoveryEnabledValue,
-            updateCheckEnabledValue,
-            showSubscriptionColorsValue,
-            maxMessagesValue,
-            showTimestampsValue,
-          ) {
+          initial: SettingsValues(
+            fontSize: messageFontSize,
+            retryInterval: retryInterval,
+            heartbeatInterval: heartbeatInterval,
+            jetStreamEnabled: jetStreamEnabled,
+            kvEnabled: kvEnabled,
+            objectStoreEnabled: objectStoreEnabled,
+            serviceDiscoveryEnabled: serviceDiscoveryEnabled,
+            updateCheckEnabled: updateCheckEnabled,
+            showSubscriptionColors: showSubscriptionColors,
+            maxMessages: maxMessages,
+            showTimestamps: showTimestamps,
+          ),
+          onSave: (values) {
             final updateCheckJustEnabled =
-                updateCheckEnabledValue && !updateCheckEnabled;
+                values.updateCheckEnabled && !updateCheckEnabled;
             setState(() {
-              messageFontSize = fontSize;
-              retryInterval = retryIntervalValue;
-              heartbeatInterval = heartbeatIntervalValue;
-              jetStreamEnabled = jetStreamEnabledValue;
-              kvEnabled = kvEnabledValue;
-              objectStoreEnabled = objectStoreEnabledValue;
-              serviceDiscoveryEnabled = serviceDiscoveryEnabledValue;
-              updateCheckEnabled = updateCheckEnabledValue;
-              showSubscriptionColors = showSubscriptionColorsValue;
-              maxMessages = maxMessagesValue;
-              showTimestamps = showTimestampsValue;
+              messageFontSize = values.fontSize;
+              retryInterval = values.retryInterval;
+              heartbeatInterval = values.heartbeatInterval;
+              jetStreamEnabled = values.jetStreamEnabled;
+              kvEnabled = values.kvEnabled;
+              objectStoreEnabled = values.objectStoreEnabled;
+              serviceDiscoveryEnabled = values.serviceDiscoveryEnabled;
+              updateCheckEnabled = values.updateCheckEnabled;
+              showSubscriptionColors = values.showSubscriptionColors;
+              maxMessages = values.maxMessages;
+              showTimestamps = values.showTimestamps;
               _ensureTabController();
               // A no-op unless the new cap is smaller than the list's
               // current size (e.g. the user just lowered it here).
