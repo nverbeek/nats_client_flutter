@@ -171,4 +171,38 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('Services'), findsNothing);
   });
+
+  testWidgets(
+      'Server Monitoring defaults off, and toggling it on/off adds/removes '
+      'its tab', (tester) async {
+    await pumpDisconnectedApp(tester);
+    expect(find.text('Server'), findsNothing);
+
+    await openSettings(tester);
+    // Index 5: right after Enable Service Discovery.
+    final serverMonitorSwitchFinder = find.byType(Switch).at(5);
+    await tester.ensureVisible(serverMonitorSwitchFinder);
+    await tester.tap(serverMonitorSwitchFinder);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.widgetWithText(TextButton, 'Save'));
+    await saveSettings(tester);
+    expect(tester.takeException(), isNull);
+    expect(find.text('Server'), findsOneWidget);
+
+    // Not connected, so the tab asks to connect rather than polling.
+    await tester.tap(find.text('Server'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Connect to a NATS server to see its monitoring data.'),
+        findsOneWidget);
+
+    await openSettings(tester);
+    await tester.ensureVisible(serverMonitorSwitchFinder);
+    await tester.tap(serverMonitorSwitchFinder);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.widgetWithText(TextButton, 'Save'));
+    await saveSettings(tester);
+    expect(tester.takeException(), isNull);
+    expect(find.text('Server'), findsNothing);
+  });
 }

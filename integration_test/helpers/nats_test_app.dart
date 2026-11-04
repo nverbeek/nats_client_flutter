@@ -68,6 +68,10 @@ Future<void> pumpConnectedApp(
   // wants a short interval so it doesn't have to wait out the full 10s
   // default to see the reconnect complete.
   int retryInterval = constants.defaultRetryInterval,
+  // Overridable like maxMessages: a Server tab test wants it on from the
+  // first frame, or a specific (e.g. closed) monitoring port.
+  bool serverMonitorEnabled = constants.defaultServerMonitorEnabled,
+  int serverMonitorPort = constants.defaultServerMonitorPort,
 }) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setString(constants.prefScheme, constants.defaultScheme);
@@ -87,6 +91,10 @@ Future<void> pumpConnectedApp(
   // other key here, so tests that assume a fixed 4-tab/switch layout aren't
   // silently broken by an earlier manual run that turned it on.
   await prefs.setBool(constants.prefServiceDiscoveryEnabled, false);
+  await prefs.setBool(constants.prefServerMonitorEnabled, serverMonitorEnabled);
+  await prefs.setInt(constants.prefServerMonitorPort, serverMonitorPort);
+  await prefs.setInt(constants.prefServerMonitorInterval,
+      constants.defaultServerMonitorInterval);
   // Must be one of the Settings dialog's fixed dropdown options (3/5/10/30)
   // -- an out-of-set value crashes DropdownButtonFormField's "exactly one
   // matching item" assertion the moment Settings is opened. Reset here for
@@ -142,6 +150,12 @@ Future<void> pumpDisconnectedApp(
   // other key here, so tests that assume a fixed 4-tab/switch layout aren't
   // silently broken by an earlier manual run that turned it on.
   await prefs.setBool(constants.prefServiceDiscoveryEnabled, false);
+  await prefs.setBool(constants.prefServerMonitorEnabled,
+      constants.defaultServerMonitorEnabled);
+  await prefs.setInt(
+      constants.prefServerMonitorPort, constants.defaultServerMonitorPort);
+  await prefs.setInt(constants.prefServerMonitorInterval,
+      constants.defaultServerMonitorInterval);
   // Must be one of the Settings dialog's fixed dropdown options (3/5/10/30)
   // -- an out-of-set value crashes DropdownButtonFormField's "exactly one
   // matching item" assertion the moment Settings is opened. Reset here for
