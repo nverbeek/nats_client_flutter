@@ -41,6 +41,11 @@ see whether a newer version is available. This request contains no
 personal or usage data — it is a plain, unauthenticated GET request, and
 its result only affects whether an "update available" notice is shown.
 
+If you turn on **Server Monitoring** (off by default), the app also polls
+the HTTP monitoring port of the server you're connected to, while the
+Server tab is showing. That goes to the same host you configured, on the
+port you set; the Docker image makes that request from its own server.
+
 ## What the app does not do
 
 - No analytics, telemetry, or usage tracking.

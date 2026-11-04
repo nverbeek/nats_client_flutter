@@ -18,6 +18,38 @@ const relayPath = 'nats-tcp';
 /// match `tcpRelayContextsPath` in the app's `lib/tcp_relay.dart`.
 const contextsPath = 'contexts';
 
+/// Path of the proxy to a NATS server's HTTP monitoring port, for the app's
+/// Server tab. Must match `tcpRelayMonitorPath` in the app's
+/// `lib/tcp_relay.dart`.
+const monitorPath = 'nats-monitor';
+
+/// Header every monitoring request must carry. Must match
+/// `tcpRelayMonitorHeader` in the app's `lib/tcp_relay.dart`.
+///
+/// A cross-site `<img>` or `<script>` GET carries no `Origin`, so the page
+/// check alone would let any site make the relay fetch. A script can't add
+/// a custom header to a cross-origin request without a CORS preflight,
+/// which the relay never answers, so only the relay's own page (and
+/// non-browser clients that set it on purpose) get through.
+const monitorHeader = 'x-nats-monitor';
+
+/// The monitoring endpoints the proxy fetches, and the `/connz` sort orders
+/// it passes on. Nothing else is forwarded.
+const _monitorPaths = {'varz', 'connz', 'healthz', 'gatewayz'};
+const _connzSorts = {
+  'cid',
+  'subs',
+  'pending',
+  'msgs_from',
+  'msgs_to',
+  'uptime'
+};
+
+/// Most connections one `/connz` page may ask for, and the largest
+/// monitoring response passed on.
+const _maxConnzLimit = 100;
+const _maxMonitorBody = 4 * 1024 * 1024;
+
 /// Prefix of every `-ERR` the relay sends. The app looks for it to tell a
 /// relay refusal apart from a server error. Must match `tcpRelayErrorMarker`
 /// in the app's `lib/tcp_relay.dart`.
@@ -37,6 +69,7 @@ class RelayConfig {
     this.connectTimeout = const Duration(seconds: 5),
     this.infoTimeout = const Duration(seconds: 5),
     this.pingInterval = const Duration(seconds: 30),
+    this.monitorTimeout = const Duration(seconds: 5),
   }) : contexts = contexts ?? ContextSet.empty;
 
   /// When false, every relay connection is refused with a reason the app
@@ -68,6 +101,9 @@ class RelayConfig {
   /// WebSocket pings to the browser, so proxies that drop idle connections
   /// (nginx's default is 60 seconds) leave a quiet session alone.
   final Duration pingInterval;
+
+  /// How long one monitoring request may take in all, connecting included.
+  final Duration monitorTimeout;
 
   /// Parses a comma-separated `NATS_TCP_ALLOWED_HOSTS` value.
   static Set<String> parseAllowedHosts(String? value) => {
@@ -221,15 +257,259 @@ Handler createHandler({
   final config = relay ?? RelayConfig();
   final staticHandler =
       createStaticHandler(webRoot, defaultDocument: 'index.html');
+  final httpsTargets = <String>{};
   return (Request request) {
     switch (request.url.path) {
       case relayPath:
         return _relayHandler(request, config, log);
       case contextsPath:
         return _contextsHandler(request, config, log);
+      case monitorPath:
+        return _monitorHandler(request, config, log, httpsTargets);
     }
     return staticHandler(request);
   };
+}
+
+/// Fetches one monitoring endpoint (`?path=varz|connz|healthz|gatewayz`)
+/// from `host` or the context's servers, at `port`, for a browser that
+/// can't: the host only resolves in here, or the page is https.
+///
+/// Same limits as the TCP relay: the same page check, the host allowlist,
+/// and only answers that look like nats-server's monitoring JSON are passed
+/// on (the HTTP version of the INFO check), so this can't be used to read
+/// other web services the container can reach. Only fixed paths and the
+/// `/connz` paging and sort parameters are forwarded, and no redirect is
+/// followed.
+///
+/// Refusals are `{"error": reason}`: 504 when the target didn't answer and
+/// 502 when it isn't a monitoring endpoint, so the app can tell those from
+/// a refusal.
+///
+/// nats-server serves monitoring over http (`http_port`) or https
+/// (`https_port`, as demo.nats.io does). A target is asked over http until
+/// it answers that it speaks https, and is then remembered in
+/// [httpsTargets] (`host:port`). For a context, https trusts its CA and
+/// presents its client certificate, as the TCP relay does.
+Future<Response> _monitorHandler(Request request, RelayConfig config,
+    void Function(String) log, Set<String> httpsTargets) async {
+  const headers = {
+    'content-type': 'application/json',
+    'cache-control': 'no-store',
+  };
+  final client = _clientAddress(request);
+  Response refuse(int status, String reason) {
+    log('monitor refused (from $client): $reason');
+    return Response(status,
+        body: jsonEncode({'error': reason}), headers: headers);
+  }
+
+  if (request.method != 'GET') return refuse(405, 'only GET is supported');
+  if (!config.enabled) {
+    return refuse(
+        503,
+        'the relay is turned off on this server '
+        '(NATS_TCP_RELAY=off)');
+  }
+  final pageRefusal = config.pageRefusal(request, webSocket: false);
+  if (pageRefusal != null) return refuse(403, pageRefusal);
+  if (request.headers[monitorHeader] == null) {
+    return refuse(
+        403,
+        'monitoring requests must come from the app '
+        '(the $monitorHeader header is missing)');
+  }
+
+  final query = request.url.queryParameters;
+  final path = query['path'] ?? '';
+  if (!_monitorPaths.contains(path)) {
+    return refuse(400, 'path must be one of ${_monitorPaths.join(', ')}');
+  }
+  final port = int.tryParse(query['port'] ?? '');
+  if (port == null || port < 1 || port > 65535) {
+    return refuse(400, 'a port between 1 and 65535 is required');
+  }
+  final forward = <String, String>{};
+  if (path == 'connz') {
+    final sort = query['sort'];
+    if (sort != null) {
+      if (!_connzSorts.contains(sort)) {
+        return refuse(400, 'sort must be one of ${_connzSorts.join(', ')}');
+      }
+      forward['sort'] = sort;
+    }
+    final offset = int.tryParse(query['offset'] ?? '');
+    if (offset != null && offset >= 0) forward['offset'] = '$offset';
+    final limit = int.tryParse(query['limit'] ?? '');
+    if (limit != null && limit > 0) {
+      forward['limit'] = '${limit > _maxConnzLimit ? _maxConnzLimit : limit}';
+    }
+  }
+
+  final List<String> hosts;
+  NatsContext? context;
+  final contextName = query['context']?.trim() ?? '';
+  if (contextName.isNotEmpty) {
+    final name = _printable(contextName);
+    final found = config.contexts.byName(contextName);
+    if (found == null) {
+      return refuse(404, 'there is no context named "$name"');
+    }
+    if (found.error != null) {
+      return refuse(403, 'context "$name" is unusable: ${found.error}');
+    }
+    context = found;
+    hosts = {for (final s in found.servers) s.host}.toList();
+  } else {
+    final host = query['host']?.trim() ?? '';
+    if (host.isEmpty) return refuse(400, 'a host or a context is required');
+    // Uri() throws on anything else, e.g. a ':' that isn't IPv6.
+    if (InternetAddress.tryParse(host) == null &&
+        !RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(host)) {
+      return refuse(400, '${_printable(host)} is not a host name');
+    }
+    if (!config.allows(host, port)) {
+      return refuse(
+          403, '${_printable(host)}:$port is not in NATS_TCP_ALLOWED_HOSTS');
+    }
+    hosts = [host];
+  }
+
+  // Like the TCP relay, a context's servers are tried in order.
+  var failure = _MonitorAnswer.failed(504, 'the context has no servers');
+  for (final host in hosts) {
+    Uri uri(String scheme) => Uri(
+        scheme: scheme,
+        host: host,
+        port: port,
+        path: '/$path',
+        queryParameters: forward.isEmpty ? null : forward);
+    final key = '${host.toLowerCase()}:$port';
+    final https = httpsTargets.contains(key);
+    var answer = await _fetchMonitor(
+        uri(https ? 'https' : 'http'), path, config, context, log);
+    if (!https && answer.httpsOnly) {
+      // Bounded, so many distinct targets can't grow it without limit.
+      if (httpsTargets.length >= 256) httpsTargets.clear();
+      httpsTargets.add(key);
+      answer = await _fetchMonitor(uri('https'), path, config, context, log);
+    }
+    if (answer.body != null) {
+      return Response(answer.status, body: answer.body, headers: headers);
+    }
+    failure = answer;
+  }
+  return refuse(failure.status, failure.error!);
+}
+
+/// A monitoring response to pass on, or why there isn't one.
+class _MonitorAnswer {
+  _MonitorAnswer.ok(this.status, List<int> this.body)
+      : error = null,
+        httpsOnly = false;
+  _MonitorAnswer.failed(this.status, String this.error,
+      {this.httpsOnly = false})
+      : body = null;
+
+  final int status;
+  final List<int>? body;
+  final String? error;
+
+  /// The target said it only speaks https (Go's reply to plain http on a
+  /// TLS port).
+  final bool httpsOnly;
+}
+
+Future<_MonitorAnswer> _fetchMonitor(Uri uri, String path, RelayConfig config,
+    NatsContext? context, void Function(String) log) async {
+  final target = _printable(
+      '${uri.host.contains(':') ? '[${uri.host}]' : uri.host}:${uri.port}');
+  SecurityContext? security;
+  if (uri.scheme == 'https' && context != null) {
+    // Read afresh, so a file changed since startup can still fail here.
+    try {
+      security = context.securityContext();
+    } catch (e) {
+      log('context "${context.name}": $e');
+      return _MonitorAnswer.failed(
+          403, 'the TLS files of the context cannot be loaded');
+    }
+  }
+  final http = HttpClient(context: security)
+    ..connectionTimeout = config.connectTimeout
+    // Straight to the target, never through a proxy from the environment.
+    ..findProxy = ((_) => 'DIRECT');
+  try {
+    return await _readMonitor(http, uri, path, target)
+        .timeout(config.monitorTimeout);
+  } on TimeoutException {
+    return _MonitorAnswer.failed(504, '$target did not answer in time');
+  } on SocketException catch (e) {
+    final reason = e.osError?.message ?? e.message;
+    return _MonitorAnswer.failed(
+        504, 'could not reach $target (${_printable(reason)})');
+  } on TlsException catch (e) {
+    final reason = e.osError?.message ?? e.message;
+    return _MonitorAnswer.failed(
+        502,
+        'https to $target failed (${_printable(reason)}); a private CA '
+        'needs a context that names it');
+  } on HttpException {
+    return _MonitorAnswer.failed(
+        502, '$target did not answer like a NATS monitoring endpoint');
+  } finally {
+    http.close(force: true);
+  }
+}
+
+Future<_MonitorAnswer> _readMonitor(
+    HttpClient http, Uri uri, String path, String target) async {
+  final notMonitoring = _MonitorAnswer.failed(
+      502, '$target did not answer like a NATS monitoring endpoint');
+  final request = await http.getUrl(uri);
+  request.followRedirects = false;
+  request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+  final response = await request.close();
+  // An unhealthy server answers /healthz with 503 and its reason.
+  final status = response.statusCode;
+  if (status != 200 && !(path == 'healthz' && status == 503)) {
+    if (status == 400 && uri.scheme == 'http') {
+      // Go's short reply to plain http on a TLS port.
+      final text = await response
+          .transform(const Utf8Decoder(allowMalformed: true))
+          .take(4)
+          .join()
+          .catchError((_) => '');
+      if (text.contains('HTTP request to an HTTPS server')) {
+        return _MonitorAnswer.failed(502, '$target only speaks https',
+            httpsOnly: true);
+      }
+      return notMonitoring;
+    }
+    await response.drain<void>().catchError((_) {});
+    return notMonitoring;
+  }
+  final body = BytesBuilder(copy: false);
+  await for (final chunk in response) {
+    body.add(chunk);
+    if (body.length > _maxMonitorBody) {
+      return _MonitorAnswer.failed(
+          502, 'the answer from $target is larger than 4 MiB');
+    }
+  }
+  final bytes = body.takeBytes();
+  Object? json;
+  try {
+    json = jsonDecode(utf8.decode(bytes));
+  } on FormatException {
+    return notMonitoring;
+  }
+  final valid = json is Map<String, dynamic> &&
+      (path == 'healthz'
+          ? json['status'] is String
+          : json['server_id'] is String &&
+              (json['server_id'] as String).isNotEmpty);
+  return valid ? _MonitorAnswer.ok(status, bytes) : notMonitoring;
 }
 
 Response _contextsHandler(

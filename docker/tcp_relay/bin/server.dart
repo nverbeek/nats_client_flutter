@@ -12,7 +12,8 @@ import 'package:shelf/shelf_io.dart' as shelf_io;
 ///   only ws:// works. The app still lists nats://, and shows the refusal.
 /// - `NATS_TCP_ALLOWED_HOSTS`: comma-separated `host` or `host:port` entries
 ///   the relay may connect to. Unset allows any NATS server. Connecting as
-///   a context is always allowed.
+///   a context is always allowed. Also limits the `nats-monitor` proxy,
+///   where a `host:port` entry has to name the monitoring port.
 /// - `NATS_UI_ALLOWED_ORIGINS`: comma-separated origins
 ///   (`https://nats-ui.example.com`) of pages that may use the relay besides
 ///   its own address. Needed with contexts when the page isn't opened from

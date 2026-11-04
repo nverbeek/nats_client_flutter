@@ -109,10 +109,10 @@ packages:
     dependency: "direct main"
     description:
       name: dart_nats
-      sha256: db2f5bbbddc48fc6f7281cc66ed5918230d3e7e9ea6a9e71ddd281fda7903ae1
+      sha256: f0dc3c3083052c38da99ff4a0c2c469f74ed81c01eb998081da63d19c2b6a63d
       url: "https://pub.dev"
     source: hosted
-    version: "1.7.0"
+    version: "1.7.1"
   ed25519_edwards:
     dependency: transitive
     description:

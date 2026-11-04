@@ -26,6 +26,8 @@ A window screenshot with its title bar has to come from another process. So this
 
 To add a screen, call `signaler.capture(tester, 'Some Name')` in the tour test once the screen settles, and reference `./images/Some%20Name.png` from the README. If the screen needs its own demo data, add a seed step to the script's "Seeding..." block.
 
+The **Server** screenshot is the exception: its data has to be live. The tour starts `integration_test/helpers/demo_traffic.dart` (a few named `dart_nats` clients trading messages at a varying rate), then stays on the Server tab until the throughput chart's two-minute window is full, since the tab only polls while showing. That makes it the slowest step, about two minutes. The server needs its monitoring port, which the script's own container has (`-m 8222`); a server you started yourself on port 4222 needs it too.
+
 ## Icons
 
 `assets/app_launcher_icon.svg` is the official NATS icon from [cncf/artwork](https://github.com/cncf/artwork) (`projects/nats/icon/color/nats-icon-color.svg`), **unmodified**. NATS's CNCF trademark guidelines forbid altered or look-alike logos, and the NATS maintainers asked for the official icon (nats-io/nats-site#1121). Don't redesign, recolor or crop it. Don't show it in the app's UI either: it appears only as the launcher icon and the Windows title bar icon.

@@ -18,19 +18,25 @@ import 'package:web_socket_channel/io.dart';
 ///
 /// `--origin <url>` connects as a page from that origin would, and
 /// `--expect-refusal` passes only if the relay refuses the connection.
+/// `--monitor <port>` also fetches `/varz` through the `nats-monitor` proxy
+/// from the same host or context, at that monitoring port.
 Future<void> main(List<String> arguments) async {
   final args = [...arguments];
-  String? origin;
-  final originAt = args.indexOf('--origin');
-  if (originAt >= 0 && originAt + 1 < args.length) {
-    origin = args[originAt + 1];
-    args.removeRange(originAt, originAt + 2);
+  String? option(String name) {
+    final at = args.indexOf(name);
+    if (at < 0 || at + 1 >= args.length) return null;
+    final value = args[at + 1];
+    args.removeRange(at, at + 2);
+    return value;
   }
+
+  final origin = option('--origin');
+  final monitorPort = option('--monitor');
   final expectRefusal = args.remove('--expect-refusal');
   if (args.length != 3) {
     stderr.writeln('usage: smoke.dart <base url> <nats host> <nats port>\n'
         '       smoke.dart <base url> --context <name>\n'
-        '  [--origin <url>] [--expect-refusal]');
+        '  [--origin <url>] [--expect-refusal] [--monitor <port>]');
     exit(64);
   }
   final base = Uri.parse(args[0]);
@@ -89,4 +95,28 @@ Future<void> main(List<String> arguments) async {
   }
   if (expectRefusal) throw StateError('expected a refusal, got: $received');
   print('relayed PING/PONG with $relay');
+
+  if (monitorPort != null) {
+    final target =
+        args[1] == '--context' ? {'context': args[2]} : {'host': args[1]};
+    final monitor = base.resolve('nats-monitor').replace(queryParameters: {
+      'path': 'varz',
+      ...target,
+      'port': monitorPort,
+    });
+    final client = HttpClient();
+    final request = await client.getUrl(monitor);
+    request.headers.set('x-nats-monitor', '1');
+    if (origin != null) request.headers.set('origin', origin);
+    final response = await request.close();
+    final text = await response.transform(utf8.decoder).join();
+    client.close();
+    final json = jsonDecode(text);
+    if (response.statusCode != 200 ||
+        json is! Map ||
+        json['server_id'] is! String) {
+      throw StateError('GET $monitor returned ${response.statusCode}: $text');
+    }
+    print('fetched /varz of ${json['server_id']} through $monitor');
+  }
 }

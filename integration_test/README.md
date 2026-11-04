@@ -14,10 +14,10 @@ Run integration tests **one file per invocation**. Passing several files to one 
 **JetStream** (covers core pub/sub, JetStream, KV and Object Store, since KV and Object Store buckets are JetStream streams):
 
 ```sh
-docker run -d --name nats-js -p 4222:4222 -p 8222:8222 nats:latest -js
+docker run -d --name nats-js -p 4222:4222 -p 8222:8222 nats:latest -js -m 8222
 ```
 
-Drop `-js` to exercise the app's "JetStream not enabled" state. To get demo data for manual poking, see `scripts/README.md`. When done: `docker rm -f nats-js`.
+`-m 8222` turns on the monitoring port `server_monitor_test.dart` reads; passing any arguments replaces the image's defaults, so without it nothing listens on 8222. Drop `-js` to exercise the app's "JetStream not enabled" state. To get demo data for manual poking, see `scripts/README.md`. When done: `docker rm -f nats-js`.
 
 **Auth fixtures** for `authentication_test.dart`, one server per method. NATS's `authorization` block and operator/JWT mode are mutually exclusive, so they can't share a server:
 
