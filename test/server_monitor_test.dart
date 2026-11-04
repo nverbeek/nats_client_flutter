@@ -82,9 +82,9 @@ Map<String, dynamic> connzJson() => {
     };
 
 ServerMonitorClient clientFor(MockClientHandler handler,
-        {MonitorEndpoint endpoint =
-            const DirectMonitorEndpoint('127.0.0.1', 8222)}) =>
-    ServerMonitorClient(endpoint, client: MockClient(handler));
+        {MonitorEndpoint? endpoint}) =>
+    ServerMonitorClient(endpoint ?? DirectMonitorEndpoint('127.0.0.1', 8222),
+        client: MockClient(handler));
 
 Matcher throwsMonitor(MonitorErrorKind kind) =>
     throwsA(isA<MonitorException>().having((e) => e.kind, 'kind', kind));
@@ -157,19 +157,18 @@ void main() {
 
   group('MonitorEndpoint', () {
     test('direct goes to the host and port over http', () {
-      const endpoint = DirectMonitorEndpoint('127.0.0.1', 8222);
+      final endpoint = DirectMonitorEndpoint('127.0.0.1', 8222);
       expect(endpoint.uri('connz', {'sort': 'msgs_to'}).toString(),
           'http://127.0.0.1:8222/connz?sort=msgs_to');
       expect(endpoint.label, 'http://127.0.0.1:8222');
     });
 
     test('direct handles IPv6, bracketed or not', () {
-      expect(const DirectMonitorEndpoint('::1', 8222).uri('varz').toString(),
+      expect(DirectMonitorEndpoint('::1', 8222).uri('varz').toString(),
           'http://[::1]:8222/varz');
-      expect(const DirectMonitorEndpoint('[::1]', 8222).uri('varz').toString(),
+      expect(DirectMonitorEndpoint('[::1]', 8222).uri('varz').toString(),
           'http://[::1]:8222/varz');
-      expect(
-          const DirectMonitorEndpoint('::1', 8222).label, 'http://[::1]:8222');
+      expect(DirectMonitorEndpoint('::1', 8222).label, 'http://[::1]:8222');
     });
 
     test('relay by host is page-relative and carries the target', () {
@@ -227,7 +226,7 @@ void main() {
 
     test('a slow server times out as unreachable', () {
       final client = ServerMonitorClient(
-          const DirectMonitorEndpoint('127.0.0.1', 8222),
+          DirectMonitorEndpoint('127.0.0.1', 8222),
           client: MockClient((_) => Completer<http.Response>().future),
           timeout: const Duration(milliseconds: 10));
       expect(client.fetchVarz(), throwsMonitor(MonitorErrorKind.unreachable));
@@ -252,16 +251,90 @@ void main() {
           throwsMonitor(MonitorErrorKind.httpError));
     });
 
-    test('an https page never tries a direct http request', () {
-      var called = false;
-      final client = clientFor((_) async {
-        called = true;
-        return http.Response('{}', 200);
-      },
-          endpoint: const DirectMonitorEndpoint('127.0.0.1', 8222,
-              blockedByMixedContent: true));
-      expect(client.fetchVarz(), throwsMonitor(MonitorErrorKind.mixedContent));
-      expect(called, isFalse);
+    group('https monitoring (https_port, e.g. demo.nats.io)', () {
+      const httpsOnly = 'Client sent an HTTP request to an HTTPS server.\n';
+
+      test("switches to https on Go's 'HTTP request to an HTTPS server'",
+          () async {
+        final schemes = <String>[];
+        final endpoint = DirectMonitorEndpoint('demo.nats.io', 8222);
+        final client = clientFor((request) async {
+          schemes.add(request.url.scheme);
+          return request.url.scheme == 'https'
+              ? http.Response(jsonEncode(varzJson()), 200)
+              : http.Response(httpsOnly, 400);
+        }, endpoint: endpoint);
+
+        expect((await client.fetchVarz()).serverName, 'nats-east-1');
+        expect(schemes, ['http', 'https']);
+        expect(endpoint.label, 'https://demo.nats.io:8222');
+
+        // Later requests go straight to https.
+        await client.fetchVarz();
+        expect(schemes, ['http', 'https', 'https']);
+      });
+
+      test('tries https when http gets no answer (a browser hides the 400)',
+          () async {
+        final endpoint = DirectMonitorEndpoint('demo.nats.io', 8222);
+        final client = clientFor((request) async {
+          if (request.url.scheme == 'http') {
+            throw http.ClientException('XMLHttpRequest error.');
+          }
+          return http.Response(jsonEncode(varzJson()), 200);
+        }, endpoint: endpoint);
+
+        await client.fetchVarz();
+        expect(endpoint.https, isTrue);
+      });
+
+      test('when https fails too, the http failure is reported', () async {
+        final endpoint = DirectMonitorEndpoint('127.0.0.1', 8222);
+        final client = clientFor(
+            (request) async =>
+                throw http.ClientException('${request.url.scheme} refused'),
+            endpoint: endpoint);
+
+        await expectLater(
+            client.fetchVarz(),
+            throwsA(isA<MonitorException>()
+                .having((e) => e.kind, 'kind', MonitorErrorKind.unreachable)
+                .having((e) => e.detail, 'detail', contains('http refused'))));
+        expect(endpoint.https, isFalse);
+        expect(endpoint.label, 'http://127.0.0.1:8222');
+      });
+
+      test('a plain http server is never asked over https', () async {
+        final schemes = <String>[];
+        final client = clientFor((request) async {
+          schemes.add(request.url.scheme);
+          return http.Response(jsonEncode(varzJson()), 200);
+        });
+        await client.fetchVarz();
+        await client.fetchVarz();
+        expect(schemes, ['http', 'http']);
+      });
+
+      test('an https page goes straight to https', () async {
+        final schemes = <String>[];
+        final client = clientFor((request) async {
+          schemes.add(request.url.scheme);
+          return http.Response(jsonEncode(varzJson()), 200);
+        },
+            endpoint: DirectMonitorEndpoint('demo.nats.io', 8222,
+                blockedByMixedContent: true));
+        await client.fetchVarz();
+        expect(schemes, ['https']);
+      });
+
+      test('an https page that gets no https answer explains why', () {
+        final client = clientFor(
+            (_) async => throw http.ClientException('XMLHttpRequest error.'),
+            endpoint: DirectMonitorEndpoint('127.0.0.1', 8222,
+                blockedByMixedContent: true));
+        expect(
+            client.fetchVarz(), throwsMonitor(MonitorErrorKind.mixedContent));
+      });
     });
 
     test("the relay's refusal is passed on with its reason", () {
@@ -333,7 +406,7 @@ void main() {
   });
 
   test('describeMonitorError names the endpoint', () {
-    const endpoint = DirectMonitorEndpoint('127.0.0.1', 8222);
+    final endpoint = DirectMonitorEndpoint('127.0.0.1', 8222);
     expect(
         describeMonitorError(
             const MonitorException(MonitorErrorKind.unreachable), endpoint),

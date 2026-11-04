@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/services.dart';
+import 'package:http/io_client.dart';
 import 'package:loader_overlay/loader_overlay.dart';
 import 'package:nats_client_flutter/regex_text_highlight.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -1087,8 +1088,15 @@ class _MyHomePageState extends State<MyHomePage>
     _serverMonitorSession?.dispose();
     _serverMonitorSession = null;
     if (!serverMonitorEnabled || !_hasNatsClient) return;
-    _serverMonitorSession =
-        ServerMonitorSession(ServerMonitorClient(_serverMonitorEndpoint()));
+    // For https monitoring: the TLS files from Security Settings (a private
+    // CA, a client certificate) on top of the system's CAs. Browsers use
+    // their own trust, so this is desktop only.
+    final security = kIsWeb ? null : getSecurityContext(withTrustedRoots: true);
+    _serverMonitorSession = ServerMonitorSession(ServerMonitorClient(
+      _serverMonitorEndpoint(),
+      client: security == null ? null : IOClient(HttpClient(context: security)),
+      ownsClient: true,
+    ));
   }
 
   /// `TabController.length` is fixed at construction, but which tabs are
@@ -1385,7 +1393,10 @@ class _MyHomePageState extends State<MyHomePage>
   /// Creates a SecurityContext instance based on the currently configured
   /// certificates. Returns a null [SecurityContext] if no certificates
   /// are configured. Not available on web platform.
-  SecurityContext? getSecurityContext() {
+  ///
+  /// [withTrustedRoots] also trusts the system's CAs, for https monitoring,
+  /// where the server may well have a public certificate.
+  SecurityContext? getSecurityContext({bool withTrustedRoots = false}) {
     // SecurityContext is not available on web platform
     if (kIsWeb) {
       return null;
@@ -1418,7 +1429,8 @@ class _MyHomePageState extends State<MyHomePage>
     }
 
     // create a new SecurityContext
-    SecurityContext? securityContext = SecurityContext();
+    SecurityContext? securityContext =
+        SecurityContext(withTrustedRoots: withTrustedRoots);
     var useSecurityContext = false;
     if (savedTrustedCertificateBytes != null) {
       securityContext.setTrustedCertificatesBytes(savedTrustedCertificateBytes);

@@ -4,8 +4,7 @@ import 'package:nats_client_flutter/server_monitor.dart';
 import 'package:nats_client_flutter/server_monitor_dashboard.dart';
 
 class FakeServerMonitorClient extends ServerMonitorClient {
-  FakeServerMonitorClient()
-      : super(const DirectMonitorEndpoint('127.0.0.1', 8222));
+  FakeServerMonitorClient() : super(DirectMonitorEndpoint('127.0.0.1', 8222));
 
   Future<ServerVarz> Function() varzImpl = () async => sampleVarz();
   Future<ConnzPage> Function(ConnzSort sort, int offset, int limit) connzImpl =

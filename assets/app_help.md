@@ -190,10 +190,12 @@ On a narrow window the identity panel moves behind a **Details** button, and on 
 ## Turning monitoring on
 nats-server only opens its monitoring port when asked: start it with `-m 8222`, or set `http_port: 8222` in its config. Without that, the tab shows **Can't reach the monitoring endpoint**; your NATS connection itself is unaffected.
 
+Some servers serve monitoring over https instead (`https_port`), as demo.nats.io does. The tab notices and switches to https on its own; the endpoint shown under **Details** says which it's using. On the desktop app, https trusts the usual system certificate authorities plus the trusted certificate from the TLS settings, and sends the client certificate from there if you've set one.
+
 The monitoring endpoint has **no authentication**: anyone who can reach that port can read what this tab shows. Keep it off networks you don't trust.
 
 ## In a browser
-The web version can reach the monitoring port directly, since nats-server allows any page to read it. The exception is a page loaded over https, which browsers don't let call a plain http address. The Docker image fetches through its own server instead (for `nats://` connections, contexts, and https pages), so the host you typed is resolved inside the container, the same as the NATS connection.
+The web version can reach the monitoring port directly, since nats-server allows any page to read it. The exception is a page loaded over https, which browsers don't let call a plain http address, so from such a page only https monitoring works. The Docker image fetches through its own server instead (for `nats://` connections, contexts, and https pages), so the host you typed is resolved inside the container, the same as the NATS connection.
 
 # Keyboard Shortcuts
 

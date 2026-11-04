@@ -254,16 +254,25 @@ sealed class MonitorEndpoint {
 
 /// Straight to the server's monitoring port: desktop, and a browser that
 /// can reach the host itself.
+///
+/// nats-server serves monitoring over either http (`http_port`, `-m`) or
+/// https (`https_port`, e.g. demo.nats.io), and nothing says which, so
+/// [ServerMonitorClient] starts with http and sets [https] once https is
+/// the one that answers.
 class DirectMonitorEndpoint extends MonitorEndpoint {
-  const DirectMonitorEndpoint(this.host, this.port,
-      {this.blockedByMixedContent = false});
+  DirectMonitorEndpoint(this.host, this.port,
+      {this.blockedByMixedContent = false})
+      : https = blockedByMixedContent;
 
   final String host;
   final int port;
 
   /// True on an https page: browsers block an http request from it, so
-  /// there's no point trying.
+  /// only https is tried.
   final bool blockedByMixedContent;
+
+  /// Whether requests go over https.
+  bool https;
 
   @override
   Uri uri(String path, [Map<String, String> query = const {}]) {
@@ -271,7 +280,7 @@ class DirectMonitorEndpoint extends MonitorEndpoint {
         ? host.substring(1, host.length - 1)
         : host;
     return Uri(
-        scheme: 'http',
+        scheme: https ? 'https' : 'http',
         host: bare,
         port: port,
         path: '/$path',
@@ -281,7 +290,7 @@ class DirectMonitorEndpoint extends MonitorEndpoint {
   @override
   String get label {
     final h = host.contains(':') && !host.startsWith('[') ? '[$host]' : host;
-    return 'http://$h:$port';
+    return '${https ? 'https' : 'http'}://$h:$port';
   }
 }
 
@@ -355,8 +364,10 @@ String describeMonitorError(Object error, MonitorEndpoint endpoint) {
           : '${endpoint.label} answered, but not as a NATS monitoring '
               'endpoint. Check the port in Settings.';
     case MonitorErrorKind.mixedContent:
-      return 'This page was loaded over https, so the browser blocks plain '
-          'http requests to ${endpoint.label}.';
+      return 'This page was loaded over https, so the browser only allows '
+          'https requests, and ${endpoint.label} did not answer. A server '
+          'whose monitoring is plain http (-m, http_port) can only be '
+          'reached from an http page or the desktop app.';
     case MonitorErrorKind.relayRefused:
       return 'The relay refused: ${detail ?? 'no reason given'}';
     case MonitorErrorKind.httpError:
@@ -368,10 +379,14 @@ String describeMonitorError(Object error, MonitorEndpoint endpoint) {
 /// kept-alive connection) for the life of the session. Methods aren't
 /// final, so widget tests can override them.
 class ServerMonitorClient {
+  /// [client] is closed by [close] only when this created it, or when
+  /// [ownsClient] says it was made for this alone.
   ServerMonitorClient(this.endpoint,
-      {http.Client? client, this.timeout = const Duration(seconds: 5)})
+      {http.Client? client,
+      bool ownsClient = false,
+      this.timeout = const Duration(seconds: 5)})
       : _client = client ?? http.Client(),
-        _ownsClient = client == null;
+        _ownsClient = client == null || ownsClient;
 
   final MonitorEndpoint endpoint;
   final Duration timeout;
@@ -419,18 +434,20 @@ class ServerMonitorClient {
       bool requireServerId = false,
       bool unhealthyIsAnswer = false}) async {
     final endpoint = this.endpoint;
-    if (endpoint is DirectMonitorEndpoint && endpoint.blockedByMixedContent) {
-      throw const MonitorException(MonitorErrorKind.mixedContent);
-    }
     final http.Response response;
-    try {
-      response = await _client.get(endpoint.uri(path, query)).timeout(timeout);
-    } on TimeoutException {
-      throw const MonitorException(MonitorErrorKind.unreachable, 'timed out');
-    } catch (e) {
-      // http.ClientException on every platform, wrapping the socket error.
-      throw MonitorException(
-          MonitorErrorKind.unreachable, truncatedErrorDetail(e));
+    if (endpoint is DirectMonitorEndpoint && !endpoint.https) {
+      response = await _getWithHttpsFallback(endpoint, path, query);
+    } else {
+      try {
+        response = await _send(endpoint.uri(path, query));
+      } on MonitorException catch (e) {
+        if (endpoint is DirectMonitorEndpoint &&
+            endpoint.blockedByMixedContent &&
+            e.kind == MonitorErrorKind.unreachable) {
+          throw MonitorException(MonitorErrorKind.mixedContent, e.detail);
+        }
+        rethrow;
+      }
     }
 
     Object? decoded;
@@ -471,6 +488,47 @@ class ServerMonitorClient {
     }
     return json;
   }
+
+  Future<http.Response> _send(Uri uri) async {
+    try {
+      return await _client.get(uri).timeout(timeout);
+    } on TimeoutException {
+      throw const MonitorException(MonitorErrorKind.unreachable, 'timed out');
+    } catch (e) {
+      // http.ClientException on every platform, wrapping the socket error.
+      throw MonitorException(
+          MonitorErrorKind.unreachable, truncatedErrorDetail(e));
+    }
+  }
+
+  /// Tries http, and https when http says the port speaks https: the 400
+  /// Go's server sends, or (in a browser, which hides that 400 because it
+  /// has no CORS header) no usable answer at all. Once https answers, the
+  /// endpoint stays on it. If https fails too, the http failure is what's
+  /// reported, since http is the usual setup.
+  Future<http.Response> _getWithHttpsFallback(DirectMonitorEndpoint endpoint,
+      String path, Map<String, String> query) async {
+    http.Response? httpResponse;
+    MonitorException? httpError;
+    try {
+      httpResponse = await _send(endpoint.uri(path, query));
+      if (!_isHttpsOnlyReply(httpResponse)) return httpResponse;
+    } on MonitorException catch (e) {
+      httpError = e;
+    }
+    endpoint.https = true;
+    try {
+      return await _send(endpoint.uri(path, query));
+    } on MonitorException {
+      endpoint.https = false;
+      if (httpError != null) throw httpError;
+      return httpResponse!;
+    }
+  }
+
+  static bool _isHttpsOnlyReply(http.Response response) =>
+      response.statusCode == 400 &&
+      response.body.contains('HTTP request to an HTTPS server');
 }
 
 /// Message and byte rates for one poll interval, per second.

@@ -215,6 +215,39 @@ void main() {
     expect(seen, hasLength(1));
   });
 
+  test("Go's 'HTTP request to an HTTPS server' makes it try https", () async {
+    // A plain listener, so the https attempt that follows fails its TLS
+    // handshake: that failure is what proves https was tried.
+    final seen = <Uri>[];
+    final port = await target(
+        (r) => r.response
+          ..statusCode = 400
+          ..write('Client sent an HTTP request to an HTTPS server.\n')
+          ..close(),
+        seen: seen);
+    await startRelay(RelayConfig(monitorTimeout: const Duration(seconds: 2)));
+
+    final response = await get('path=varz&host=127.0.0.1&port=$port');
+    expect(response.statusCode, 502);
+    expect(jsonDecode(response.body)['error'], contains('https to'));
+    // Only the http request reached the handler; the https one never got
+    // past the handshake.
+    expect(seen, hasLength(1));
+  });
+
+  test('any other 400 is just not a monitoring endpoint', () async {
+    final port = await target((r) => r.response
+      ..statusCode = 400
+      ..write('Bad Request')
+      ..close());
+    await startRelay();
+
+    final response = await get('path=varz&host=127.0.0.1&port=$port');
+    expect(response.statusCode, 502);
+    expect(jsonDecode(response.body)['error'],
+        contains('did not answer like a NATS monitoring endpoint'));
+  });
+
   test('an unknown context is refused', () async {
     await startRelay();
     final response = await get('path=varz&context=nope&port=8222');

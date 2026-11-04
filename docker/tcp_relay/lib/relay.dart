@@ -247,6 +247,7 @@ Handler createHandler({
   final config = relay ?? RelayConfig();
   final staticHandler =
       createStaticHandler(webRoot, defaultDocument: 'index.html');
+  final httpsTargets = <String>{};
   return (Request request) {
     switch (request.url.path) {
       case relayPath:
@@ -254,7 +255,7 @@ Handler createHandler({
       case contextsPath:
         return _contextsHandler(request, config, log);
       case monitorPath:
-        return _monitorHandler(request, config, log);
+        return _monitorHandler(request, config, log, httpsTargets);
     }
     return staticHandler(request);
   };
@@ -274,8 +275,14 @@ Handler createHandler({
 /// Refusals are `{"error": reason}`: 504 when the target didn't answer and
 /// 502 when it isn't a monitoring endpoint, so the app can tell those from
 /// a refusal.
-Future<Response> _monitorHandler(
-    Request request, RelayConfig config, void Function(String) log) async {
+///
+/// nats-server serves monitoring over http (`http_port`) or https
+/// (`https_port`, as demo.nats.io does). A target is asked over http until
+/// it answers that it speaks https, and is then remembered in
+/// [httpsTargets] (`host:port`). For a context, https trusts its CA and
+/// presents its client certificate, as the TCP relay does.
+Future<Response> _monitorHandler(Request request, RelayConfig config,
+    void Function(String) log, Set<String> httpsTargets) async {
   const headers = {
     'content-type': 'application/json',
     'cache-control': 'no-store',
@@ -324,17 +331,19 @@ Future<Response> _monitorHandler(
   }
 
   final List<String> hosts;
+  NatsContext? context;
   final contextName = query['context']?.trim() ?? '';
   if (contextName.isNotEmpty) {
     final name = _printable(contextName);
-    final context = config.contexts.byName(contextName);
-    if (context == null) {
+    final found = config.contexts.byName(contextName);
+    if (found == null) {
       return refuse(404, 'there is no context named "$name"');
     }
-    if (context.error != null) {
-      return refuse(403, 'context "$name" is unusable: ${context.error}');
+    if (found.error != null) {
+      return refuse(403, 'context "$name" is unusable: ${found.error}');
     }
-    hosts = {for (final s in context.servers) s.host}.toList();
+    context = found;
+    hosts = {for (final s in found.servers) s.host}.toList();
   } else {
     final host = query['host']?.trim() ?? '';
     if (host.isEmpty) return refuse(400, 'a host or a context is required');
@@ -348,13 +357,22 @@ Future<Response> _monitorHandler(
   // Like the TCP relay, a context's servers are tried in order.
   var failure = _MonitorAnswer.failed(504, 'the context has no servers');
   for (final host in hosts) {
-    final uri = Uri(
-        scheme: 'http',
+    Uri uri(String scheme) => Uri(
+        scheme: scheme,
         host: host,
         port: port,
         path: '/$path',
         queryParameters: forward.isEmpty ? null : forward);
-    final answer = await _fetchMonitor(uri, path, config);
+    final key = '${host.toLowerCase()}:$port';
+    final https = httpsTargets.contains(key);
+    var answer = await _fetchMonitor(
+        uri(https ? 'https' : 'http'), path, config, context);
+    if (!https && answer.httpsOnly) {
+      // Bounded, so many distinct targets can't grow it without limit.
+      if (httpsTargets.length >= 256) httpsTargets.clear();
+      httpsTargets.add(key);
+      answer = await _fetchMonitor(uri('https'), path, config, context);
+    }
     if (answer.body != null) {
       return Response(answer.status, body: answer.body, headers: headers);
     }
@@ -365,19 +383,28 @@ Future<Response> _monitorHandler(
 
 /// A monitoring response to pass on, or why there isn't one.
 class _MonitorAnswer {
-  _MonitorAnswer.ok(this.status, List<int> this.body) : error = null;
-  _MonitorAnswer.failed(this.status, String this.error) : body = null;
+  _MonitorAnswer.ok(this.status, List<int> this.body)
+      : error = null,
+        httpsOnly = false;
+  _MonitorAnswer.failed(this.status, String this.error,
+      {this.httpsOnly = false})
+      : body = null;
 
   final int status;
   final List<int>? body;
   final String? error;
+
+  /// The target said it only speaks https (Go's reply to plain http on a
+  /// TLS port).
+  final bool httpsOnly;
 }
 
 Future<_MonitorAnswer> _fetchMonitor(
-    Uri uri, String path, RelayConfig config) async {
+    Uri uri, String path, RelayConfig config, NatsContext? context) async {
   final target = _printable(
       '${uri.host.contains(':') ? '[${uri.host}]' : uri.host}:${uri.port}');
-  final http = HttpClient()
+  final http = HttpClient(
+      context: uri.scheme == 'https' ? context?.securityContext() : null)
     ..connectionTimeout = config.connectTimeout
     // Straight to the target, never through a proxy from the environment.
     ..findProxy = ((_) => 'DIRECT');
@@ -390,6 +417,12 @@ Future<_MonitorAnswer> _fetchMonitor(
     final reason = e.osError?.message ?? e.message;
     return _MonitorAnswer.failed(
         504, 'could not reach $target (${_printable(reason)})');
+  } on TlsException catch (e) {
+    final reason = e.osError?.message ?? e.message;
+    return _MonitorAnswer.failed(
+        502,
+        'https to $target failed (${_printable(reason)}); a private CA '
+        'needs a context that names it');
   } on HttpException {
     return _MonitorAnswer.failed(
         502, '$target did not answer like a NATS monitoring endpoint');
@@ -409,6 +442,19 @@ Future<_MonitorAnswer> _readMonitor(
   // An unhealthy server answers /healthz with 503 and its reason.
   final status = response.statusCode;
   if (status != 200 && !(path == 'healthz' && status == 503)) {
+    if (status == 400 && uri.scheme == 'http') {
+      // Go's short reply to plain http on a TLS port.
+      final text = await response
+          .transform(const Utf8Decoder(allowMalformed: true))
+          .take(4)
+          .join()
+          .catchError((_) => '');
+      if (text.contains('HTTP request to an HTTPS server')) {
+        return _MonitorAnswer.failed(502, '$target only speaks https',
+            httpsOnly: true);
+      }
+      return notMonitoring;
+    }
     await response.drain<void>().catchError((_) {});
     return notMonitoring;
   }
