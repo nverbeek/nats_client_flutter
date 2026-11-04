@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nats_client_flutter/server_monitor.dart';
@@ -26,8 +28,11 @@ class FakeServerMonitorClient extends ServerMonitorClient {
     return connzImpl(sort, offset, limit);
   }
 
+  Future<HealthStatus> Function() healthImpl =
+      () async => const HealthStatus(ok: true);
+
   @override
-  Future<HealthStatus> fetchHealth() async => const HealthStatus(ok: true);
+  Future<HealthStatus> fetchHealth() => healthImpl();
 
   @override
   Future<int> fetchGatewayCount() async => 0;
@@ -338,6 +343,108 @@ void main() {
     await pump(tester, sessionOverride: ServerMonitorSession(other));
     expect(find.text('v2.12.0'), findsOneWidget);
     expect(find.text('v2.11.4'), findsNothing);
+    await unmount(tester);
+  });
+
+  testWidgets('a new session is polled even while the old one is in flight',
+      (tester) async {
+    final stuck = Completer<ServerVarz>();
+    client.varzImpl = () => stuck.future;
+    await pump(tester);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    final other = FakeServerMonitorClient()
+      ..varzImpl = () async => const ServerVarz(
+          serverId: 'OTHER', serverName: 'nats-west-1', version: '2.12.0');
+    await pump(tester, sessionOverride: ServerMonitorSession(other));
+    expect(other.varzCalls, 1);
+    expect(find.text('v2.12.0'), findsOneWidget);
+
+    // The old poll finishing late changes nothing, and polling goes on.
+    stuck.complete(sampleVarz());
+    await tester.pump();
+    expect(find.text('v2.12.0'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+    expect(other.varzCalls, 2);
+    await unmount(tester);
+  });
+
+  testWidgets('a failed /healthz does not throw away /varz', (tester) async {
+    client.healthImpl =
+        () async => throw const MonitorException(MonitorErrorKind.httpError);
+    await pump(tester);
+    expect(find.text('v2.11.4'), findsOneWidget);
+    expect(find.text('Healthy'), findsNothing);
+    expect(find.text('Last update failed'), findsNothing);
+    expect(find.text('svc-0'), findsOneWidget);
+    await unmount(tester);
+  });
+
+  testWidgets('a failed /connz shows why in the connections card',
+      (tester) async {
+    client.connzImpl = (_, __, ___) async =>
+        throw const MonitorException(MonitorErrorKind.unreachable);
+    await pump(tester);
+    expect(find.text('v2.11.4'), findsOneWidget);
+    expect(find.byKey(const ValueKey('connzError')), findsOneWidget);
+    expect(
+        find.descendant(
+            of: find.byType(Card),
+            matching: find.byType(CircularProgressIndicator)),
+        findsNothing);
+    await unmount(tester);
+  });
+
+  testWidgets('a page fetched before paging is not shown as the new page',
+      (tester) async {
+    await pump(tester);
+    // Hold the next /connz, then page while it's in flight.
+    final held = Completer<ConnzPage>();
+    client.connzImpl = (sort, offset, limit) =>
+        offset == 0 ? held.future : Future.value(samplePage(offset, limit));
+    await tester.tap(find.byTooltip('Refresh now'));
+    await tester.pump();
+    await tester.ensureVisible(find.byTooltip('Next page'));
+    await tester.tap(find.byTooltip('Next page'));
+    await tester.pump();
+
+    held.complete(samplePage(0, 25));
+    await tester.pump();
+    expect(find.text('svc-0'), findsNothing);
+    await tester.pump();
+    await tester.pump();
+    expect(client.connzCalls.last, (ConnzSort.msgsTo, 25, 25));
+    expect(find.text('svc-25'), findsOneWidget);
+    await unmount(tester);
+  });
+
+  testWidgets('a page past the end goes back to the last one', (tester) async {
+    await pump(tester);
+    await tester.ensureVisible(find.byTooltip('Next page'));
+    await tester.tap(find.byTooltip('Next page'));
+    await tester.pump();
+    await tester.pump();
+    await tester.tap(find.byTooltip('Next page'));
+    await tester.pump();
+    await tester.pump();
+    expect(client.connzCalls.last, (ConnzSort.msgsTo, 50, 25));
+
+    // Down to 30 connections: offset 50 is now past the end.
+    client.connzImpl = (sort, offset, limit) async => ConnzPage(
+        total: 30,
+        offset: offset,
+        limit: limit,
+        connections: samplePage(offset, limit)
+            .connections
+            .where((c) => c.cid < 1030)
+            .toList());
+    await tester.tap(find.byTooltip('Refresh now'));
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+    expect(client.connzCalls.last, (ConnzSort.msgsTo, 25, 25));
+    expect(find.text('26–30 of 30'), findsOneWidget);
     await unmount(tester);
   });
 }

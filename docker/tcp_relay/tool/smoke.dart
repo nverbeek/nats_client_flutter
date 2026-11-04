@@ -106,6 +106,7 @@ Future<void> main(List<String> arguments) async {
     });
     final client = HttpClient();
     final request = await client.getUrl(monitor);
+    request.headers.set('x-nats-monitor', '1');
     if (origin != null) request.headers.set('origin', origin);
     final response = await request.close();
     final text = await response.transform(utf8.decoder).join();

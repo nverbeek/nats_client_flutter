@@ -1090,8 +1090,19 @@ class _MyHomePageState extends State<MyHomePage>
     if (!serverMonitorEnabled || !_hasNatsClient) return;
     // For https monitoring: the TLS files from Security Settings (a private
     // CA, a client certificate) on top of the system's CAs. Browsers use
-    // their own trust, so this is desktop only.
-    final security = kIsWeb ? null : getSecurityContext(withTrustedRoots: true);
+    // their own trust, so this is desktop only. Files the platform rejects
+    // fall back to the system's CAs: this runs on connect and inside
+    // Settings' setState, where a throw would leave either half done, and
+    // the NATS connection reports the bad file itself.
+    SecurityContext? security;
+    if (!kIsWeb) {
+      try {
+        security = getSecurityContext(withTrustedRoots: true);
+      } catch (e) {
+        debugPrint('Server tab: TLS files not loaded: $e');
+        security = SecurityContext(withTrustedRoots: true);
+      }
+    }
     _serverMonitorSession = ServerMonitorSession(ServerMonitorClient(
       _serverMonitorEndpoint(),
       client: security == null ? null : IOClient(HttpClient(context: security)),

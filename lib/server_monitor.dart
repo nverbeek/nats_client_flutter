@@ -274,18 +274,22 @@ class DirectMonitorEndpoint extends MonitorEndpoint {
   /// Whether requests go over https.
   bool https;
 
+  /// Whether http has answered before. After that, a failed request is
+  /// the server being down, not a sign that it speaks https.
+  bool httpAnswered = false;
+
   @override
-  Uri uri(String path, [Map<String, String> query = const {}]) {
-    final bare = host.startsWith('[') && host.endsWith(']')
-        ? host.substring(1, host.length - 1)
-        : host;
-    return Uri(
-        scheme: https ? 'https' : 'http',
-        host: bare,
-        port: port,
-        path: '/$path',
-        queryParameters: query.isEmpty ? null : query);
-  }
+  Uri uri(String path, [Map<String, String> query = const {}]) =>
+      uriOver(path, query, https: https);
+
+  /// [uri] over https or http, whatever [https] says.
+  Uri uriOver(String path, Map<String, String> query, {required bool https}) =>
+      Uri(
+          scheme: https ? 'https' : 'http',
+          host: bareHost(host),
+          port: port,
+          path: '/$path',
+          queryParameters: query.isEmpty ? null : query);
 
   @override
   String get label {
@@ -338,9 +342,13 @@ enum MonitorErrorKind {
 }
 
 class MonitorException implements Exception {
-  const MonitorException(this.kind, [this.detail]);
+  const MonitorException(this.kind, [this.detail, this.fromRelay = false]);
   final MonitorErrorKind kind;
   final String? detail;
+
+  /// [detail] is the relay's own reason, which names the server it tried,
+  /// rather than this app's error reaching the relay.
+  final bool fromRelay;
 
   @override
   String toString() => 'MonitorException($kind, $detail)';
@@ -355,11 +363,14 @@ String describeMonitorError(Object error, MonitorEndpoint endpoint) {
   switch (error.kind) {
     // Through the relay, its own words name the server it tried.
     case MonitorErrorKind.unreachable:
-      return endpoint is RelayMonitorEndpoint && detail != null
-          ? 'The relay reports: $detail.'
+      if (error.fromRelay && detail != null) {
+        return 'The relay reports: $detail.';
+      }
+      return endpoint is RelayMonitorEndpoint
+          ? 'No response from the relay${detail == null ? '' : ' ($detail)'}.'
           : 'No response from ${endpoint.label}.';
     case MonitorErrorKind.notMonitoring:
-      return endpoint is RelayMonitorEndpoint && detail != null
+      return error.fromRelay && detail != null
           ? 'The relay reports: $detail. Check the port in Settings.'
           : '${endpoint.label} answered, but not as a NATS monitoring '
               'endpoint. Check the port in Settings.';
@@ -380,13 +391,20 @@ String describeMonitorError(Object error, MonitorEndpoint endpoint) {
 /// final, so widget tests can override them.
 class ServerMonitorClient {
   /// [client] is closed by [close] only when this created it, or when
-  /// [ownsClient] says it was made for this alone.
+  /// [ownsClient] says it was made for this alone. [timeout] defaults to
+  /// [directTimeout] or [relayTimeout], by [endpoint].
   ServerMonitorClient(this.endpoint,
-      {http.Client? client,
-      bool ownsClient = false,
-      this.timeout = const Duration(seconds: 5)})
-      : _client = client ?? http.Client(),
+      {http.Client? client, bool ownsClient = false, Duration? timeout})
+      : timeout = timeout ??
+            (endpoint is RelayMonitorEndpoint ? relayTimeout : directTimeout),
+        _client = client ?? http.Client(),
         _ownsClient = client == null || ownsClient;
+
+  static const directTimeout = Duration(seconds: 5);
+
+  /// The relay gives each of a context's servers 5 s, and as long again
+  /// for https, so it needs longer than one request to say why it failed.
+  static const relayTimeout = Duration(seconds: 20);
 
   final MonitorEndpoint endpoint;
   final Duration timeout;
@@ -472,7 +490,8 @@ class ServerMonitorClient {
             502 => MonitorErrorKind.notMonitoring,
             _ => MonitorErrorKind.relayRefused,
           },
-          reason);
+          reason,
+          true);
     }
     final healthAnswer = unhealthyIsAnswer && response.statusCode == 503;
     if (response.statusCode != 200 && !healthAnswer) {
@@ -491,7 +510,14 @@ class ServerMonitorClient {
 
   Future<http.Response> _send(Uri uri) async {
     try {
-      return await _client.get(uri).timeout(timeout);
+      // Only for the relay: on a direct request from a browser, a custom
+      // header would make it ask nats-server for a CORS preflight first.
+      return await _client
+          .get(uri,
+              headers: endpoint is RelayMonitorEndpoint
+                  ? const {tcpRelayMonitorHeader: '1'}
+                  : null)
+          .timeout(timeout);
     } on TimeoutException {
       throw const MonitorException(MonitorErrorKind.unreachable, 'timed out');
     } catch (e) {
@@ -503,24 +529,29 @@ class ServerMonitorClient {
 
   /// Tries http, and https when http says the port speaks https: the 400
   /// Go's server sends, or (in a browser, which hides that 400 because it
-  /// has no CORS header) no usable answer at all. Once https answers, the
-  /// endpoint stays on it. If https fails too, the http failure is what's
-  /// reported, since http is the usual setup.
+  /// has no CORS header) no usable answer at all, as long as http has never
+  /// answered. Once https answers, the endpoint stays on it. If https fails
+  /// too, the http failure is what's reported, since http is the usual
+  /// setup.
   Future<http.Response> _getWithHttpsFallback(DirectMonitorEndpoint endpoint,
       String path, Map<String, String> query) async {
     http.Response? httpResponse;
     MonitorException? httpError;
     try {
-      httpResponse = await _send(endpoint.uri(path, query));
-      if (!_isHttpsOnlyReply(httpResponse)) return httpResponse;
+      httpResponse = await _send(endpoint.uriOver(path, query, https: false));
+      if (!_isHttpsOnlyReply(httpResponse)) {
+        endpoint.httpAnswered = true;
+        return httpResponse;
+      }
     } on MonitorException catch (e) {
+      if (endpoint.httpAnswered) rethrow;
       httpError = e;
     }
-    endpoint.https = true;
     try {
-      return await _send(endpoint.uri(path, query));
+      final response = await _send(endpoint.uriOver(path, query, https: true));
+      endpoint.https = true;
+      return response;
     } on MonitorException {
-      endpoint.https = false;
       if (httpError != null) throw httpError;
       return httpResponse!;
     }
@@ -563,6 +594,7 @@ class ThroughputHistory {
 
   final List<ThroughputSample> _samples = [];
   ServerVarz? _previous;
+  bool _gap = false;
   int _version = 0;
 
   List<ThroughputSample> get samples => List.unmodifiable(_samples);
@@ -570,8 +602,10 @@ class ThroughputHistory {
   /// Bumped on every change, so a painter can tell whether to repaint.
   int get version => _version;
 
-  /// Adds the rates since the previous [varz]. [interval] is how often polls
-  /// are meant to happen; a longer wait than that marks a gap.
+  /// Adds the rates since the previous [varz]. [interval] is how far apart
+  /// polls are expected to be. A much longer wait is a gap: its average rate
+  /// isn't added, since it would be plotted (and shown in the legend) as the
+  /// current one, and the next sample starts a new line.
   void add(ServerVarz varz, {required Duration interval}) {
     final previous = _previous;
     _previous = varz;
@@ -594,6 +628,12 @@ class ThroughputHistory {
 
     final elapsed = now.difference(previous.now!);
     if (elapsed <= Duration.zero) return;
+    if (elapsed > interval * 2.5) {
+      _gap = _samples.isNotEmpty;
+      _samples.removeWhere((s) => now.difference(s.time) > window);
+      _version++;
+      return;
+    }
     final seconds = elapsed.inMicroseconds / Duration.microsecondsPerSecond;
     _samples.add(ThroughputSample(
       time: now,
@@ -601,8 +641,9 @@ class ThroughputHistory {
       outMsgs: (varz.outMsgs - previous.outMsgs) / seconds,
       inBytes: (varz.inBytes - previous.inBytes) / seconds,
       outBytes: (varz.outBytes - previous.outBytes) / seconds,
-      gapBefore: _samples.isNotEmpty && elapsed > interval * 2.5,
+      gapBefore: _gap && _samples.isNotEmpty,
     ));
+    _gap = false;
     _samples.removeWhere((s) => now.difference(s.time) > window);
     _version++;
   }

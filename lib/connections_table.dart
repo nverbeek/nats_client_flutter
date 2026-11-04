@@ -27,6 +27,7 @@ class ConnectionsTable extends StatelessWidget {
   const ConnectionsTable({
     super.key,
     required this.page,
+    this.error,
     required this.sort,
     required this.offset,
     required this.limit,
@@ -37,6 +38,10 @@ class ConnectionsTable extends StatelessWidget {
   });
 
   final ConnzPage? page;
+
+  /// Why the last `/connz` failed. Shown in place of the spinner while
+  /// there's no [page]; above the rows otherwise.
+  final String? error;
   final ConnzSort sort;
   final int offset;
   final int limit;
@@ -69,12 +74,23 @@ class ConnectionsTable extends StatelessWidget {
           ),
         ),
         if (narrow) _sortPicker(context),
-        if (page == null)
-          const Padding(
-            padding: EdgeInsets.all(24),
-            child: Center(child: CircularProgressIndicator()),
-          )
-        else if (page.connections.isEmpty)
+        if (error != null)
+          Padding(
+            padding: EdgeInsets.fromLTRB(14, 4, 14, page == null ? 24 : 4),
+            child: Text(
+              "Couldn't load connections: $error",
+              key: const ValueKey('connzError'),
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.error),
+            ),
+          ),
+        if (page == null) ...[
+          if (error == null)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+        ] else if (page.connections.isEmpty)
           const Padding(
             padding: EdgeInsets.all(24),
             child: Center(child: Text('No open connections.')),

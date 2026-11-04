@@ -44,7 +44,9 @@ void main() {
       ..close();
   }
 
-  Future<http.Response> get(String query, {Map<String, String>? headers}) =>
+  /// A request as the app makes it, with the [monitorHeader].
+  Future<http.Response> get(String query,
+          {Map<String, String> headers = const {monitorHeader: '1'}}) =>
       http.get(
           Uri.parse('http://127.0.0.1:${relayServer.port}/$monitorPath?$query'),
           headers: headers);
@@ -185,9 +187,63 @@ void main() {
     await startRelay();
 
     final response = await get('path=varz&host=127.0.0.1&port=$port',
-        headers: {'origin': 'https://evil.example'});
+        headers: {'origin': 'https://evil.example', monitorHeader: '1'});
     expect(response.statusCode, 403);
     expect(logs.single, contains('monitor refused'));
+  });
+
+  test('a request without the header is refused, as an <img> would be',
+      () async {
+    final seen = <Uri>[];
+    final port =
+        await target((r) => json(r, {'server_id': 'NABC'}), seen: seen);
+    await startRelay();
+
+    final response =
+        await get('path=varz&host=127.0.0.1&port=$port', headers: {});
+    expect(response.statusCode, 403);
+    expect(jsonDecode(response.body)['error'], contains(monitorHeader));
+    expect(seen, isEmpty);
+  });
+
+  test('a host that is not a host name is refused, not a 500', () async {
+    await startRelay();
+    for (final host in ['foo:bar', 'a/b', 'a%0Ab']) {
+      final response = await get('path=varz&host=$host&port=8222');
+      expect(response.statusCode, 400, reason: host);
+      expect(jsonDecode(response.body)['error'], contains('not a host name'));
+    }
+    expect(logs.join(), isNot(contains('\n')));
+  });
+
+  test('IPv6 literals are still accepted', () async {
+    final closed = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    final port = closed.port;
+    await closed.close();
+    await startRelay();
+
+    final response = await get('path=varz&host=::1&port=$port');
+    expect(response.statusCode, 504);
+  });
+
+  test("a context's TLS files that no longer load are a refusal", () async {
+    final ca = File('${webRoot.path}/ca.pem')..writeAsStringSync('not PEM');
+    final port = await target((r) => r.response
+      ..statusCode = 400
+      ..write('Client sent an HTTP request to an HTTPS server.\n')
+      ..close());
+    await startRelay(RelayConfig(
+        contexts: ContextSet([
+      NatsContext(
+          name: 'prod',
+          servers: const [ContextServer('127.0.0.1', 4222)],
+          ca: ca.path),
+    ])));
+
+    final response = await get('path=varz&context=prod&port=$port');
+    expect(response.statusCode, 403);
+    expect(jsonDecode(response.body)['error'],
+        contains('TLS files of the context cannot be loaded'));
   });
 
   test('turned off with NATS_TCP_RELAY=off', () async {

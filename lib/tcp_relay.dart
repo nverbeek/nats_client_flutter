@@ -22,9 +22,20 @@ const String tcpRelayContextsPath = 'contexts';
 /// `docker/tcp_relay/lib/relay.dart`.
 const String tcpRelayMonitorPath = 'nats-monitor';
 
+/// Header the relay requires on every monitoring request, so other sites
+/// can't make it fetch through a visitor's browser. Must match
+/// `monitorHeader` in `docker/tcp_relay/lib/relay.dart`.
+const String tcpRelayMonitorHeader = 'x-nats-monitor';
+
 /// Prefix of every `-ERR` the relay sends when it refuses a target. Must
 /// match `relayErrorMarker` in `docker/tcp_relay/lib/relay.dart`.
 const String tcpRelayErrorMarker = 'NATS TCP relay:';
+
+/// [host] without the brackets of an IPv6 literal (`[::1]` is URL syntax;
+/// `Uri(host:)` and the relay want `::1`).
+String bareHost(String host) => host.startsWith('[') && host.endsWith(']')
+    ? host.substring(1, host.length - 1)
+    : host;
 
 /// The WebSocket URL that relays to the NATS server at [host]:[port]: same
 /// origin as the page at [pageBase], `wss` when the page is served over
@@ -32,13 +43,9 @@ const String tcpRelayErrorMarker = 'NATS TCP relay:';
 /// app under a sub-path still reaches the relay.
 Uri tcpRelayUri(Uri pageBase, String host, String port) {
   final endpoint = pageBase.resolve(tcpRelayPath);
-  // A bracketed IPv6 literal is URL syntax; the relay wants the bare address.
-  final bareHost = host.startsWith('[') && host.endsWith(']')
-      ? host.substring(1, host.length - 1)
-      : host;
   return endpoint.replace(
     scheme: endpoint.scheme == 'https' ? 'wss' : 'ws',
-    queryParameters: {'host': bareHost, 'port': port},
+    queryParameters: {'host': bareHost(host), 'port': port},
   );
 }
 
@@ -76,13 +83,10 @@ Uri tcpRelayMonitorUri(Uri pageBase,
     required String path,
     Map<String, String> query = const {}}) {
   assert((host == null) != (context == null));
-  final bareHost = host != null && host.startsWith('[') && host.endsWith(']')
-      ? host.substring(1, host.length - 1)
-      : host;
   return pageBase.resolve(tcpRelayMonitorPath).replace(queryParameters: {
     ...query,
     'path': path,
-    if (bareHost != null) 'host': bareHost,
+    if (host != null) 'host': bareHost(host),
     if (context != null) 'context': context,
     'port': '$port',
   });

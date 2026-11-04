@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:nats_client_flutter/server_monitor.dart';
+import 'package:nats_client_flutter/tcp_relay.dart';
 
 /// A trimmed but real-shaped `/varz` (nats-server 2.11), timestamps with
 /// nanoseconds and an offset like the server sends.
@@ -304,6 +305,37 @@ void main() {
         expect(endpoint.label, 'http://127.0.0.1:8222');
       });
 
+      test('once http has answered, a failure is not retried over https',
+          () async {
+        final schemes = <String>[];
+        var up = true;
+        final endpoint = DirectMonitorEndpoint('127.0.0.1', 8222);
+        final client = clientFor((request) async {
+          schemes.add(request.url.scheme);
+          if (!up) throw http.ClientException('refused');
+          return http.Response(jsonEncode(varzJson()), 200);
+        }, endpoint: endpoint);
+
+        await client.fetchVarz();
+        up = false;
+        await expectLater(
+            client.fetchVarz(), throwsMonitor(MonitorErrorKind.unreachable));
+        expect(schemes, ['http', 'http']);
+      });
+
+      test('the label stays http while https is being tried', () async {
+        final endpoint = DirectMonitorEndpoint('127.0.0.1', 8222);
+        final labels = <String>[];
+        final client = clientFor((request) async {
+          labels.add(endpoint.label);
+          throw http.ClientException('refused');
+        }, endpoint: endpoint);
+
+        await expectLater(
+            client.fetchVarz(), throwsMonitor(MonitorErrorKind.unreachable));
+        expect(labels, everyElement('http://127.0.0.1:8222'));
+      });
+
       test('a plain http server is never asked over https', () async {
         final schemes = <String>[];
         final client = clientFor((request) async {
@@ -375,10 +407,50 @@ void main() {
       expect(
           describeMonitorError(
               const MonitorException(MonitorErrorKind.unreachable,
-                  'could not reach nats-js:8222 (Connection refused)'),
+                  'could not reach nats-js:8222 (Connection refused)', true),
               relay),
           'The relay reports: could not reach nats-js:8222 '
           '(Connection refused).');
+    });
+
+    test('not reaching the relay is not put in its words', () async {
+      final relay = RelayMonitorEndpoint.host(
+          Uri.parse('http://localhost:8080/'), 'nats-js', 8222);
+      final client = ServerMonitorClient(relay,
+          client: MockClient((_) => Completer<http.Response>().future),
+          timeout: const Duration(milliseconds: 10));
+      final error = await client
+          .fetchVarz()
+          .then<Object?>((_) => null, onError: (Object e) => e);
+      expect(describeMonitorError(error!, relay),
+          'No response from the relay (timed out).');
+    });
+
+    test('relay requests carry its header, direct ones do not', () async {
+      final headers = <Map<String, String>>[];
+      Future<http.Response> handler(http.Request request) async {
+        headers.add(request.headers);
+        return http.Response(jsonEncode(varzJson()), 200);
+      }
+
+      await clientFor(handler,
+              endpoint: RelayMonitorEndpoint.host(
+                  Uri.parse('http://localhost:8080/'), 'nats-js', 8222))
+          .fetchVarz();
+      await clientFor(handler).fetchVarz();
+      expect(headers.first[tcpRelayMonitorHeader], '1');
+      expect(headers.last.containsKey(tcpRelayMonitorHeader), isFalse);
+    });
+
+    test('the relay gets longer than a direct request', () {
+      final relay = RelayMonitorEndpoint.context(
+          Uri.parse('http://localhost:8080/'), 'prod', 8222);
+      expect(
+          ServerMonitorClient(relay).timeout, ServerMonitorClient.relayTimeout);
+      expect(ServerMonitorClient(DirectMonitorEndpoint('h', 8222)).timeout,
+          ServerMonitorClient.directTimeout);
+      expect(ServerMonitorClient.relayTimeout,
+          greaterThan(ServerMonitorClient.directTimeout * 2));
     });
 
     test('healthz: 200 is healthy, 503 is an answer with the reason', () async {
@@ -451,12 +523,29 @@ void main() {
       expect(s.gapBefore, isFalse);
     });
 
-    test('a long wait between polls marks a gap', () {
+    test('a long wait between polls is a gap, not a sample', () {
       final history = ThroughputHistory()
         ..add(at(0), interval: interval)
-        ..add(at(2), interval: interval)
-        ..add(at(20), interval: interval);
+        ..add(at(2, inMsgs: 20), interval: interval)
+        ..add(at(20, inMsgs: 9000), interval: interval);
+      // The 18 s average isn't plotted as the current rate...
+      expect(history.samples, hasLength(1));
+      expect(history.samples.single.gapBefore, isFalse);
+
+      // ...and the next sample starts a new line from there.
+      history.add(at(22, inMsgs: 9040), interval: interval);
+      expect(history.samples, hasLength(2));
+      expect(history.samples.last.inMsgs, 20);
       expect(history.samples.last.gapBefore, isTrue);
+    });
+
+    test('polls as far apart as the interval says are not gaps', () {
+      final history = ThroughputHistory()
+        ..add(at(0), interval: const Duration(seconds: 6))
+        ..add(at(6), interval: const Duration(seconds: 6))
+        ..add(at(12), interval: const Duration(seconds: 6));
+      expect(history.samples, hasLength(2));
+      expect(history.samples.any((s) => s.gapBefore), isFalse);
     });
 
     test('samples older than two minutes are dropped', () {

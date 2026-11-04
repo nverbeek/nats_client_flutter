@@ -23,6 +23,16 @@ const contextsPath = 'contexts';
 /// `lib/tcp_relay.dart`.
 const monitorPath = 'nats-monitor';
 
+/// Header every monitoring request must carry. Must match
+/// `tcpRelayMonitorHeader` in the app's `lib/tcp_relay.dart`.
+///
+/// A cross-site `<img>` or `<script>` GET carries no `Origin`, so the page
+/// check alone would let any site make the relay fetch. A script can't add
+/// a custom header to a cross-origin request without a CORS preflight,
+/// which the relay never answers, so only the relay's own page (and
+/// non-browser clients that set it on purpose) get through.
+const monitorHeader = 'x-nats-monitor';
+
 /// The monitoring endpoints the proxy fetches, and the `/connz` sort orders
 /// it passes on. Nothing else is forwarded.
 const _monitorPaths = {'varz', 'connz', 'healthz', 'gatewayz'};
@@ -303,6 +313,12 @@ Future<Response> _monitorHandler(Request request, RelayConfig config,
   }
   final pageRefusal = config.pageRefusal(request, webSocket: false);
   if (pageRefusal != null) return refuse(403, pageRefusal);
+  if (request.headers[monitorHeader] == null) {
+    return refuse(
+        403,
+        'monitoring requests must come from the app '
+        '(the $monitorHeader header is missing)');
+  }
 
   final query = request.url.queryParameters;
   final path = query['path'] ?? '';
@@ -347,6 +363,11 @@ Future<Response> _monitorHandler(Request request, RelayConfig config,
   } else {
     final host = query['host']?.trim() ?? '';
     if (host.isEmpty) return refuse(400, 'a host or a context is required');
+    // Uri() throws on anything else, e.g. a ':' that isn't IPv6.
+    if (InternetAddress.tryParse(host) == null &&
+        !RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(host)) {
+      return refuse(400, '${_printable(host)} is not a host name');
+    }
     if (!config.allows(host, port)) {
       return refuse(
           403, '${_printable(host)}:$port is not in NATS_TCP_ALLOWED_HOSTS');
@@ -366,12 +387,12 @@ Future<Response> _monitorHandler(Request request, RelayConfig config,
     final key = '${host.toLowerCase()}:$port';
     final https = httpsTargets.contains(key);
     var answer = await _fetchMonitor(
-        uri(https ? 'https' : 'http'), path, config, context);
+        uri(https ? 'https' : 'http'), path, config, context, log);
     if (!https && answer.httpsOnly) {
       // Bounded, so many distinct targets can't grow it without limit.
       if (httpsTargets.length >= 256) httpsTargets.clear();
       httpsTargets.add(key);
-      answer = await _fetchMonitor(uri('https'), path, config, context);
+      answer = await _fetchMonitor(uri('https'), path, config, context, log);
     }
     if (answer.body != null) {
       return Response(answer.status, body: answer.body, headers: headers);
@@ -399,12 +420,22 @@ class _MonitorAnswer {
   final bool httpsOnly;
 }
 
-Future<_MonitorAnswer> _fetchMonitor(
-    Uri uri, String path, RelayConfig config, NatsContext? context) async {
+Future<_MonitorAnswer> _fetchMonitor(Uri uri, String path, RelayConfig config,
+    NatsContext? context, void Function(String) log) async {
   final target = _printable(
       '${uri.host.contains(':') ? '[${uri.host}]' : uri.host}:${uri.port}');
-  final http = HttpClient(
-      context: uri.scheme == 'https' ? context?.securityContext() : null)
+  SecurityContext? security;
+  if (uri.scheme == 'https' && context != null) {
+    // Read afresh, so a file changed since startup can still fail here.
+    try {
+      security = context.securityContext();
+    } catch (e) {
+      log('context "${context.name}": $e');
+      return _MonitorAnswer.failed(
+          403, 'the TLS files of the context cannot be loaded');
+    }
+  }
+  final http = HttpClient(context: security)
     ..connectionTimeout = config.connectTimeout
     // Straight to the target, never through a proxy from the environment.
     ..findProxy = ((_) => 'DIRECT');

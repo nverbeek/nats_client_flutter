@@ -180,7 +180,7 @@ When **Enable Server Monitoring** is turned on in Settings and you're connected,
 
 - **Identity**: name, ID, version, Go version, uptime, JetStream, cluster, max payload, and whether auth and TLS are required. **Account Info** opens the same dialog as the JetStream tab.
 - **Load**: connections, subscriptions, CPU and memory, plus routes, gateways and leaf nodes.
-- **Throughput**: messages (or bytes) per second in and out over the last two minutes. The server only reports running totals, so each rate is the change between two polls; the chart fills in over its first two minutes.
+- **Throughput**: messages (or bytes) per second in and out over the last two minutes. The server only reports running totals, so each rate is the change between two polls; the chart fills in over its first two minutes. After a break in polling (the tab was hidden, paused or couldn't reach the server), the line starts again instead of plotting an average over the break.
 - **Connections**: one page of the server's client connections at a time. Sorting is done by the server, so only CID, Subs, Pending, Msgs in, Msgs out and Uptime can be sorted, and the server picks the direction (CID ascending, the rest largest first).
 
 The tab only polls while it's showing, and **Pause** stops it. The connections list refreshes every fifth poll (or right away when you sort or change page), because listing connections is the expensive call on a busy server.

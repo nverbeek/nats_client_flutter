@@ -65,14 +65,25 @@ class ServerMonitorDashboardState extends State<ServerMonitorDashboard> {
   HealthStatus? _health;
   int? _gatewayCount;
   ConnzPage? _connz;
+  Object? _connzError;
   Object? _error;
   DateTime? _updatedAt;
 
   Timer? _timer;
-  bool _inFlight = false;
+
+  /// The session a poll is running for. A poll for a session that has
+  /// since been replaced doesn't hold up the new one's.
+  ServerMonitorSession? _polling;
   bool _connzStale = false;
   int _tick = 0;
   bool _paused = false;
+
+  /// Bumped whenever the sort, page or page size changes, so a `/connz`
+  /// page fetched for the previous one is dropped.
+  int _connzQuery = 0;
+
+  /// How long the last poll took, all its requests included.
+  Duration _lastPollTook = Duration.zero;
 
   ConnzSort _sort = ConnzSort.msgsTo;
   int _offset = 0;
@@ -108,10 +119,14 @@ class ServerMonitorDashboardState extends State<ServerMonitorDashboard> {
         _health = null;
         _gatewayCount = null;
         _connz = null;
+        _connzError = null;
         _error = null;
         _updatedAt = null;
         _tick = 0;
         _offset = 0;
+        _connzQuery++;
+        _connzStale = false;
+        _lastPollTook = Duration.zero;
       });
       _poll();
     } else if (oldWidget.pollInterval != widget.pollInterval && !_paused) {
@@ -124,53 +139,76 @@ class ServerMonitorDashboardState extends State<ServerMonitorDashboard> {
   }
 
   /// Schedules the next poll: [ServerMonitorDashboard.pollInterval] apart
-  /// once the endpoint has answered, [retryInterval] until it does. A
-  /// one-shot timer started after each poll finishes, so polls never
+  /// once the endpoint has answered, [retryInterval] until it does,
+  /// counted from when the last poll started ([took] is how long it ran).
+  /// A one-shot timer started after each poll finishes, so polls never
   /// overlap however slow the server is.
-  void _schedule() {
+  void _schedule([Duration took = Duration.zero]) {
     _timer?.cancel();
     if (_paused || widget.session == null) return;
-    _timer = Timer(_varz == null ? retryInterval : widget.pollInterval, _poll);
+    final wait = (_varz == null ? retryInterval : widget.pollInterval) - took;
+    _timer = Timer(wait.isNegative ? Duration.zero : wait, _poll);
   }
 
   Future<void> _poll({bool connzNow = false}) async {
     final session = widget.session;
     if (session == null) return;
-    if (_inFlight) {
+    if (_polling == session) {
       if (connzNow) _connzStale = true;
       return;
     }
-    _inFlight = true;
+    _polling = session;
     _timer?.cancel();
+    final started = DateTime.now();
     final slow = _tick % slowEvery == 0;
     _tick++;
     final client = session.client;
     try {
       final varz = await client.fetchVarz();
       if (!mounted || widget.session != session) return;
-      session.history.add(varz, interval: widget.pollInterval);
-      ConnzPage? connz;
-      HealthStatus? health;
-      int? gateways;
-      if (slow || connzNow || _connz == null) {
-        connz = await client.fetchConnz(
-            sort: _sort, offset: _offset, limit: _limit);
-      }
-      if (slow) {
-        health = await client.fetchHealth();
-        if (varz.gatewayName != null) {
-          gateways = await client.fetchGatewayCount();
-        }
-      }
+      // Polls start pollInterval apart unless one takes longer than that.
+      session.history.add(varz,
+          interval: _lastPollTook > widget.pollInterval
+              ? _lastPollTook
+              : widget.pollInterval);
+      // Each of these can fail without the others, or a good /varz, being
+      // thrown away: a slow /connz, a busy JetStream server's /healthz, or
+      // a server too old to have /healthz.
+      final query = _connzQuery;
+      final (connz, health, gateways) = await (
+        _attempt(
+            slow || connzNow || _connz == null,
+            () =>
+                client.fetchConnz(sort: _sort, offset: _offset, limit: _limit)),
+        _attempt(slow, client.fetchHealth),
+        _attempt(slow && varz.gatewayName != null, client.fetchGatewayCount),
+      ).wait;
       if (!mounted || widget.session != session) return;
       setState(() {
         _varz = varz;
-        _connz = connz ?? _connz;
-        _health = health ?? _health;
+        // A page for an earlier sort or page is dropped; the poll that
+        // the change asked for (_connzStale) brings the right one.
+        if (connz != null && query == _connzQuery) {
+          final page = connz.value;
+          _connzError = connz.error;
+          if (page != null) {
+            _connz = page;
+            // Connections closed since the user paged here: go to the
+            // last page there is.
+            if (page.connections.isEmpty && page.total > 0 && _offset > 0) {
+              _offset = (page.total - 1) ~/ _limit * _limit;
+              _connz = null;
+              _connzQuery++;
+              _connzStale = true;
+            }
+          }
+        }
+        // A failed /healthz hides the pill rather than keep an old answer.
+        if (health != null) _health = health.value;
         if (varz.gatewayName == null) {
           _gatewayCount = 0;
-        } else if (gateways != null) {
-          _gatewayCount = gateways;
+        } else if (gateways?.value != null) {
+          _gatewayCount = gateways!.value;
         }
         _error = null;
         _updatedAt = DateTime.now();
@@ -179,14 +217,26 @@ class ServerMonitorDashboardState extends State<ServerMonitorDashboard> {
       if (!mounted || widget.session != session) return;
       setState(() => _error = e);
     } finally {
-      _inFlight = false;
+      if (_polling == session) _polling = null;
     }
     if (!mounted || widget.session != session) return;
+    _lastPollTook = DateTime.now().difference(started);
     if (_connzStale) {
       _connzStale = false;
       unawaited(_poll(connzNow: true));
     } else {
-      _schedule();
+      _schedule(_lastPollTook);
+    }
+  }
+
+  /// Runs [fetch] when [wanted], catching its error; null when not wanted.
+  static Future<_Outcome<T>?> _attempt<T>(
+      bool wanted, Future<T> Function() fetch) async {
+    if (!wanted) return null;
+    try {
+      return _Outcome.value(await fetch());
+    } catch (e) {
+      return _Outcome.error(e);
     }
   }
 
@@ -211,6 +261,8 @@ class ServerMonitorDashboardState extends State<ServerMonitorDashboard> {
       }
       if (offset != null) _offset = offset;
       _connz = null;
+      _connzError = null;
+      _connzQuery++;
     });
     _poll(connzNow: true);
   }
@@ -774,6 +826,9 @@ class ServerMonitorDashboardState extends State<ServerMonitorDashboard> {
       clipBehavior: Clip.antiAlias,
       child: ConnectionsTable(
         page: _connz,
+        error: _connzError == null
+            ? null
+            : describeMonitorError(_connzError!, widget.session!.endpoint),
         sort: _sort,
         offset: _offset,
         limit: _limit,
@@ -784,6 +839,15 @@ class ServerMonitorDashboardState extends State<ServerMonitorDashboard> {
       ),
     );
   }
+}
+
+/// A request's result or its error.
+class _Outcome<T> {
+  _Outcome.value(T this.value) : error = null;
+  _Outcome.error(Object this.error) : value = null;
+
+  final T? value;
+  final Object? error;
 }
 
 /// `2026-11-04 07:44`: when the server started, to the minute. Uptime
