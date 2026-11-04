@@ -281,6 +281,9 @@ class KvDashboardState extends State<KvDashboard> {
     // a duplicate client-side listener per refresh.
     _watchSub?.cancel();
 
+    // Known gap: the watch starts only after `_loadKeys`' snapshot, so a
+    // put/delete landing in between is missed until the next Refresh.
+    // `watch()` has no "resume from revision" option to close it app-side.
     _watchSub = manager.watch(bucket).listen((entry) {
       if (!mounted || widget.manager != manager || _selectedBucket != bucket) {
         return;

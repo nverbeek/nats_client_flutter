@@ -5,13 +5,13 @@ import 'package:integration_test/integration_test.dart';
 import 'helpers/nats_test_app.dart';
 
 /// Exercises `KvManager.bucketStatus()` (Milestone 29) against a real,
-/// locally-running JetStream-enabled `nats-server` (see AGENTS.md "Recipe E:
-/// Local JetStream Testing"): creates a bucket with a non-default TTL and
+/// locally-running JetStream-enabled `nats-server` (see
+/// integration_test/README.md): creates a bucket with a non-default TTL and
 /// history depth through the normal Create Bucket dialog, then confirms the
-/// Bucket Info dialog's raw `$JS.API.STREAM.INFO` request correctly reads
-/// back `max_age` (TTL) and `max_msgs_per_subject` (history) from the real
-/// server -- the two fields `dart_nats` 1.2.3's own `KeyValue.status()`
-/// can't surface at all (see ROADMAP.md's Milestone 29 entry).
+/// Bucket Info dialog's raw `$JS.API.STREAM.INFO` request correctly reads back
+/// `max_age` (TTL) and `max_msgs_per_subject` (history) from the real server --
+/// the two fields `dart_nats` 1.2.3's own `KeyValue.status()` can't surface at
+/// all.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 

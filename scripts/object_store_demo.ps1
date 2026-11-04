@@ -2,8 +2,8 @@
 # Populates a local JetStream-enabled NATS server with a demo Object Store
 # bucket and a handful of realistic-looking objects, so the app's Object
 # Store tab has real data to look at. Object Store buckets are backed by
-# JetStream, so the same server used for Recipe E (see AGENTS.md "Local
-# JetStream Testing") works here too — no separate setup needed.
+# JetStream, so the same JetStream-enabled server the integration tests use
+# (see integration_test/README.md) works here too — no separate setup needed.
 #
 # Unlike kv_demo.ps1/jetstream_demo.ps1, this does NOT use the `nats` CLI to
 # upload the objects. `nats object put` leaves the object metadata's `mtime`

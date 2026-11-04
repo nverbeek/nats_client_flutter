@@ -10,7 +10,7 @@ import 'package:nats_client_flutter/main.dart' as app;
 import 'helpers/nats_test_app.dart';
 
 /// Verifies *when* a connection is recorded into history against a real
-/// `nats-server` (see AGENTS.md "Recipe D: Local Mock Testing" -- a plain
+/// `nats-server` (see integration_test/README.md -- a plain
 /// `docker run -d -p 4222:4222 nats` is enough here; JetStream isn't
 /// needed): only on a successful `Status.connected`, never on a failed
 /// attempt. Dropdown display/filter/select/delete mechanics are covered

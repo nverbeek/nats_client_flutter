@@ -8,11 +8,11 @@ import 'package:nats_client_flutter/connection_history.dart';
 import 'package:nats_client_flutter/constants.dart' as constants;
 import 'package:nats_client_flutter/main.dart' as app;
 
-/// Exercises the Host field's connection-history dropdown (Milestone 12 in
-/// ROADMAP.md): showing seeded entries, filtering as you type, selecting an
-/// entry by mouse or keyboard, and per-entry delete / Clear history. None of
-/// this needs a live `nats-server` -- it's pure UI/preferences mechanics --
-/// so this seeds prefs directly and boots the app disconnected, mirroring
+/// Exercises the Host field's connection-history dropdown: showing seeded
+/// entries, filtering as you type, selecting an entry by mouse or keyboard, and
+/// per-entry delete / Clear history. None of this needs a live `nats-server` --
+/// it's pure UI/preferences mechanics -- so this seeds prefs directly and boots
+/// the app disconnected, mirroring
 /// `helpers/nats_test_app.dart`'s `pumpDisconnectedApp` but with an
 /// additional `prefConnectionHistory` seed that helper has no parameter for.
 /// (*When* an entry gets recorded -- a successful connect, never a failed
@@ -58,9 +58,10 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  // The Host field's hintText and labelText are both "Host" -- `.first`
-  // avoids double-counting the same TextFormField, same quirk noted in
-  // AGENTS.md Recipe F and already worked around in connect_shortcut_test.dart.
+  // The Host field's hintText and labelText are both "Host" -- `.first` avoids
+  // double-counting the same TextFormField, same quirk noted in
+  // integration_test/README.md and already worked around in
+  // connect_shortcut_test.dart.
   Finder hostField() => find.widgetWithText(TextFormField, 'Host').first;
   Finder portField() => find.widgetWithText(TextFormField, 'Port').first;
 

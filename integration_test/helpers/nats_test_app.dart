@@ -42,7 +42,7 @@ Future<void> pumpBriefly(
 
 /// Seeds `SharedPreferences` with a known-good connection configuration
 /// pointing at a local, JetStream-enabled `nats-server` (see
-/// `AGENTS.md` "Recipe E: Local JetStream Testing" for how to start one),
+/// integration_test/README.md for how to start one),
 /// boots the real app entrypoint (`lib/main.dart`'s `main()`), taps
 /// Connect, and waits for the "Connected" status.
 ///

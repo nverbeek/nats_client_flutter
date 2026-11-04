@@ -8,12 +8,12 @@ import 'package:nats_client_flutter/regex_text_highlight.dart';
 
 import 'helpers/nats_test_app.dart';
 
-/// Exercises the JetStream "Browse Messages" view (`JetStreamMessageView`,
-/// the ephemeral ordered-consumer tail) against a real, locally-running
-/// JetStream-enabled `nats-server` (see AGENTS.md "Recipe E: Local
-/// JetStream Testing"). This view was flagged untestable-via-fake back in
-/// Milestone 1a (an `OrderedConsumer` is bound to a real `Client`) and was
-/// still unexercised even after the real-server integration suite landed —
+/// Exercises the JetStream "Browse Messages" view (`JetStreamMessageView`, the
+/// ephemeral ordered-consumer tail) against a real, locally-running
+/// JetStream-enabled `nats-server` (see integration_test/README.md). This view
+/// was flagged untestable-via-fake back in Milestone 1a (an `OrderedConsumer`
+/// is bound to a real `Client`) and was still unexercised even after the
+/// real-server integration suite landed —
 /// `jetstream_lifecycle_test.dart` tails a named consumer instead of using
 /// this button.
 void main() {
@@ -224,7 +224,7 @@ void main() {
     // a second, direct `dart_nats` client (rather than switching to the
     // Live Messages tab) since switching tabs would tear down this whole
     // Browse session — `JetStreamDashboard`'s state doesn't survive a trip
-    // away from the JetStream tab, per the note in `AGENTS.md` Recipe F.
+    // away from the JetStream tab, per the note in integration_test/README.md.
     await tester.tap(find.descendant(
         of: fieldWithPrefixIcon(Icons.filter_list),
         matching: find.byIcon(Icons.clear)));

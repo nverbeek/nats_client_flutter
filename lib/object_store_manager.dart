@@ -12,7 +12,8 @@ const String objectStoreStreamPrefix = 'OBJ_';
 /// Above this transfer size, Upload/Download show a warn-and-proceed
 /// confirmation first. `dart_nats` 1.4.0 added `ObjectStore.putStream()`/
 /// `getStream()` for true streaming transfers, but this app doesn't use them
-/// -- the real memory cost starts one layer up, in `object_store_dashboard.dart`'s
+/// -- the real memory cost starts one layer up, in
+/// `object_store_dashboard.dart`'s
 /// `pickUploadFile`/`saveDownloadedFile`, which already read/write the whole
 /// file via `file_picker` before `ObjectStoreManager` ever sees it (and must,
 /// on web, where there's no filesystem to stream from). Switching just the
@@ -30,7 +31,7 @@ const int largeObjectTransferWarningThreshold = 100 * 1024 * 1024; // 100 MiB
 /// does the exact same conversion) purely so a real `timeout` can be passed
 /// through to `createStream()` -- `createObjectStore()` doesn't accept one
 /// at all. Unlike `KeyValueConfig`'s equivalent conversion, live-server
-/// verification (see ROADMAP.md's Milestone 7) confirmed
+/// verification confirmed
 /// `ObjectStoreConfig.toStreamConfig()` does *not* drop `ttl`/replicas onto
 /// the floor, so no other workaround is needed here.
 class ObjectStoreManager {

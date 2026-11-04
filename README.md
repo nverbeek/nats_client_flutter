@@ -24,7 +24,7 @@ This application currently supports Windows, Linux, macOS and Web platforms. Dow
 - Connect to a single NATS server using either plain (`nats://`) or WebSocket (`ws://`) schemes
 - TLS connection support with optional custom certificates
 - **Authentication support**: username/password, bearer token, NKey seed, or decentralized JWT+NKey (`.creds` file) — configured in the same Security Settings dialog as TLS, with credentials remembered only if you opt in
-- Subscribe to multiple subjects, each with its own auto-assigned color shown on its chip and matching Live Messages rows, so it's easy to tell at a glance which subscription a message came from — toggle it off in Settings ("Show Subscription Colors", on by default) if you'd rather not see them
+- Subscribe to multiple subjects (optionally in a queue group), each with its own auto-assigned color shown on its chip and matching Live Messages rows, so it's easy to tell at a glance which subscription a message came from — toggle it off in Settings ("Show Subscription Colors", on by default) if you'd rather not see them
 - Automatic re-connect upon lost connection
 - **Connection history**: the Host field remembers up to 10 previously-used `scheme://host:port` targets, offered in a searchable dropdown as you type — pick one to fill in the scheme, host, and port at once, or delete individual entries / clear the whole history from the same dropdown. Only successful connections are remembered, so typos and unreachable hosts don't clutter the list.
 - Filter received messages
@@ -32,14 +32,14 @@ This application currently supports Windows, Linux, macOS and Web platforms. Dow
 - Pause the message list to freeze it while you work, without stopping arrivals in the background
 - Multi-select messages (Shift+Click, Ctrl+Click, Ctrl+Shift+Up/Down for a range or disconnected set) and copy them to the clipboard as plain text
 - **Export & Replay**: bulk-export captured messages (a selection, or everything captured) to an NDJSON file — with a warning if the export is large — then **Replay** a previously exported file by publishing every message back onto the connected server, with configurable pacing (delay between messages, repeat count, delay between repeats) and a live progress banner with a Stop button
-- Send custom messages
-- See message details, such as headers, subject and payload. JSON payloads are automatically formatted and syntax highlighted as well!
+- Send custom messages, with optional headers
+- See message details, such as headers, subject and payload. JSON payloads are automatically formatted and syntax highlighted, and binary payloads can be viewed as hex.
 - Light and Dark themes
 - Most recent connection information & theme are persisted between app runs
 - Message view settings: adjustable font size, an optional per-row arrival timestamp, and a configurable cap on how many messages are kept in memory (1k–100k, or unlimited)
 - **JetStream support** (optional, on by default — toggle it off in Settings if you don't need it):
   - Monitor streams and their consumers, including message/byte counts, retention, and ack/redelivery stats
-  - Create, purge, and delete streams; create and delete consumers (push or pull, any ack policy)
+  - Create, edit, purge (all, keep newest N, or up to a sequence), and delete streams; create, pause, and delete consumers (push or pull, any ack policy)
   - Browse a stream's messages live (with its own Filter/Find and Pause/Resume), or tail a specific consumer and Ack / Nak / Term individual messages
   - Publish messages with JetStream delivery acknowledgement straight from the regular Send Message dialog
 - **Key-Value Stores support** (optional, on by default — toggle it off in Settings if you don't need it):
@@ -186,7 +186,7 @@ This project has two test suites:
   ```
   flutter test test/
   ```
-- **`integration_test/`** — end-to-end tests that drive the real app against a real, locally-running `nats-server`, covering the core message round trip, the full JetStream stream/consumer lifecycle, the full Key-Value bucket/key lifecycle (including live updates from other clients and the optimistic-concurrency conflict path), the Live Messages tab's filter/find/row-menu/keyboard-shortcut controls, its Export-to-file/Replay-from-file round trip, and a successful connection for each of the four authentication methods (username/password, token, NKey seed, `.creds`) against purpose-built fixture servers. See [AGENTS.md](./AGENTS.md)'s "Recipe E: Local JetStream Testing" (KV buckets are backed by JetStream, so this same server covers both) or "Recipe H: Local Authentication Testing" for the auth fixtures, then run each file individually against it, e.g.:
+- **`integration_test/`** — end-to-end tests that drive the real app against a real, locally-running `nats-server`: messaging, JetStream, Key-Value, Object Store, Services, Export/Replay, and each authentication method. See [integration_test/README.md](./integration_test/README.md) for starting the servers, then run each file on its own, e.g.:
   ```
   flutter test integration_test/live_messages_test.dart -d windows
   ```

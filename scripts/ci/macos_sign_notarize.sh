@@ -7,7 +7,7 @@
 #
 # Writes <output dir>/<base>.dmg and <output dir>/<base>.zip.
 #
-# Expects these environment variables (repo secrets; see ROADMAP.md M35):
+# Expects these environment variables (repo secrets; see RELEASING.md):
 #   MACOS_CERT_P12_BASE64, MACOS_CERT_PASSWORD  Developer ID Application cert
 #   MACOS_KEYCHAIN_PASSWORD                     any value; temp keychain only
 #   ASC_KEY_P8_BASE64, ASC_KEY_ID, ASC_ISSUER_ID App Store Connect API key

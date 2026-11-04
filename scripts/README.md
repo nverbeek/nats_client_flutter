@@ -1,105 +1,41 @@
-# Flutter Icon Generator
+# Scripts
 
-This directory contains scripts to generate all necessary app launcher icons for your Flutter application across all platforms while preserving transparency.
+| Script | Purpose |
+|---|---|
+| `message_pub.ps1` | Publishes a few embedded sample JSON payloads (`animal.*`, `car.*`) via `nats pub`, for poking at Live Messages |
+| `jetstream_demo.ps1` | Creates demo streams (`orders`, `telemetry`) and loops `nats pub`; `-Iterations N` for a finite run |
+| `kv_demo.ps1` | Seeds a demo KV bucket (`app-config`) |
+| `object_store_demo.ps1` + `seed_object_store.dart` | Seeds a demo Object Store bucket (`documents`) |
+| `capture_screenshots.ps1` + `_image_processing.ps1` | Regenerates the README screenshots in `images/` |
+| `generate_icons.js` (`npm run generate`) | Regenerates every platform's launcher icon from `assets/app_launcher_icon.svg` |
+| `ci/` | CI-only: macOS signing/notarization, Homebrew cask, macOS file-panel driver (see `RELEASING.md`) |
 
-## Prerequisites
+The demo seeders and `capture_screenshots.ps1` need **`pwsh` (PowerShell 7+), not Windows PowerShell 5.1**. 5.1 prepends a UTF-8 BOM when piping to a native process's stdin, which corrupts the JSON payloads. Their `#Requires -PSEdition Core` line makes that fail loudly. The demo seeders need the `nats` CLI on `PATH` and a JetStream-enabled server (see `integration_test/README.md`).
 
-- **Node.js** (v14 or higher)
-- **npm** (comes with Node.js)
+`object_store_demo.ps1` seeds through `dart_nats`'s `ObjectStore.put()` rather than `nats object put`. The CLI leaves `mtime` at Go's zero time, which the app would show as "739807d ago". Uploads through the app are unaffected.
 
-## Usage
+## Screenshots
 
-### Method 1: Using Node.js directly
+```powershell
+pwsh ./scripts/capture_screenshots.ps1
+```
 
-```bash
+Needs `flutter`, `dart`, `docker`, the `nats` CLI and ImageMagick (`magick`) on `PATH`. Windows only, because the capture uses Win32 `PrintWindow`.
+
+A window screenshot with its title bar has to come from another process. So this script and `integration_test/screenshot_tour_test.dart` cooperate through files under `build/.screenshot_signals/`; the script's header comment explains the handshake. The script starts a disposable JetStream server, or reuses whatever is on port 4222, and seeds it with all three demo scripts. It then runs the tour test, captures each screen it reaches, and overwrites `images/<name>.png` with the cropped, rounded result.
+
+To add a screen, call `signaler.capture(tester, 'Some Name')` in the tour test once the screen settles, and reference `./images/Some%20Name.png` from the README. If the screen needs its own demo data, add a seed step to the script's "Seeding..." block.
+
+## Icons
+
+`assets/app_launcher_icon.svg` is the official NATS icon from [cncf/artwork](https://github.com/cncf/artwork) (`projects/nats/icon/color/nats-icon-color.svg`), **unmodified**. NATS's CNCF trademark guidelines forbid altered or look-alike logos, and the NATS maintainers asked for the official icon (nats-io/nats-site#1121). Don't redesign, recolor or crop it. Don't show it in the app's UI either: it appears only as the launcher icon and the Windows title bar icon.
+
+If the official artwork changes, replace the SVG and run:
+
+```sh
 cd scripts
 npm install
 npm run generate
 ```
 
-This will automatically:
-1. Install dependencies (sharp for SVG to PNG conversion, png-to-ico for Windows icons)
-2. Generate all platform icons from your SVG source
-3. Preserve transparency in all icons
-4. Create proper ICO files for Windows
-
-### Method 2: Manual execution
-
-```bash
-cd scripts
-npm install
-node generate_icons.js
-```
-
-## What Gets Generated
-
-The script generates icons for all Flutter platforms:
-
-### Android
-- `mipmap-mdpi/ic_launcher.png` (48x48)
-- `mipmap-hdpi/ic_launcher.png` (72x72)
-- `mipmap-xhdpi/ic_launcher.png` (96x96)
-- `mipmap-xxhdpi/ic_launcher.png` (144x144)
-- `mipmap-xxxhdpi/ic_launcher.png` (192x192)
-
-### iOS
-- All required sizes from 20x20 to 1024x1024
-- `Contents.json` manifest file
-- Located in `ios/Runner/Assets.xcassets/AppIcon.appiconset/`
-
-### Web
-- `Icon-192.png` (192x192)
-- `Icon-512.png` (512x512)
-- `Icon-maskable-192.png` (192x192 with safe area padding)
-- `Icon-maskable-512.png` (512x512 with safe area padding)
-- `favicon.png` (16x16)
-
-### macOS
-- All required sizes from 16x16 to 1024x1024
-- `Contents.json` manifest file
-- Located in `macos/Runner/Assets.xcassets/AppIcon.appiconset/`
-
-### Windows
-- `app_icon.ico` - Automatically generated ICO file containing all necessary sizes (16, 32, 48, 64, 128, 256)
-- Located in `windows/runner/resources/`
-
-### Linux
-- `icon.png` (64x64)
-
-## Source Icon
-
-The scripts expect the source SVG icon to be located at:
-```
-assets/app_launcher_icon.svg
-```
-
-## Transparency
-
-All generated icons preserve the transparency from the source SVG. This is why we're not using the `flutter_launcher_icons` package, which can sometimes have issues with transparent backgrounds.
-
-## Features
-
-- **Pure JavaScript**: No external binary dependencies required
-- **Transparency preservation**: Maintains alpha channel from SVG
-- **Automatic ICO generation**: Windows icons are created automatically using `png-to-ico`
-- **High quality**: Uses sharp for high-quality SVG to PNG conversion
-- **Maskable icons**: Web icons include maskable variants for PWA support
-
-## Troubleshooting
-
-1. **"sharp" installation fails**: Make sure you have the latest Node.js and try:
-   ```bash
-   npm install --force
-   ```
-
-2. **Poor quality icons**: The script uses high DPI (300) for SVG rendering. If you need even higher quality, you can modify the `density` parameter in the script.
-
-3. **Missing dependencies**: Run `npm install` to ensure all dependencies are installed.
-
-## Customization
-
-You can modify `generate_icons.js` to:
-- Change icon sizes
-- Add platform-specific variations
-- Adjust maskable icon padding (currently 10%)
-- Modify the SVG rendering density 
+This writes the Android, iOS, web (including maskable), macOS, Windows (`.ico`) and Linux icons. It uses sharp + png-to-ico rather than `flutter_launcher_icons`, which can break transparency.

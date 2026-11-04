@@ -59,8 +59,8 @@ jobs:
         # are started as a regular step — rather than a `services:` entry —
         # because `services:` containers start before `actions/checkout`,
         # too early to mount the config files these depend on. See
-        # integration_test/fixtures/auth/ for each fixture and AGENTS.md's
-        # auth recipe for how to run them locally.
+        # integration_test/fixtures/auth/ for each fixture and
+        # integration_test/README.md for how to run them locally.
         run: |
           docker run -d --name nats-fixture-userpass -p 4300:4222 \
             -v "$PWD/integration_test/fixtures/auth/userpass.conf:/etc/nats/nats-server.conf:ro" \
@@ -85,7 +85,7 @@ jobs:
           #
           # screenshot_tour_test.dart is excluded: it only makes progress
           # paired with the scripts/capture_screenshots.ps1 watcher process
-          # (see AGENTS.md "Recipe G"), which doesn't exist in CI — it would
+          # (see scripts/README.md), which doesn't exist in CI — it would
           # just time out waiting for capture acks that never arrive.
           # macos_file_picker_sandbox_test.dart is excluded too: it's
           # macOS-only (it'd just skip here after a full Linux build) and
@@ -540,7 +540,7 @@ jobs:
       - uses: dart-lang/setup-dart@v1
 
       - name: Start the auth fixture servers and their contexts
-        # Recipe H's servers (one per auth method), and a NATS CLI context
+        # The integration tests' auth fixture servers (one per auth method), and a NATS CLI context
         # for each, so the smoke test proves the relay authenticates as a
         # context against a real server. The nkey and creds paths name
         # another machine's files, to exercise the "next to the context"

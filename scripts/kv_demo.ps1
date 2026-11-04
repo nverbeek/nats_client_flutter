@@ -2,8 +2,8 @@
 # Populates a local JetStream-enabled NATS server with a demo Key-Value
 # bucket and a handful of realistic-looking keys, so the app's Key-Value
 # Stores tab has real data to look at. KV buckets are backed by JetStream,
-# so the same server used for Recipe E (see AGENTS.md "Local JetStream
-# Testing") works here too — no separate setup needed.
+# so the same JetStream-enabled server the integration tests use (see
+# integration_test/README.md) works here too — no separate setup needed.
 #
 # Requires the `nats` CLI (https://github.com/nats-io/natscli) on PATH,
 # pointed at a JetStream-enabled server, e.g.:

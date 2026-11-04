@@ -8,10 +8,10 @@ import 'package:nats_client_flutter/regex_text_highlight.dart';
 
 import 'helpers/nats_test_app.dart';
 
-/// Verifies queue-group subscriptions actually load-balance rather than
-/// fan out, against a real, locally-running `nats-server` (see AGENTS.md
-/// "Recipe E: Local JetStream Testing" for how to start one -- this test
-/// only needs plain NATS, no `-js` flag required).
+/// Verifies queue-group subscriptions actually load-balance rather than fan
+/// out, against a real, locally-running `nats-server` (see
+/// integration_test/README.md for how to start one -- this test only needs
+/// plain NATS, no `-js` flag required).
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 

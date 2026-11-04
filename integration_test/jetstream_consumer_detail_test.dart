@@ -9,15 +9,15 @@ import 'package:nats_client_flutter/constants.dart' as constants;
 
 import 'helpers/nats_test_app.dart';
 
-/// Exercises `JetStreamManager.consumerDetail()` (Milestone 29) against a
-/// real, locally-running JetStream-enabled `nats-server` (see AGENTS.md
-/// "Recipe E: Local JetStream Testing").
+/// Exercises `JetStreamManager.consumerDetail()` (Milestone 29) against a real,
+/// locally-running JetStream-enabled `nats-server` (see
+/// integration_test/README.md).
 ///
 /// The app's own Create Consumer dialog has no fields for `ack_wait`,
 /// `max_deliver`, or `max_ack_pending` (and `dart_nats` 1.2.3's
-/// `ConsumerConfig` has no fields for them either -- see ROADMAP.md's
-/// Milestone 29 entry), so this seeds a consumer with non-default values for
-/// all three via a second, direct `dart_nats` client issuing the same raw
+/// `ConsumerConfig` has no fields for them either), so this seeds a consumer
+/// with non-default values for all three via a second, direct `dart_nats`
+/// client issuing the same raw
 /// `$JS.API.CONSUMER.DURABLE.CREATE` request the package's own
 /// `createConsumer()` makes internally, just with a hand-built JSON config
 /// carrying the extra fields. It then opens that consumer's detail dialog

@@ -9,7 +9,7 @@ import 'package:nats_client_flutter/regex_text_highlight.dart';
 import 'helpers/nats_test_app.dart';
 
 /// Verifies the chip-based Subjects row against a real, locally-running
-/// `nats-server` (see AGENTS.md "Recipe E: Local JetStream Testing" for how
+/// `nats-server` (see integration_test/README.md for how
 /// to start one -- this test only needs plain NATS, no `-js` flag
 /// required): adding a second subscription live-subscribes it, each
 /// subscription's messages get a distinct color indicator, and removing a

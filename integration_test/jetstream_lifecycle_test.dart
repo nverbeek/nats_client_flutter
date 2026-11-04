@@ -5,10 +5,10 @@ import 'package:integration_test/integration_test.dart';
 import 'helpers/nats_test_app.dart';
 
 /// Exercises the full JetStream mutation lifecycle (Milestone 1b) against a
-/// real, locally-running JetStream-enabled `nats-server` (see AGENTS.md
-/// "Recipe E: Local JetStream Testing"): create a stream, publish into it
-/// with a delivery ack, create an explicit-ack consumer, tail it and ack a
-/// message, then delete the consumer, purge, and delete the stream.
+/// real, locally-running JetStream-enabled `nats-server` (see
+/// integration_test/README.md): create a stream, publish into it with a
+/// delivery ack, create an explicit-ack consumer, tail it and ack a message,
+/// then delete the consumer, purge, and delete the stream.
 ///
 /// This is one long ordered scenario rather than several small ones:
 /// JetStream stream/consumer objects live on the shared server, not in

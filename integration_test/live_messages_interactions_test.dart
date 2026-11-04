@@ -10,13 +10,12 @@ import 'package:nats_client_flutter/send_message_dialog.dart';
 import 'helpers/nats_test_app.dart';
 
 /// Exercises the Live Messages tab's daily-use controls against a real,
-/// locally-running `nats-server` (see AGENTS.md "Recipe E: Local JetStream
-/// Testing") — Filter, Find, the per-row popup menu (Copy/Detail/Replay/
-/// Edit & Send/Reply To), and the keyboard shortcuts. None of this is
-/// widget-testable in isolation: `MyHomePage` constructs its own `Client()`
-/// internally with no injection point for a fake, and these controls only
-/// mean anything against messages that actually arrived over a real
-/// connection.
+/// locally-running `nats-server` (see integration_test/README.md) — Filter,
+/// Find, the per-row popup menu (Copy/Detail/Replay/ Edit & Send/Reply To), and
+/// the keyboard shortcuts. None of this is widget-testable in isolation:
+/// `MyHomePage` constructs its own `Client()` internally with no injection
+/// point for a fake, and these controls only mean anything against messages
+/// that actually arrived over a real connection.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 

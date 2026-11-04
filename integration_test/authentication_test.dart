@@ -17,7 +17,7 @@ import 'helpers/nats_test_app.dart';
 /// NATS's simple `authorization` block (user/pass, token, bare nkey) and its
 /// operator/JWT mode are mutually exclusive server configs. See
 /// `integration_test/fixtures/auth/` for each server's config (and
-/// `test-user.creds` for the `.creds` case) and AGENTS.md's auth recipe for
+/// `test-user.creds` for the `.creds` case) and integration_test/README.md for
 /// how to run them locally.
 ///
 /// Covers both the "correct credentials connect successfully" path and the
@@ -167,8 +167,8 @@ void main() {
     // overflow and isn't rendered. The chip marker itself is covered by
     // test/subject_chips_row_test.dart.
     expect(find.text('Status: ${constants.connected}'), findsOneWidget);
-    // MyHomePage has no fake-injection point for the client or its
-    // subscription list, so read them off the state (see AGENTS.md Recipe F).
+    // MyHomePage has no fake-injection point for the client or its subscription
+    // list, so read them off the state (see integration_test/README.md).
     final state = tester.state(find.byType(app.MyHomePage)) as dynamic;
     final subscriptions = state.subscriptions as List<SubscriptionInfo>;
     expect({for (final s in subscriptions) s.subject: s.permissionDenied},

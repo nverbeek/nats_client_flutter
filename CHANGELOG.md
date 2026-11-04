@@ -73,7 +73,7 @@
 
 ## Maintenance & Dependencies
 
-- Upgraded `dart_nats` to 1.4.0, adopting the consumer pause/resume and filtered/keep/sequence-bounded purge APIs it added; Object Store's new streaming upload/download APIs were deliberately not adopted this release (see ROADMAP.md)
+- Upgraded `dart_nats` to 1.4.0, adopting the consumer pause/resume and filtered/keep/sequence-bounded purge APIs it added; Object Store's new streaming upload/download APIs were deliberately not adopted this release
 - Worked around a `dart_nats` parsing gap where a paused consumer's pause-expiry timestamp wasn't read correctly off the server's response
 
 # 1.0.16

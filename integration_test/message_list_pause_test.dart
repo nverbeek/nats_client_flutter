@@ -8,11 +8,11 @@ import 'package:nats_client_flutter/regex_text_highlight.dart';
 import 'helpers/nats_test_app.dart';
 
 /// Exercises the Live Messages tab's Pause/Resume control and the
-/// scroll-position-stable insert behind it (Milestone 6 in ROADMAP.md — see
-/// the `reverse: true` + sliver/data-index mapping comment on the
-/// `ListView.builder` in `lib/main.dart`'s `_buildLiveMessagesTab`) against
-/// a real, locally-running `nats-server` (see AGENTS.md "Recipe E: Local
-/// JetStream Testing"). Bursts are published via a second, direct
+/// scroll-position-stable insert behind it (see the `reverse: true` +
+/// sliver/data-index mapping comment on the
+/// `ListView.builder` in `lib/main.dart`'s `_buildLiveMessagesTab`) against a
+/// real, locally-running `nats-server` (see integration_test/README.md). Bursts
+/// are published via a second, direct
 /// `dart_nats` client rather than the app's own Send dialog — both because
 /// it's far faster than driving the dialog N times, and because it's a
 /// more realistic stand-in for "an external, fast-moving publisher" than

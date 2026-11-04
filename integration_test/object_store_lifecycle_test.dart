@@ -10,14 +10,13 @@ import 'package:nats_client_flutter/object_store_manager.dart';
 import 'helpers/nats_test_app.dart';
 
 /// Exercises the full Object Store lifecycle (Milestone 7) against a real,
-/// locally-running JetStream-enabled `nats-server` (see AGENTS.md "Recipe
-/// E: Local JetStream Testing" — Object Store buckets are backed by
-/// JetStream streams just like KV, so no separate fixture server is needed):
-/// create a bucket through the UI, upload and download objects, confirm the
-/// dashboard's explicit Refresh (there is no `watch()` for Object Store,
-/// unlike KV) picks up an object written by a second, direct client, verify
-/// downloaded bytes match byte-for-byte, then delete an object and the
-/// bucket through the UI.
+/// locally-running JetStream-enabled `nats-server` (see
+/// integration_test/README.md — Object Store buckets are backed by JetStream
+/// streams just like KV, so no separate fixture server is needed): create a
+/// bucket through the UI, upload and download objects, confirm the dashboard's
+/// explicit Refresh (there is no `watch()` for Object Store, unlike KV) picks
+/// up an object written by a second, direct client, verify downloaded bytes
+/// match byte-for-byte, then delete an object and the bucket through the UI.
 ///
 /// Upload/Download themselves go through a native OS file picker
 /// (`file_picker`'s `pickFiles()`/`saveFile()`), which — like the TLS cert

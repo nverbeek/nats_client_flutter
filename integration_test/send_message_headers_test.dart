@@ -8,7 +8,7 @@ import 'helpers/nats_test_app.dart';
 
 /// Verifies headers attached in `SendMessageDialog` actually reach the wire
 /// and round-trip back through a real, locally-running `nats-server` (see
-/// AGENTS.md "Recipe E: Local JetStream Testing" for how to start one —
+/// integration_test/README.md for how to start one —
 /// this test only needs plain NATS, no `-js` flag required).
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -78,9 +78,9 @@ void main() {
     await tester.tap(find.text('Detail'));
     await tester.pumpAndSettle();
 
-    // Headers now render as a two-column table (see message_detail_dialog.dart),
-    // with the key and value as separate SelectableText widgets rather than a
-    // single combined "key: value" string.
+    // Headers now render as a two-column table (see
+    // message_detail_dialog.dart), with the key and value as separate
+    // SelectableText widgets rather than a single combined "key: value" string.
     expect(find.text(headerKey), findsOneWidget);
     expect(find.text(headerValue), findsOneWidget);
   });

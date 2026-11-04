@@ -13,7 +13,7 @@ import 'helpers/nats_test_app.dart';
 /// Exercises the Ctrl+Enter (Cmd+Enter on Mac) shortcut that fires Connect
 /// while focus is in the Host/Port/Subjects fields and the client isn't
 /// already connected, against a real, locally-running `nats-server` (see
-/// AGENTS.md "Recipe E: Local JetStream Testing"). Deliberately does not
+/// integration_test/README.md). Deliberately does not
 /// use `pumpConnectedApp` (which connects via tapping the checkmark
 /// button) — this test needs the app to start disconnected so it can
 /// connect via the shortcut instead.
@@ -47,9 +47,9 @@ void main() {
 
     expect(find.text('Status: ${constants.disconnected}'), findsOneWidget);
 
-    // `.first`: the Host field's hintText and labelText are both "Host",
-    // so `find.widgetWithText` double-counts the same TextFormField (see
-    // the same quirk noted in AGENTS.md Recipe F re: find.text/RichText).
+    // `.first`: the Host field's hintText and labelText are both "Host", so
+    // `find.widgetWithText` double-counts the same TextFormField (see the same
+    // quirk noted in integration_test/README.md re: find.text/RichText).
     await tester.tap(find.widgetWithText(TextFormField, 'Host').first);
     await tester.pump();
     await tester.sendKeyDownEvent(LogicalKeyboardKey.control);

@@ -582,6 +582,11 @@ class _ServerSide {
 
   /// Sends everything from now on to [onData], and calls [onClosed] when the
   /// server goes away.
+  ///
+  /// Known limitation: there's no backpressure. A WebSocket sink has no flow
+  /// control, so a `>` firehose to a slow browser tab grows the relay's
+  /// memory without bound. Fixing it means pausing the TCP subscription while
+  /// the WebSocket's buffer is full, which `web_socket_channel` doesn't expose.
   void forward(void Function(Uint8List) onData, void Function() onClosed) {
     for (final data in _early) {
       onData(data);

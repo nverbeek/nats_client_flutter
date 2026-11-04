@@ -13,7 +13,7 @@ import 'package:nats_client_flutter/replay_config_dialog.dart';
 import 'helpers/nats_test_app.dart';
 
 /// Exercises Milestone 22's Export/Replay round trip against a real, locally
-/// running `nats-server` (see AGENTS.md "Recipe E: Local JetStream Testing"
+/// running `nats-server` (see integration_test/README.md
 /// -- a plain core-NATS server is sufficient here, JetStream isn't involved).
 ///
 /// Neither Export's save-file step nor Replay's open-file step goes through

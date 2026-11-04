@@ -8,13 +8,13 @@ import 'package:nats_client_flutter/kv_put_dialog.dart';
 import 'helpers/nats_test_app.dart';
 
 /// Exercises the full Key-Value mutation lifecycle (Milestone 2) against a
-/// real, locally-running JetStream-enabled `nats-server` (see AGENTS.md
-/// "Recipe E: Local JetStream Testing"): create a bucket, put a value,
-/// confirm a change made by a second, direct `dart_nats` client shows up
-/// live via `KvManager.watch()` with no manual refresh, edit a key through
-/// the UI, exercise the optimistic-concurrency conflict path (a stale edit
-/// must be rejected, not silently overwrite someone else's change), check
-/// History, then delete a key, purge a key, and delete the bucket.
+/// real, locally-running JetStream-enabled `nats-server` (see
+/// integration_test/README.md): create a bucket, put a value, confirm a change
+/// made by a second, direct `dart_nats` client shows up live via
+/// `KvManager.watch()` with no manual refresh, edit a key through the UI,
+/// exercise the optimistic-concurrency conflict path (a stale edit must be
+/// rejected, not silently overwrite someone else's change), check History, then
+/// delete a key, purge a key, and delete the bucket.
 ///
 /// One long ordered scenario rather than several small ones, mirroring
 /// `jetstream_lifecycle_test.dart`: the bucket/keys live on the shared

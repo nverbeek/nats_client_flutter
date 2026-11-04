@@ -5,8 +5,8 @@ import 'package:integration_test/integration_test.dart';
 import 'helpers/nats_test_app.dart';
 
 /// Exercises the core NATS publish/subscribe round trip against a real,
-/// locally-running `nats-server` (see AGENTS.md "Recipe E: Local JetStream
-/// Testing" for how to start one — this test only needs plain NATS, no
+/// locally-running `nats-server` (see integration_test/README.md for how to
+/// start one — this test only needs plain NATS, no
 /// `-js` flag required, though it's harmless if JetStream is enabled too).
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();

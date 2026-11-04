@@ -1,9 +1,9 @@
 # Privacy Policy
 
-**Last updated: 2026-07-21**
+**Last updated: 2026-11-03**
 
-NATS Client ("the app") is a desktop client for connecting to NATS
-messaging servers. This policy explains what data the app handles and,
+NATS Client ("the app") is a desktop and web client for connecting to
+NATS messaging servers. This policy explains what data the app handles and,
 just as importantly, what it does not.
 
 ## Data you provide
@@ -23,6 +23,14 @@ Messages you publish, subscribe to, or browse (including via JetStream,
 Key/Value, and Object Store) are exchanged directly between the app and
 the NATS server you connect to. The app does not copy, log, or transmit
 this data to any server operated by the developer.
+
+If you run the app from its Docker image, connections made with `nats://`
+pass through the server inside that container, which you run yourself. It
+forwards them to the NATS server you chose. Its log, which stays in
+the container, records who connected and to which server, never message
+contents. Credentials
+for NATS contexts you give the container stay in the container and are
+never sent to the browser.
 
 ## Network requests made by the app itself
 

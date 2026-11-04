@@ -12,7 +12,7 @@ import 'helpers/nats_test_app.dart';
 /// Exercises the Milestone 27 Edit Stream flow -- `JetStreamManager
 /// .streamDetail()`/`updateStream()` and `StreamConfigDialog`'s edit mode --
 /// against a real, locally-running JetStream-enabled `nats-server` (see
-/// AGENTS.md "Recipe E: Local JetStream Testing").
+/// integration_test/README.md).
 ///
 /// Deliberately doesn't touch Storage or Retention Policy: `nats-server`
 /// rejects in-place changes to those two on some/all server versions, and

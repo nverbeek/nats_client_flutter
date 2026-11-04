@@ -4,10 +4,10 @@ import 'package:integration_test/integration_test.dart';
 
 import 'helpers/nats_test_app.dart';
 
-/// Exercises the two app-side follow-ups to ROADMAP.md Milestone 30 that
-/// touch existing JetStream UI -- consumer Pause/Resume and filtered/keep
+/// Exercises two `dart_nats` 1.4.0 additions that touch existing
+/// JetStream UI -- consumer Pause/Resume and filtered/keep
 /// stream purge -- against a real, locally-running JetStream-enabled
-/// `nats-server` (see AGENTS.md "Recipe E: Local JetStream Testing"). Both
+/// `nats-server` (see integration_test/README.md). Both
 /// capabilities require `dart_nats` 1.4.0 (pause/resume shipped in 1.3.0,
 /// filtered/keep purge in 1.4.0) and a NATS server new enough to support the
 /// consumer pause API (2.11+).

@@ -41,7 +41,7 @@ The rest of the connection information is straightforward:
 
 - **Host**: IP or DNS address of the NATS server host. This field remembers up to 10 previously-successful connection targets — start typing, or click into the field, to see a dropdown of `scheme://host:port` entries filtered to match; selecting one fills in the scheme, host, and port together. Use the arrow keys and Enter to navigate the dropdown, or the mouse. Each entry has its own remove (✕) button, and a **Clear history** option removes them all. Only successful connections are added — a failed attempt never pollutes the list.
 - **Port**: Associated NATS port
-- **Subjects**: The desired subjects you'd like to subscribe to. This allows a comma-separated list of subjects to be defined, ie `test.*, test.*.*`.
+- **Subjects**: The subjects you're subscribed to, one chip each (wildcards like `test.*` and `test.>` work). Click **+** to add one, click a chip to edit its subject or **queue group**, or click its ✕ to remove it. While connected, changes subscribe and unsubscribe immediately. If there are more chips than fit, a **+N more** chip opens the **Manage Subscriptions** dialog, which lists them all. With a queue group set, the server spreads that subject's messages across every subscriber in the same group instead of sending each one to all of them.
 
 Each time the Connect button is pressed, the current connection information is persisted and remembered for the next time the application runs.
 
@@ -77,38 +77,40 @@ All connection definition entry widgets are disabled when a connection is active
 If a connection is lost or unavailable at request time, the client will indefinitely attempt reconnection on a short interval. To stop reconnecting, simply select the Disconnect button.
 
 # Message List
-Incoming messages are displayed as they arrive in the message list. The list is in newest to oldest order (newest on top).
+Incoming messages are displayed as they arrive in the message list. The list is in newest to oldest order (newest on top). Once you scroll down, a **Jump to top** button appears in the list's lower-right corner.
 
 Each message has the following information/options:
 
 - The data of the message is displayed on a single line, clipped with an ellipsis if it doesn't fit.
 - On the right, in a "chip" widget is the subject of the message
-- On the right, a 3 dot menu button is available, with the following options:
-- Right-clicking anywhere on a row opens the same menu at the click point, rather than at the row's trailing edge.
+- On the right, a 3 dot menu button is available, with the following options. Right-clicking anywhere on a row opens the same menu at the click point.
 
     - **Copy**: Copies the message data to the clipboard
     - **Copy Subject**: Copies just the message's subject to the clipboard.
-    - **Detail**: If the message is JSON based, opens a dialog and displays a formatted view. Otherwise, the dialog will just show the original content.
+    - **Detail**: Opens a dialog with the message's subject, headers (as a table) and payload. JSON payloads are formatted and highlighted. A **Text/Hex** toggle shows the raw bytes, and switches to Hex on its own when the payload isn't valid text. Each section has a copy button.
     - **Replay**: Re-sends the message exactly as defined, with the same subject and data. (Not to be confused with the Tools section's file-based **Replay**, below, which re-publishes every message from a previously exported file.)
     - **Edit & Send** - Opens a dialog pre-filled with the message's subject and data, allowing you to edit prior to sending again.
     - **Reply To** - If the selected message has a replyTo subject defined, this option opens a send message box where the subject is pre-filled with the replyTo subject.
+    - **Subscribe to This Subject**: Adds a subscription for exactly this message's subject. Hidden once one exists. Any wider subscription (e.g. `orders.>`) stays, so matching messages can arrive twice.
     - When more than one row is selected (see Multi-Select, below), this menu also offers **Copy Selected (N)** and **Export Selected (N)**.
 
 # JetStream
 When **Enable JetStream** is on (the default) and you're connected to a server or account with JetStream enabled, a **JetStream** tab appears alongside **Live Messages**. It's a monitoring and management dashboard for streams and consumers.
 
 ## Streams
-The left-hand pane lists all streams on the account. Selecting a stream shows its subjects, storage type, retention policy, and message/byte counts on the right. Subjects display as chips, collapsed to the first several with a "+N more"/"Show less" toggle once a stream has a lot of them, plus a copy button that copies the full subject list (comma-separated) to the clipboard.
+The left-hand pane lists all streams on the account. The **Account info** icon above it shows the account's JetStream usage against its limits (memory, storage, streams, consumers) and API statistics. Selecting a stream shows its subjects, storage type, retention policy, and message/byte counts on the right. Subjects display as chips, collapsed to the first several with a "+N more"/"Show less" toggle once a stream has a lot of them, plus a copy button that copies the full subject list (comma-separated) to the clipboard.
 
-- **Add Stream**: Opens a dialog to create a new stream (name, comma-separated subjects, optional max age in days, and replica count).
+- **Add Stream**: Opens a dialog to create a new stream: name, comma-separated subjects, storage (file or memory), retention and discard policies, optional limits (max age, messages, bytes, message size, messages per subject), replica count, and the allow-rollup/deny-delete/deny-purge flags.
+- **Edit**: Opens the same dialog filled in with the stream's current settings. The name can't change, and the server rejects changes it doesn't allow in place (such as the storage type), with its reason shown.
 - **Browse Messages**: Opens a live tail of the selected stream's contents. This uses a temporary, auto-cleaning consumer under the hood — no manual consumer setup required just to look at what's in a stream. Disabled when the stream has no messages yet. Includes its own Filter/Find fields, a Pause/Resume toggle, and a Clear button, working the same way as their Live Messages tab counterparts described below. Each row's own menu offers **Copy**, **Copy Subject**, and **Detail**, same as the Live Messages tab — including opening via right-click at the click point.
-- **Purge**: Deletes all messages in the stream but keeps the stream and its consumers. Asks for confirmation first.
+- **Purge**: Deletes messages but keeps the stream and its consumers. Choose **All**, **Keep Newest** N messages, or **Up to Seq**uence, optionally limited to one subject. Asks for confirmation first.
 - **Delete Stream**: Permanently deletes the stream, its messages, and its consumers. Asks for confirmation first.
 
 ## Consumers
-Each stream's consumers are listed below its details. Tapping a consumer opens a detail dialog (type, ack policy, deliver policy, created time, ack-wait, max-deliver, max-ack-pending, and pending/waiting/ack-pending/redelivered counts) with its own manual Refresh, plus **Delete** and **Tail** actions.
+Each stream's consumers are listed below its details. Tapping a consumer opens a detail dialog (type, ack policy, deliver policy, created time, ack-wait, max-deliver, max-ack-pending, and pending/waiting/ack-pending/redelivered counts) with its own manual Refresh, plus **Pause**/**Resume**, **Delete** and **Tail** actions.
 
 - **Create Consumer**: Opens a dialog to create a new consumer on the selected stream — durable name (leave blank for an ephemeral consumer), optional filter subject, push (with a deliver subject) or pull, ack policy, and deliver policy.
+- **Pause**: Suspends delivery to the consumer (and pulls from it) for the number of minutes you choose, without deleting it. The detail dialog shows when the pause ends. **Resume** ends it early.
 - **Delete**: Removes the consumer. Asks for confirmation first. Only available for named (non-ephemeral) consumers.
 - **Tail**: Opens a live view of messages delivered to that specific consumer. If the consumer's ack policy is `explicit`, each message gets **Ack**, **Nak** (redeliver), and **Term** (stop redelivery) buttons; once you act on a message, its buttons disable. Consumers with any other ack policy show the same messages with those buttons disabled, since the server isn't expecting acks for them. Each row's menu also offers **Copy** and **Copy Subject**, also openable via right-click at the click point.
 
@@ -119,7 +121,7 @@ The regular **Send Message** dialog (see Tools, below) gets a **Publish via JetS
 When **Enable Key-Value Stores** is on (the default) and you're connected to a server or account with JetStream enabled (KV buckets are themselves backed by JetStream streams), a **Key-Value Stores** tab appears. It's a monitoring and management dashboard for KV buckets and their keys.
 
 ## Buckets
-The left-hand pane lists all KV buckets on the account. Selecting a bucket shows its keys on the right, with live search.
+The left-hand pane lists all KV buckets on the account. The **Account info** icon shows the same account usage panel as the JetStream tab. Selecting a bucket shows its keys on the right, with live search.
 
 - **Create Bucket**: Opens a dialog to create a new bucket — name, history depth (how many past revisions are kept per key), optional TTL in days, and replica count.
 - **Delete** (trash icon on each bucket row): Permanently deletes the bucket and all of its keys. Asks for confirmation first.
@@ -211,7 +213,7 @@ At the bottom of the window are several tools:
 
 - **Clear**: Removes all current messages from the view. This is a permanent operation.
 - **Pause**: Freezes the on-screen list — no new rows appear — while the connection stays open and messages keep arriving in the background. The button shows a small count of how many arrived while paused (e.g. `12`, `1.1k`); pressing it again (now labeled **Resume**) reveals everything that came in.
-- **Send Message**: Opens a dialog with subject and data fields, allowing the user to send a custom message.
+- **Send Message**: Opens a dialog with subject and data fields, plus optional **Headers** (add as many name/value pairs as you need), allowing the user to send a custom message.
 - **Filter**: This field filters the message list upon each character typed in the box. The filter operation is a **case-insensitive contains** on the message data only.
 - **Find**: This field will highlight results found in the message data. Searches all items and highlights matches within the list.
 - **Export**: Writes captured messages to a file in NDJSON format (one JSON object per line: `subject`, `payload` as base64, and optional `headers`/`capturedAt`) — base64 keeps binary payloads intact, unlike the per-row Replay action above which round-trips through text. Two options:

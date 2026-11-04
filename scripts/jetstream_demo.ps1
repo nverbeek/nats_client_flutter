@@ -1,8 +1,7 @@
 #Requires -PSEdition Core
 # Populates a local JetStream-enabled NATS server with a couple of demo
 # streams and a steady trickle of sample messages, so the app's JetStream
-# tab has real, growing streams to look at. See AGENTS.md "Recipe E: Local
-# JetStream Testing" for full setup steps.
+# tab has real, growing streams to look at. See integration_test/README.md for full setup steps.
 #
 # Requires the `nats` CLI (https://github.com/nats-io/natscli) on PATH,
 # pointed at a JetStream-enabled server, e.g.:
@@ -17,7 +16,7 @@
 #
 # -Iterations lets a caller (e.g. scripts/capture_screenshots.ps1) seed a
 # handful of messages and return instead of trickling forever — 0 (the
-# default) preserves the original "run until Ctrl+C" Recipe E behavior.
+# default) preserves the original "run until Ctrl+C" behavior.
 param(
     [int]$Iterations = 0
 )
