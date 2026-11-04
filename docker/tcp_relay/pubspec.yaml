@@ -8,7 +8,7 @@ environment:
   sdk: ^3.5.0
 
 dependencies:
-  dart_nats: ^1.7.0
+  dart_nats: ^1.7.1
   shelf: ^1.4.2
   shelf_static: ^1.1.3
   shelf_web_socket: ^3.0.0

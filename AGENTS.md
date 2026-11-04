@@ -53,7 +53,7 @@ Other docs (read the one that matches your task before starting):
 
 ## `dart_nats`
 
-A normal pub.dev dependency (`^1.7.0`, repo [dart-nats/dart-nats](https://github.com/dart-nats/dart-nats)). This project's owner also owns that repo and the pub.dev package. When a feature needs a library change, land it upstream and cut a release rather than working around it or forking. A `dependency_overrides` pin is fine only while verifying an unreleased change. To read the library source, find its pub-cache path in `.dart_tool/package_config.json`; don't search the filesystem. Object Store is `EXPERIMENTAL` upstream.
+A normal pub.dev dependency (`^1.7.1`, repo [dart-nats/dart-nats](https://github.com/dart-nats/dart-nats)). This project's owner also owns that repo and the pub.dev package. When a feature needs a library change, land it upstream and cut a release rather than working around it or forking. A `dependency_overrides` pin is fine only while verifying an unreleased change. To read the library source, find its pub-cache path in `.dart_tool/package_config.json`; don't search the filesystem. Object Store is `EXPERIMENTAL` upstream.
 
 ## Tests
 
