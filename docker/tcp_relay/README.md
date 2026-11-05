@@ -7,7 +7,8 @@ Browsers have no TCP sockets, but NATS over WebSocket uses the same bytes as NAT
 | File | Role |
 |---|---|
 | `lib/relay.dart` | `createHandler()`/`RelayConfig`: static files, the `nats-tcp` endpoint (INFO check, TLS, CONNECT auth injection, allowlist, page-origin check), the `contexts` list, the `nats-monitor` proxy |
-| `lib/context.dart` | `NatsContext`/`ContextSet`: NATS CLI contexts from a mounted dir plus the CLI's env vars; `applyAuth()` (nonce signing via dart_nats `Nkeys`) |
+| `lib/allowlist.dart` | `HostAllowlist`: `NATS_TCP_ALLOWED_HOSTS` entries (names, `*.suffix`, CIDR) and the DNS pinning for CIDR |
+| `lib/context.dart` | `NatsContext`/`ContextSet`: NATS CLI contexts from a mounted dir plus the CLI's env vars; `applyAuth()` (nonce signing via dart_nats `Nkeys`); `ContextDirectory`, which reloads the dir when it changes |
 | `bin/server.dart` | Entry point. Env: `PORT`, `WEB_ROOT`, `NATS_TCP_RELAY`, `NATS_TCP_ALLOWED_HOSTS`, `NATS_UI_ALLOWED_ORIGINS`, `NATS_CONTEXTS`, `NATS_CONTEXT`, `NATS_URL` & co. |
 | `tool/smoke.dart` | CI smoke test of a running image against a real nats-server |
 | `../../lib/tcp_relay.dart` | The app side: `tcpRelayAvailable`, `tcpRelayUri()`/`tcpRelayContextUri()`, `tcpRelayRefusalReason()`, `fetchRelayContexts()` |
@@ -23,7 +24,10 @@ Browsers have no TCP sockets, but NATS over WebSocket uses the same bytes as NAT
 ## Guardrails
 
 - **Not a general TCP proxy.** A target whose first line isn't `INFO ` is refused.
-- **Host allowlist.** `NATS_TCP_ALLOWED_HOSTS` is optional; empty means any NATS server (`RelayConfig.allows`). Connecting *as* a context is always allowed. Loading contexts deliberately doesn't narrow the allowlist. The credentials only ever go to a context's own servers either way, and users expect to reach anything they have credentials for.
+- **Host allowlist.** `NATS_TCP_ALLOWED_HOSTS` is optional; empty means any NATS server (`HostAllowlist.check`). Connecting *as* a context is always allowed. Loading contexts deliberately doesn't narrow the allowlist. The credentials only ever go to a context's own servers either way, and users expect to reach anything they have credentials for.
+  - Entries are exact names/IPs, `*.suffix` wildcards (at least one label before the suffix, never the bare domain), or CIDR ranges, each with an optional `:port`. Name and wildcard matches connect by name, as before. A CIDR match on a name resolves it and returns only the in-range addresses (`HostCheck.addresses`). The relay and the monitoring proxy (through `HttpClient.connectionFactory`) then connect to exactly those addresses, so a second DNS answer can't swap in an address outside the range. Lookup results keep the name in `InternetAddress.host`, so TLS still verifies the name. Don't replace the pinned addresses with a fresh lookup.
+  - An invalid entry allows nothing and gets a startup warning (`HostAllowlist.invalid`).
+- **Contexts change at runtime.** `RelayConfig.contexts` is a getter over `ContextDirectory.current`, which rescans at most every 2 s, and only when a file in the dir (or `../context.txt`) changed size or mtime, or while any context is unusable. Read `config.contexts` per request and never cache it, including in `pageRefusal`: the DNS-rebinding `Host` check has to start applying as soon as the first context appears. Reload logs go through `onChange`, only when the public view or the warnings changed. The app fetches the list only on page load.
 - **Which page may use it** (`RelayConfig.pageRefusal`, for both `nats-tcp` and `contexts`):
   - A browser's `Origin` must be the relay's own page (`Host`, or a proxy's `X-Forwarded-Host`) or be listed in `NATS_UI_ALLOWED_ORIGINS`.
   - A missing `Origin` means a non-browser client. `Origin: null` (sandboxed iframes, local files) is always refused and can't be listed.

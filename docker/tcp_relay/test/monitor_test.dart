@@ -182,6 +182,32 @@ void main() {
         jsonDecode(response.body)['error'], contains('NATS_TCP_ALLOWED_HOSTS'));
   });
 
+  test('a CIDR entry fetches from the address it checked', () async {
+    final seen = <Uri>[];
+    final headers = <String?>[];
+    final port = await target((r) {
+      headers.add(r.headers.host);
+      json(r, {'server_id': 'NABC'});
+    }, seen: seen);
+    // The name only resolves here, so a fetch that isn't pinned would fail.
+    await startRelay(RelayConfig(
+        allowedHosts: {'127.0.0.0/8'},
+        lookup: (host) async => host == 'nats-tenant'
+            ? [InternetAddress('192.0.2.1'), InternetAddress('127.0.0.1')]
+            : [InternetAddress('192.0.2.1')]));
+
+    final response = await get('path=varz&host=nats-tenant&port=$port');
+    expect(response.statusCode, 200);
+    expect(seen.single.path, '/varz');
+    // Still asked by name.
+    expect(headers.single, 'nats-tenant');
+
+    final refused = await get('path=varz&host=elsewhere&port=$port');
+    expect(refused.statusCode, 403);
+    expect(jsonDecode(refused.body)['error'],
+        contains('elsewhere:$port is not in NATS_TCP_ALLOWED_HOSTS'));
+  });
+
   test('another site cannot use it from a visitor\'s browser', () async {
     final port = await target((r) => json(r, {'server_id': 'NABC'}));
     await startRelay();
