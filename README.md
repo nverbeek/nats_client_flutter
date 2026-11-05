@@ -103,8 +103,9 @@ docker run -d -p 8080:8080 --user "$(id -u):$(id -g)" \
 - Files a context refers to (`.creds`, NKey seed, certificates) must be readable inside the container: either mount them at the same path, or put them next to the context files and the container finds them by file name (so give them different names).
 - The NATS CLI writes these files readable only by you. `--user "$(id -u):$(id -g)"` runs the container as you, so it can read them through the mount.
 - Credential files are read again for every connection, so a rotated `.creds` file (or Kubernetes Secret) is used from the next connection on, without a restart.
+- The directory is watched too: a context added, changed or removed while the container runs is picked up within a few seconds, and appears in the Host dropdown the next time the page is loaded. A context that can't be used yet, such as one whose `.creds` file hasn't arrived, is retried until it can. The container logs the new list.
 - A password, token, `user_jwt` or `user_seed` can also be `env://VARIABLE` or `file://path`, as with the NATS CLI. Other references (`op://`, `nsc://`) aren't supported.
-- Only the app's own page can use the container, so other websites can't use it through your browser. Once contexts are loaded, the page must also be opened at `localhost`, a `*.localhost` name, or an IP address, and that applies to every `nats://` connection, including ones to a host you type in. To open the page under another name, such as behind an ingress, list it: `-e NATS_UI_ALLOWED_ORIGINS=https://nats-ui.example.com`. A proxy in front must pass the browser's `Host` header through; ingress-nginx, Traefik and oauth2-proxy do by default.
+- Only the app's own page can use the container, so other websites can't use it through your browser. Once contexts are loaded, the page must also be opened at `localhost`, a `*.localhost` name, or an IP address, and that applies to every `nats://` connection, including ones to a host you type in. To open the page under another name, such as behind an ingress, list it: `-e NATS_UI_ALLOWED_ORIGINS=https://nats-ui.example.com`. If contexts may be added later, list it from the start, because the rule applies as soon as the first one appears. A proxy in front must pass the browser's `Host` header through; ingress-nginx, Traefik and oauth2-proxy do by default.
 - `NATS_CONTEXTS` points at a different directory than `/nats-contexts`.
 
 For a single connection, the NATS CLI's own environment variables work without any files. They define a context named `default`:
@@ -168,17 +169,64 @@ spec:
   selector: {app: nats-ui}
   ports: [{port: 8080}]
 ```
-- Mount the Secret as a directory, not with `subPath`: only a directory mount picks up a rotated Secret.
+- Mount the Secret as a directory, not with `subPath`: only a directory mount picks up a rotated Secret, or a context added to it.
 - `NATS_URL` and friends work from a Secret through `env`/`envFrom` as well.
 - Behind an ingress: put sign-in in front of it (for example oauth2-proxy or your ingress's own auth), and with contexts set `NATS_UI_ALLOWED_ORIGINS` to the page's address. A k3d `*.localhost` host name needs no setting. The relay pings the browser every 30 seconds, so ingress idle timeouts don't drop quiet sessions.
 - Under a path, such as `http://localhost/nats/`: route the prefix to the container and strip it (Traefik's StripPrefix, or ingress-nginx's `rewrite-target`). The page uses only relative URLs, so no other setting is needed. Redirect `/nats` to `/nats/`, because without the trailing slash the browser resolves those URLs from `/`.
 
+### Contexts from other teams' namespaces
+When one team deploys this UI as part of a shared platform and other teams add their own NATS servers later, those teams can't edit the UI's configuration. They can still publish a context for it. A sidecar such as [k8s-sidecar](https://github.com/kiwigrid/k8s-sidecar) (the one Grafana uses for dashboards) copies every labelled Secret into the contexts directory, and the container picks each one up while it runs:
+```yaml
+# In the UI's Deployment: share an emptyDir between the sidecar and the UI.
+      containers:
+        - name: nats-ui
+          # ...as above, with this mount instead of the Secret volume:
+          volumeMounts:
+            - {name: contexts, mountPath: /nats-contexts, readOnly: true}
+        - name: contexts
+          image: quay.io/kiwigrid/k8s-sidecar  # pin a release
+          env:
+            - {name: LABEL, value: nats-ui/context}
+            - {name: LABEL_VALUE, value: "true"}
+            - {name: RESOURCE, value: secret}
+            - {name: NAMESPACE, value: "team-a,team-b"}
+            - {name: FOLDER, value: /nats-contexts}
+          volumeMounts:
+            - {name: contexts, mountPath: /nats-contexts}
+      volumes:
+        - {name: contexts, emptyDir: {}}
+---
+# In a team's own chart:
+apiVersion: v1
+kind: Secret
+metadata:
+  name: team-a-nats-ui-context
+  namespace: team-a
+  labels: {nats-ui/context: "true"}
+stringData:
+  team-a.json: |
+    {"description": "Team A", "url": "nats://nats.team-a.svc:4222", "creds": "team-a.creds"}
+  team-a.creds: |
+    -----BEGIN NATS USER JWT-----
+    ...
+```
+- The sidecar needs a ServiceAccount allowed to `get`, `list` and `watch` Secrets in those namespaces. Its README has the RBAC.
+- Each key becomes a file, so file names must be unique across teams. Prefixing them with the team's name works.
+- The files must be readable by uid 65532. With the pod's `fsGroup: 65532`, the files the sidecar writes into the emptyDir belong to that group.
+- **Whoever can create a labelled Secret in a watched namespace can add a context, and a context isn't limited by `NATS_TCP_ALLOWED_HOSTS`.** List the namespaces you trust rather than `ALL`.
+
 ## Which servers the relay connects to
 - It connects to any server that answers like a NATS server, and to every context's servers.
-- `NATS_TCP_ALLOWED_HOSTS` limits the servers you can reach by typing a host: a comma-separated list of hosts or `host:port` entries. Contexts are always allowed. It also applies to the Server tab, which the image fetches through its own server: a bare host covers both ports, but a `host:port` entry only covers that port, so list the monitoring port too (`nats-prod:4222,nats-prod:8222`).
+- `NATS_TCP_ALLOWED_HOSTS` limits the servers you can reach by typing a host. It's a comma-separated list of entries, each optionally followed by `:port`:
+  - a host name or IP address: `nats-prod`, `10.0.0.5`
+  - a wildcard for every name under a domain: `*.svc.cluster.local` matches `nats.team-a.svc.cluster.local`, but not `svc.cluster.local` itself
+  - a CIDR range: `10.96.0.0/12`. It matches an IP address in the range, and a name that resolves into it. The relay then connects only to the resolved addresses inside the range, so the DNS answer it checked is the one it uses. In Kubernetes, the cluster's Service range allows every Service however its name is typed (`nats.team-a`, `nats.team-a.svc`, ...), including ones added later.
+  - an IPv6 address with a port is written in brackets: `[fd00::1]:4222`
+- Contexts are always allowed. The list also applies to the Server tab, which the image fetches through its own server: an entry without a port covers both ports, but an entry with a port only covers that port, so list the monitoring port too (`nats-prod:4222,nats-prod:8222`). The container logs a warning for an entry it can't read; such an entry allows nothing.
   ```
-  docker run -d -p 8080:8080 -e NATS_TCP_ALLOWED_HOSTS=nats-prod,nats-dev:4222 nverbeek/nats-client-flutter
+  docker run -d -p 8080:8080 -e NATS_TCP_ALLOWED_HOSTS=nats-prod,nats-dev:4222,*.nats.internal,10.96.0.0/12 nverbeek/nats-client-flutter
   ```
+- In Kubernetes, the list is the app's own limit, not a network boundary. A NetworkPolicy on the UI's pod is what actually limits what the container can reach.
 - `NATS_TCP_RELAY=off` turns the relay off, so only `ws://` connections work; `nats://` stays in the app's list, but connecting with it shows that it's turned off.
 
 # Testing

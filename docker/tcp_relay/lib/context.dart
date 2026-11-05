@@ -224,7 +224,82 @@ class NatsContext {
       };
 }
 
-/// Everything the relay knows about contexts, loaded once at startup.
+/// The contexts in a directory, kept current: [current] loads them again
+/// when a file in the directory changes (one added, removed, or rewritten,
+/// as a Kubernetes volume update or a sidecar does), at most once per
+/// [checkInterval].
+///
+/// While a context is unusable it is retried on every check, so one whose
+/// credential files land after its JSON (or live outside the directory)
+/// becomes usable without a change to the directory itself.
+class ContextDirectory {
+  ContextDirectory({
+    required this.dir,
+    Map<String, String>? env,
+    this.checkInterval = const Duration(seconds: 2),
+    this.onChange,
+  }) : env = env ?? Platform.environment {
+    _fingerprint = _fingerprintNow();
+    _current = ContextSet.load(dir: dir, env: this.env);
+    _checked.start();
+  }
+
+  final String dir;
+  final Map<String, String> env;
+  final Duration checkInterval;
+
+  /// Called after a reload whose result differs from what it replaced, as
+  /// the browser or the log would see it.
+  final void Function(ContextSet previous, ContextSet current)? onChange;
+
+  late ContextSet _current;
+  late String _fingerprint;
+  final _checked = Stopwatch();
+
+  ContextSet get current {
+    if (_checked.elapsed < checkInterval) return _current;
+    _checked.reset();
+    final fingerprint = _fingerprintNow();
+    final retry = _current.contexts.any((c) => c.error != null);
+    if (fingerprint == _fingerprint && !retry) return _current;
+    _fingerprint = fingerprint;
+    final previous = _current;
+    _current = ContextSet.load(dir: dir, env: env);
+    if (_current.summary != previous.summary) {
+      onChange?.call(previous, _current);
+    }
+    return _current;
+  }
+
+  /// Name, size and modification time of every file in [dir] (following
+  /// links, as Kubernetes volumes use them) and of the CLI's `context.txt`
+  /// beside it.
+  String _fingerprintNow() {
+    final parts = <String>[];
+    void add(String path) {
+      final stat = FileStat.statSync(path);
+      if (stat.type == FileSystemEntityType.file) {
+        parts.add('$path|${stat.size}|${stat.modified.microsecondsSinceEpoch}');
+      }
+    }
+
+    try {
+      final directory = Directory(dir);
+      if (directory.existsSync()) {
+        for (final entry in directory.listSync()) {
+          add(entry.path);
+        }
+      }
+    } on FileSystemException {
+      // ContextSet.load reports it.
+    }
+    add('$dir/../context.txt');
+    parts.sort();
+    return parts.join('\n');
+  }
+}
+
+/// Everything the relay knows about contexts at one time.
 class ContextSet {
   ContextSet(this.contexts, {this.selected, this.warnings = const []});
 
@@ -251,6 +326,14 @@ class ContextSet {
   List<Map<String, dynamic>> toPublicJson() => [
         for (final c in contexts) c.toPublicJson(selected: c.name == selected),
       ];
+
+  /// What the browser and the log see of this set, to tell whether a
+  /// reload changed anything.
+  String get summary => jsonEncode({
+        'contexts': toPublicJson(),
+        'servers': [for (final c in contexts) c.servers.join(',')],
+        'warnings': warnings,
+      });
 
   /// Loads every `*.json` context in [dir] (when it exists), plus a
   /// `default` context from the nats CLI's own environment variables when

@@ -277,4 +277,56 @@ ${user.seed}
       expect(verify(user.publicKey(), out['sig'] as String), isTrue);
     });
   });
+
+  group('ContextDirectory', () {
+    test('picks up contexts added, changed and removed while running', () {
+      final changes = <String>[];
+      final directory = ContextDirectory(
+          dir: dir.path,
+          env: const {},
+          checkInterval: Duration.zero,
+          onChange: (previous, current) => changes
+              .add('${previous.contexts.length}->${current.contexts.length}'));
+      expect(directory.current.isEmpty, isTrue);
+
+      writeContext('tenant-a', {'url': 'nats://nats.tenant-a:4222'});
+      expect(directory.current.contexts.map((c) => c.name), ['tenant-a']);
+      expect(directory.current.selected, 'tenant-a');
+
+      writeContext('tenant-a', {'url': 'nats://nats.tenant-a:14222'});
+      expect('${directory.current.byName('tenant-a')!.servers.single}',
+          'nats://nats.tenant-a:14222');
+
+      File('${dir.path}/tenant-a.json').deleteSync();
+      expect(directory.current.isEmpty, isTrue);
+      expect(changes, ['0->1', '1->1', '1->0']);
+    });
+
+    test('retries an unusable context until its files arrive', () {
+      final directory = ContextDirectory(
+          dir: dir.path, env: const {}, checkInterval: Duration.zero);
+      writeContext('tenant-b', {
+        'url': 'nats://nats.tenant-b:4222',
+        'creds': '/elsewhere/tenant-b.creds',
+      });
+      expect(directory.current.byName('tenant-b')!.error, isNotNull);
+      // Written next to the context, where a sidecar would put it.
+      final user = Nkeys.createUser();
+      File('${dir.path}/tenant-b.creds')
+          .writeAsStringSync('-----BEGIN NATS USER JWT-----\neyJ0eXAi.e30.sig\n'
+              '------END NATS USER JWT------\n\n'
+              '-----BEGIN USER NKEY SEED-----\n${user.seed}\n'
+              '------END USER NKEY SEED------\n');
+      expect(directory.current.byName('tenant-b')!.error, isNull);
+    });
+
+    test('checks the directory at most once per interval', () {
+      final directory = ContextDirectory(
+          dir: dir.path,
+          env: const {},
+          checkInterval: const Duration(hours: 1));
+      writeContext('late', {'url': 'nats://late:4222'});
+      expect(directory.current.isEmpty, isTrue);
+    });
+  });
 }

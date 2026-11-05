@@ -8,6 +8,7 @@ import 'package:shelf_static/shelf_static.dart';
 import 'package:shelf_web_socket/shelf_web_socket.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'allowlist.dart';
 import 'context.dart';
 
 /// Path (relative to wherever the app is served) of the relay endpoint. Must
@@ -66,29 +67,38 @@ class RelayConfig {
     this.allowedHosts = const {},
     this.allowedOrigins = const {},
     ContextSet? contexts,
+    ContextSet Function()? loadContexts,
+    HostLookup? lookup,
     this.connectTimeout = const Duration(seconds: 5),
     this.infoTimeout = const Duration(seconds: 5),
     this.pingInterval = const Duration(seconds: 30),
     this.monitorTimeout = const Duration(seconds: 5),
-  }) : contexts = contexts ?? ContextSet.empty;
+  })  : _contexts = loadContexts ?? (() => contexts ?? ContextSet.empty),
+        allowlist = HostAllowlist(allowedHosts, lookup: lookup);
 
   /// When false, every relay connection is refused with a reason the app
   /// shows. The app's Docker build always offers nats://, so a plain 404
   /// would leave it retrying with no explanation.
   final bool enabled;
 
-  /// Lower-case `host` or `host:port` entries a browser may relay to, from
-  /// `NATS_TCP_ALLOWED_HOSTS`. Empty allows any NATS server. Connecting as
-  /// a context is always allowed.
+  /// Lower-case entries of `NATS_TCP_ALLOWED_HOSTS`: the servers a browser
+  /// may relay to by address (see [HostAllowlist]). Empty allows any NATS
+  /// server. Connecting as a context is always allowed.
   final Set<String> allowedHosts;
+
+  /// [allowedHosts], parsed.
+  final HostAllowlist allowlist;
 
   /// Lower-case origins (`https://nats-ui.example.com`) of pages that may
   /// use the relay besides its own, from `NATS_UI_ALLOWED_ORIGINS`. See
   /// [pageRefusal].
   final Set<String> allowedOrigins;
 
-  /// The NATS CLI contexts the browser can connect as.
-  final ContextSet contexts;
+  final ContextSet Function() _contexts;
+
+  /// The NATS CLI contexts the browser can connect as, as they are now: a
+  /// [ContextDirectory] picks up contexts added while the relay runs.
+  ContextSet get contexts => _contexts();
 
   /// How long to wait for the TCP connection to the target.
   final Duration connectTimeout;
@@ -106,10 +116,8 @@ class RelayConfig {
   final Duration monitorTimeout;
 
   /// Parses a comma-separated `NATS_TCP_ALLOWED_HOSTS` value.
-  static Set<String> parseAllowedHosts(String? value) => {
-        for (final entry in (value ?? '').split(','))
-          if (entry.trim().isNotEmpty) entry.trim().toLowerCase(),
-      };
+  static Set<String> parseAllowedHosts(String? value) =>
+      HostAllowlist.parse(value);
 
   /// Parses a comma-separated `NATS_UI_ALLOWED_ORIGINS` value, the way
   /// browsers send `Origin`: no trailing slash. Entries that aren't a
@@ -136,13 +144,6 @@ class RelayConfig {
   static bool _isOrigin(String entry) {
     final uri = Uri.tryParse(entry);
     return uri != null && entry.contains('://') && uri.host.isNotEmpty;
-  }
-
-  /// Whether a browser may relay to [host]:[port] by address.
-  bool allows(String host, int port) {
-    if (allowedHosts.isEmpty) return true;
-    final h = host.toLowerCase();
-    return allowedHosts.contains(h) || allowedHosts.contains('$h:$port');
   }
 
   /// Why the page making [request] may not use the relay, or null if it may.
@@ -347,6 +348,7 @@ Future<Response> _monitorHandler(Request request, RelayConfig config,
   }
 
   final List<String> hosts;
+  List<InternetAddress>? pinned;
   NatsContext? context;
   final contextName = query['context']?.trim() ?? '';
   if (contextName.isNotEmpty) {
@@ -368,11 +370,12 @@ Future<Response> _monitorHandler(Request request, RelayConfig config,
         !RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(host)) {
       return refuse(400, '${_printable(host)} is not a host name');
     }
-    if (!config.allows(host, port)) {
-      return refuse(
-          403, '${_printable(host)}:$port is not in NATS_TCP_ALLOWED_HOSTS');
+    final check = await config.allowlist.check(host, port);
+    if (!check.allowed) {
+      return refuse(403, '${_printable(host)}:$port ${check.refusal}');
     }
     hosts = [host];
+    pinned = check.addresses;
   }
 
   // Like the TCP relay, a context's servers are tried in order.
@@ -387,12 +390,13 @@ Future<Response> _monitorHandler(Request request, RelayConfig config,
     final key = '${host.toLowerCase()}:$port';
     final https = httpsTargets.contains(key);
     var answer = await _fetchMonitor(
-        uri(https ? 'https' : 'http'), path, config, context, log);
+        uri(https ? 'https' : 'http'), path, config, context, pinned, log);
     if (!https && answer.httpsOnly) {
       // Bounded, so many distinct targets can't grow it without limit.
       if (httpsTargets.length >= 256) httpsTargets.clear();
       httpsTargets.add(key);
-      answer = await _fetchMonitor(uri('https'), path, config, context, log);
+      answer =
+          await _fetchMonitor(uri('https'), path, config, context, pinned, log);
     }
     if (answer.body != null) {
       return Response(answer.status, body: answer.body, headers: headers);
@@ -420,8 +424,15 @@ class _MonitorAnswer {
   final bool httpsOnly;
 }
 
-Future<_MonitorAnswer> _fetchMonitor(Uri uri, String path, RelayConfig config,
-    NatsContext? context, void Function(String) log) async {
+/// [pinned]: the only addresses to connect to, when a CIDR entry of the
+/// allowlist allowed the host; otherwise the name is looked up as usual.
+Future<_MonitorAnswer> _fetchMonitor(
+    Uri uri,
+    String path,
+    RelayConfig config,
+    NatsContext? context,
+    List<InternetAddress>? pinned,
+    void Function(String) log) async {
   final target = _printable(
       '${uri.host.contains(':') ? '[${uri.host}]' : uri.host}:${uri.port}');
   SecurityContext? security;
@@ -439,6 +450,14 @@ Future<_MonitorAnswer> _fetchMonitor(Uri uri, String path, RelayConfig config,
     ..connectionTimeout = config.connectTimeout
     // Straight to the target, never through a proxy from the environment.
     ..findProxy = ((_) => 'DIRECT');
+  if (pinned != null) {
+    http.connectionFactory = (url, _, __) async => ConnectionTask.fromSocket(
+        _connectPinned(pinned, url.port,
+            https: url.scheme == 'https',
+            timeout: config.connectTimeout,
+            security: security),
+        () {});
+  }
   try {
     return await _readMonitor(http, uri, path, target)
         .timeout(config.monitorTimeout);
@@ -460,6 +479,31 @@ Future<_MonitorAnswer> _fetchMonitor(Uri uri, String path, RelayConfig config,
   } finally {
     http.close(force: true);
   }
+}
+
+/// Connects to the first of [addresses] that answers, with TLS for [https].
+/// An address from a lookup keeps the host name, which TLS verifies.
+///
+/// [HttpClient.connectionTimeout] doesn't apply to a connection factory, so
+/// each attempt gets its own share of [timeout]: an address that drops the
+/// SYN mustn't use up the whole request before the next is tried.
+Future<Socket> _connectPinned(List<InternetAddress> addresses, int port,
+    {required bool https,
+    required Duration timeout,
+    SecurityContext? security}) async {
+  final each = timeout ~/ (addresses.isEmpty ? 1 : addresses.length);
+  SocketException? last;
+  for (final address in addresses) {
+    try {
+      return https
+          ? await SecureSocket.connect(address, port,
+              context: security, timeout: each)
+          : await Socket.connect(address, port, timeout: each);
+    } on SocketException catch (e) {
+      last = e;
+    }
+  }
+  throw last ?? const SocketException('no address to connect to');
 }
 
 Future<_MonitorAnswer> _readMonitor(
@@ -586,6 +630,7 @@ class _Relay {
 
     final NatsContext? context;
     final List<ContextServer> servers;
+    List<InternetAddress>? pinned;
     var auth = const ContextAuth();
     final name = _printable(contextName ?? '');
     if (name.isNotEmpty) {
@@ -610,11 +655,12 @@ class _Relay {
       if (host.isEmpty || port == null || port < 1 || port > 65535) {
         return _refuse('a host and a port between 1 and 65535 are required');
       }
-      if (!config.allows(host, port)) {
-        return _refuse(
-            '${_printable(host)}:$port is not in NATS_TCP_ALLOWED_HOSTS');
+      final check = await config.allowlist.check(host, port);
+      if (!check.allowed) {
+        return _refuse('${_printable(host)}:$port ${check.refusal}');
       }
       servers = [ContextServer(host, port)];
+      pinned = check.addresses;
     }
 
     // Hold what the browser sends until a server is connected (it normally
@@ -634,13 +680,20 @@ class _Relay {
       pending.add(bytes);
     }, onDone: _close, onError: (Object _) => _close());
 
-    // A context can name several servers (a cluster): use the first that
-    // answers.
+    // A context can name several servers (a cluster), and a CIDR entry of
+    // the allowlist several addresses: use the first that answers.
+    final attempts = [
+      for (final server in servers)
+        if (pinned == null)
+          (server, null)
+        else
+          for (final address in pinned) (server, address),
+    ];
     _Refusal? last;
-    for (final server in servers) {
+    for (final (server, address) in attempts) {
       if (_closed) return;
       try {
-        final side = await _open(server, context);
+        final side = await _open(server, context, address);
         if (_closed) {
           side.destroy();
           return;
@@ -676,9 +729,12 @@ class _Relay {
     if (out.isNotEmpty) server.socket.add(out);
   }
 
-  /// Connects to [server], reads its INFO, and does TLS when the server asks
-  /// for it, the URL is `tls://`, or the context names TLS files.
-  Future<_ServerSide> _open(ContextServer server, NatsContext? context) async {
+  /// Connects to [server] (at [address] when the allowlist pinned one),
+  /// reads its INFO, and does TLS when the server asks for it, the URL is
+  /// `tls://`, or the context names TLS files.
+  Future<_ServerSide> _open(ContextServer server, NatsContext? context,
+      InternetAddress? address) async {
+    final Object connectTo = address ?? server.host;
     final target = '${_printable(server.host)}:${server.port}';
     final tlsFirst = context?.tlsFirst ?? false;
     // Only built when TLS is used: most plain connections never need it.
@@ -695,9 +751,9 @@ class _Relay {
     Socket socket;
     try {
       socket = tlsFirst
-          ? await SecureSocket.connect(server.host, server.port,
+          ? await SecureSocket.connect(connectTo, server.port,
               context: security(), timeout: config.connectTimeout)
-          : await Socket.connect(server.host, server.port,
+          : await Socket.connect(connectTo, server.port,
               timeout: config.connectTimeout);
     } on _Refusal {
       rethrow;

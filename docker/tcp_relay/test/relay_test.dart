@@ -146,14 +146,31 @@ void main() {
         contains('not in NATS_TCP_ALLOWED_HOSTS'));
   });
 
-  test('parses the allowlist environment value', () {
+  test('parses the allowlist environment value', () async {
     expect(RelayConfig.parseAllowedHosts(' Nats-A , nats-b:4222,, '),
         {'nats-a', 'nats-b:4222'});
     expect(RelayConfig.parseAllowedHosts(null), isEmpty);
     final config = RelayConfig(allowedHosts: {'nats-a', 'nats-b:4222'});
-    expect(config.allows('NATS-A', 1234), isTrue);
-    expect(config.allows('nats-b', 4222), isTrue);
-    expect(config.allows('nats-b', 4223), isFalse);
+    expect((await config.allowlist.check('NATS-A', 1234)).allowed, isTrue);
+    expect((await config.allowlist.check('nats-b', 4222)).allowed, isTrue);
+    expect((await config.allowlist.check('nats-b', 4223)).allowed, isFalse);
+  });
+
+  test('a CIDR entry relays to the address it checked', () async {
+    final port = await target(natsInfo);
+    // "nats-tenant" resolves to an address outside the range first: only
+    // the one inside it may be used.
+    await startRelay(RelayConfig(
+        allowedHosts: {'127.0.0.0/8'},
+        lookup: (host) async => host == 'nats-tenant'
+            ? [InternetAddress('192.0.2.1'), InternetAddress('127.0.0.1')]
+            : [InternetAddress('192.0.2.1')]));
+    expect(
+        await receive('host=nats-tenant&port=$port',
+            wait: const Duration(milliseconds: 500)),
+        startsWith('INFO '));
+    expect(await receive('host=elsewhere&port=$port'),
+        contains('elsewhere:$port is not in NATS_TCP_ALLOWED_HOSTS'));
   });
 
   test('serves the web build', () async {
