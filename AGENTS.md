@@ -14,7 +14,7 @@ cd docker/tcp_relay && dart pub get && dart analyze --fatal-infos && dart test  
 docker build -t nats-client-flutter .
 ```
 
-CI (`.github/workflows/build.yml`) runs all of the above on every push and gates every build/release job on them.
+CI (`.github/workflows/build.yml`) runs all of the above on every push (integration tests sharded across 4 parallel jobs; a newer push to the same branch cancels the older run) and gates every build/release job on them.
 
 ## Where things are
 

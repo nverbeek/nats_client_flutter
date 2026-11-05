@@ -4,15 +4,48 @@ on:
       - '**'
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
-  pull_request:
-    branches:
-      - '**'
   workflow_dispatch:
+# A new push to a branch cancels that branch's run still in progress; runs on
+# master and on release tags always finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' && github.ref != 'refs/heads/master' }}
 env:
   ARTIFACT_SUFFIX: ${{ github.ref_type == 'tag' && github.ref_name || github.run_id }}
 jobs:
-  test:
+  unit:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+      - name: Install project dependencies
+        run: flutter pub get
+      - name: Run fast widget/unit test suite
+        run: flutter test test/
+      - name: Test the Docker image's TCP relay server
+        # A separate Dart package (docker/tcp_relay), excluded from the app's
+        # own analysis, so it gets its own analyze and test run here.
+        working-directory: docker/tcp_relay
+        run: |
+          dart pub get
+          dart analyze --fatal-infos
+          dart test
+  integration:
+    # Split across parallel shards: each file boots the full app (~14s of
+    # build and launch on its own), so one job running them all in a row took
+    # ~14 minutes. Each shard is its own VM, so services and fixture ports
+    # don't collide. Raise SHARDS together with the matrix list.
+    name: integration (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    env:
+      SHARDS: 4
     services:
       # nats:latest is a fully distroless image (no shell, no wget/curl, not
       # even `which`) — a Docker healthcheck has to `exec` a command *inside*
@@ -33,6 +66,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          cache: true
       - name: Install Linux desktop + Xvfb dependencies
         run: |
           sudo apt-get update -y
@@ -41,16 +75,6 @@ jobs:
         run: flutter pub get
       - name: Enable linux build
         run: flutter config --enable-linux-desktop
-      - name: Run fast widget/unit test suite
-        run: flutter test test/
-      - name: Test the Docker image's TCP relay server
-        # A separate Dart package (docker/tcp_relay), excluded from the app's
-        # own analysis, so it gets its own analyze and test run here.
-        working-directory: docker/tcp_relay
-        run: |
-          dart pub get
-          dart analyze --fatal-infos
-          dart test
       - name: Start auth fixture servers
         # integration_test/authentication_test.dart needs one server per auth
         # method (NATS's simple user/pass, token, and bare-nkey auth blocks,
@@ -74,14 +98,13 @@ jobs:
           docker run -d --name nats-fixture-creds -p 4303:4222 \
             -v "$PWD/integration_test/fixtures/auth/creds.conf:/etc/nats/nats-server.conf:ro" \
             nats:latest -c /etc/nats/nats-server.conf
-      - name: Run real-backend integration test suite
+      - name: Run real-backend integration test shard
         run: |
           # Run each integration_test file as its own `flutter test` invocation
-          # rather than passing the whole directory at once: each file boots a
-          # full app process, and running multiple in one invocation against
-          # the same desktop target has been observed to fail to relaunch the
-          # app for the second file. Looping keeps this working as more
-          # integration test files are added later.
+          # rather than passing several at once: each file boots a full app
+          # process, and running multiple in one invocation against the same
+          # desktop target has been observed to fail to relaunch the app for
+          # the second file. Files are dealt round-robin to the shards.
           #
           # screenshot_tour_test.dart is excluded: it only makes progress
           # paired with the scripts/capture_screenshots.ps1 watcher process
@@ -90,15 +113,19 @@ jobs:
           # macos_file_picker_sandbox_test.dart is excluded too: it's
           # macOS-only (it'd just skip here after a full Linux build) and
           # runs in the test-macos job below.
+          i=0
           for f in integration_test/*_test.dart; do
             case "$(basename "$f")" in
               screenshot_tour_test.dart|macos_file_picker_sandbox_test.dart)
                 continue
                 ;;
             esac
-            echo "::group::$f"
-            xvfb-run -a flutter test "$f" -d linux -r github
-            echo "::endgroup::"
+            if [ $((i % SHARDS)) -eq ${{ matrix.shard }} ]; then
+              echo "::group::$f"
+              xvfb-run -a flutter test "$f" -d linux -r github
+              echo "::endgroup::"
+            fi
+            i=$((i + 1))
           done
       - name: Stop auth fixture servers
         if: always()
@@ -110,12 +137,13 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          cache: true
       - name: Install project dependencies
         run: flutter pub get
       - name: Enable macOS build
         run: flutter config --enable-macos-desktop
       - name: Start nats-server
-        # GitHub's macOS runners have no Docker, so the `test` job's
+        # GitHub's macOS runners have no Docker, so the integration jobs'
         # nats:latest service container isn't an option here.
         run: |
           brew install nats-server
@@ -168,7 +196,7 @@ jobs:
         if: failure()
         run: cat "$RUNNER_TEMP/nats-server.log"
   release-notes:
-    needs: test
+    needs: [unit, integration]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
@@ -193,13 +221,14 @@ jobs:
         with:
           body_path: release_notes.md
   build-web:
-    needs: test
+    needs: [unit, integration]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          cache: true
       - name: Install project dependencies
         run: flutter pub get
       - name: Build artifacts
@@ -218,13 +247,14 @@ jobs:
         with:
           files: build/web/NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-web.zip
   build-windows-x64:
-    needs: test
+    needs: [unit, integration]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          cache: true
       - name: Install project dependencies
         run: flutter pub get
       - name: Enable windows build
@@ -250,7 +280,7 @@ jobs:
         with:
           files: build/windows/x64/runner/Release/NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-windows-x64.zip
   check-store-secrets:
-    needs: test
+    needs: [unit, integration]
     runs-on: ubuntu-latest
     outputs:
       has-secrets: ${{ steps.check.outputs.has-secrets }}
@@ -261,7 +291,7 @@ jobs:
         # output the next job's `if:` can reference via `needs`.
         run: echo "has-secrets=${{ secrets.PARTNER_CENTER_CLIENT_ID != '' }}" >> "$GITHUB_OUTPUT"
   publish-windows-store:
-    needs: [test, check-store-secrets]
+    needs: [unit, integration, check-store-secrets]
     if: startsWith(github.ref, 'refs/tags/') && needs.check-store-secrets.outputs.has-secrets == 'true'
     runs-on: windows-latest
     steps:
@@ -269,6 +299,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          cache: true
       - name: Install project dependencies
         run: flutter pub get
       - name: Enable windows build
@@ -304,7 +335,7 @@ jobs:
         # at a "best candidate" across the whole tree.
         run: msstore publish . --appId 9NVR7NHHL4FB --inputDirectory build/windows/x64/runner/Release
   build-windows-arm64:
-    needs: test
+    needs: [unit, integration]
     runs-on: windows-11-arm
     steps:
       - uses: actions/checkout@v7
@@ -356,13 +387,14 @@ jobs:
         with:
           files: ${{ env.BUILD_DIR }}/NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-windows-arm64.zip
   build-linux:
-    needs: test
+    needs: [unit, integration]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          cache: true
       - name: Install dependencies
         run: |
           sudo apt-get update -y
@@ -387,7 +419,7 @@ jobs:
         with:
           files: build/linux/x64/release/bundle/NATSClientUI-${{ env.ARTIFACT_SUFFIX }}-linux.zip
   build-macos:
-    needs: [test, test-macos]
+    needs: [unit, integration, test-macos]
     runs-on: macos-latest
     outputs:
       signed: ${{ steps.signing.outputs.enabled }}
@@ -396,6 +428,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          cache: true
       - name: Install project dependencies
         run: flutter pub get
       - name: Enable macOS build
@@ -483,7 +516,7 @@ jobs:
             bash scripts/ci/homebrew_cask.sh "$VERSION" "$DMG" "file://$PWD/$DMG"
           fi
   build-docker:
-    needs: test
+    needs: [unit, integration]
     runs-on: ubuntu-latest
     env:
       IMG_NAME: nverbeek/nats-client-flutter
