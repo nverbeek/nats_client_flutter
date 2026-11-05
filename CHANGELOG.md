@@ -1,3 +1,21 @@
+# 1.0.22
+
+## New Features
+
+- **Server tab**: watch the NATS server you're connected to through its HTTP monitoring endpoint. It shows message and byte throughput charts, server details and health, and a connections table you can sort and page through. It's off by default; turn it on in Settings, where you can also set the monitoring port and how often it polls. It switches to https when the monitoring port uses it. In the Docker image, the container's server fetches the monitoring data, so it also works when the browser can't reach the monitoring port.
+- **Docker contexts picked up while running**: a context added to, changed in or removed from the contexts directory appears within a few seconds, without a restart. A context that can't be used yet, such as one whose `.creds` file hasn't arrived, is retried until it can. This lets other teams publish their own contexts from labelled Kubernetes Secrets through a sidecar such as k8s-sidecar; see the README's Kubernetes section.
+- **Wildcards and CIDR ranges in `NATS_TCP_ALLOWED_HOSTS`**: besides exact hosts, entries can be `*.svc.cluster.local` (any name under a domain) or `10.96.0.0/12` (any address in the range, and any name that resolves into it). For a CIDR match the relay connects only to the resolved addresses inside the range. The container logs a warning for an entry it can't read.
+
+## Changes
+
+- The app's connection is named "NATS Client UI", so it's easy to find in the server's connection list.
+- **Docker**: if contexts may be added to a running container that's opened under a host name (such as behind an ingress), list that name in `NATS_UI_ALLOWED_ORIGINS` from the start. The origin check applies as soon as the first context appears.
+
+## Maintenance & Dependencies
+
+- `dart_nats` updated to 1.7.1, which reports its real version to the server.
+- CI runs the integration tests in four parallel jobs and caches the Flutter SDK, so checks finish sooner.
+
 # 1.0.21
 
 ## Bug Fixes
