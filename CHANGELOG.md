@@ -1,3 +1,20 @@
+# 1.0.23
+
+## New Features
+
+- **Wrap long messages**: the new **Max Lines per Message** setting (1-20) lets long messages in Live Messages and Browse Messages wrap across several lines instead of being cut off at one. The default stays at one line.
+- **Pinned fields**: pin JSON fields such as `label`, `meta.status` or `items[*].sku` to show their values in columns at the start of every message row. That makes it easy to follow a value as messages arrive, even when it sits at the end of a long payload. Pick fields straight from a message with **Pin Fields…** in its row menu, or type paths in Settings, and give a pin a short name with `name=path`. Click a pinned value to copy it or unpin it.
+- **Protobuf payloads**: Message Detail decodes Protocol Buffers payloads without their schema, showing field numbers and values. Binary payloads that are protobuf open in this view.
+- **Hide subjects**: the new **Show Message Subjects** setting hides the subject chip on message rows, giving message text more room.
+
+## Changes
+
+- While you're scrolled down a message list, new messages wait instead of appearing above you, so what you're reading stays put. A **↑ N new** button at the top of the list shows how many are waiting and takes you back to the top to see them.
+- Message text uses a bundled monospace font (Roboto Mono), and the default message font size is now 13. A size you've already chosen is kept.
+- Message rows give more of their width to message text.
+- The Settings dialog is wider and grouped into Messages, Connection, Tabs & Server and Updates.
+- Refreshed README screenshots.
+
 # 1.0.22
 
 ## New Features
