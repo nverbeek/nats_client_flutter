@@ -33,7 +33,7 @@ This application currently supports Windows, Linux, macOS and Web platforms. Dow
 - Multi-select messages (Shift+Click, Ctrl+Click, Ctrl+Shift+Up/Down for a range or disconnected set) and copy them to the clipboard as plain text
 - **Export & Replay**: bulk-export captured messages (a selection, or everything captured) to an NDJSON file — with a warning if the export is large — then **Replay** a previously exported file by publishing every message back onto the connected server, with configurable pacing (delay between messages, repeat count, delay between repeats) and a live progress banner with a Stop button
 - Send custom messages, with optional headers
-- See message details, such as headers, subject and payload. JSON payloads are automatically formatted and syntax highlighted, and binary payloads can be viewed as hex.
+- See message details, such as headers, subject and payload. JSON payloads are automatically formatted and syntax highlighted, binary payloads can be viewed as hex, and protobuf payloads can be decoded without their schema (field numbers and values).
 - Light and Dark themes
 - Most recent connection information & theme are persisted between app runs
 - Message view settings: adjustable font size, an optional per-row arrival timestamp, and a configurable cap on how many messages are kept in memory (1k–100k, or unlimited)

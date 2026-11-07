@@ -90,7 +90,7 @@ Each message has the following information/options:
 
     - **Copy**: Copies the message data to the clipboard
     - **Copy Subject**: Copies just the message's subject to the clipboard.
-    - **Detail**: Opens a dialog with the message's subject, headers (as a table) and payload. JSON payloads are formatted and highlighted. A **Text/Hex** toggle shows the raw bytes, and switches to Hex on its own when the payload isn't valid text. Each section has a copy button.
+    - **Detail**: Opens a dialog with the message's subject, headers (as a table) and payload. JSON payloads are formatted and highlighted. A **Text/Hex** toggle shows the raw bytes. When the payload is a Protocol Buffers (protobuf) message, a third **Protobuf** option decodes it without its schema, the way `protoc --decode_raw` does: field numbers and values, but no field names. Payloads that aren't valid text open in Protobuf when they decode as one, otherwise in Hex. Each section has a copy button.
     - **Replay**: Re-sends the message exactly as defined, with the same subject and data. (Not to be confused with the Tools section's file-based **Replay**, below, which re-publishes every message from a previously exported file.)
     - **Edit & Send** - Opens a dialog pre-filled with the message's subject and data, allowing you to edit prior to sending again.
     - **Reply To** - If the selected message has a replyTo subject defined, this option opens a send message box where the subject is pre-filled with the replyTo subject.

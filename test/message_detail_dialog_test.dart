@@ -128,7 +128,7 @@ void main() {
       ),
     ));
 
-    expect(find.byType(SegmentedButton<bool>), findsNothing);
+    expect(find.text('Hex'), findsNothing);
   });
 
   testWidgets(
@@ -147,7 +147,8 @@ void main() {
       ),
     ));
 
-    expect(find.byType(SegmentedButton<bool>), findsOneWidget);
+    expect(find.text('Hex'), findsOneWidget);
+    expect(find.text('Protobuf'), findsNothing); // JSON isn't protobuf
     expect(find.textContaining('"a": 1', findRichText: true), findsOneWidget);
 
     await tester.tap(find.text('Hex'));
@@ -355,5 +356,71 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'Close'));
     await tester.pumpAndSettle();
     expect(find.byType(MessageDetailDialog), findsNothing);
+  });
+
+  group('Protobuf view', () {
+    // field 1 varint 150, field 2 fixed64 21.5, field 3 bytes ff 00 --
+    // the 0xff makes it invalid UTF-8.
+    final protobufBytes = Uint8List.fromList([
+      0x08, 0x96, 0x01, //
+      0x11, 0, 0, 0, 0, 0, 0x80, 0x35, 0x40, //
+      0x1A, 0x02, 0xFF, 0x00,
+    ]);
+
+    Widget dialog(Uint8List bytes) => withThemeModel(
+          MaterialApp(
+            home: Scaffold(
+              body: MessageDetailDialog(
+                headerVersion: '',
+                headers: const {},
+                formattedJson: 'x',
+                payloadBytes: bytes,
+              ),
+            ),
+          ),
+        );
+
+    testWidgets('a binary protobuf payload opens decoded', (tester) async {
+      await tester.pumpWidget(dialog(protobufBytes));
+
+      expect(find.text('Protobuf'), findsOneWidget);
+      expect(
+          find.byKey(const Key('protobufPayloadBackground')), findsOneWidget);
+      expect(find.textContaining('1: 150'), findsOneWidget);
+      expect(find.textContaining('2: 21.5'), findsOneWidget);
+
+      await tester.tap(find.text('Hex'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('hexPayloadBackground')), findsOneWidget);
+      expect(find.textContaining('1: 150'), findsNothing);
+    });
+
+    testWidgets('payloads that are not protobuf get no Protobuf option',
+        (tester) async {
+      await tester.pumpWidget(dialog(Uint8List.fromList([0xFF, 0xFE])));
+      expect(find.text('Protobuf'), findsNothing);
+      expect(find.byKey(const Key('hexPayloadBackground')), findsOneWidget);
+    });
+
+    testWidgets('copy copies the decoded text', (tester) async {
+      final copiedData = <ClipboardData>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copiedData
+                .add(ClipboardData(text: call.arguments['text'] as String));
+          }
+          return null;
+        },
+      );
+      addTearDown(() => tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null));
+
+      await tester.pumpWidget(dialog(protobufBytes));
+      await tester.tap(find.byIcon(Icons.copy));
+      await tester.pump();
+      expect(copiedData.single.text, startsWith('1: 150\n'));
+    });
   });
 }
