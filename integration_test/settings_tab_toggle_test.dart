@@ -57,9 +57,12 @@ void main() {
     await openSettings(tester);
     // Switches, in order: Show Subscription Colors, Enable JetStream, Enable
     // Key-Value Stores, Enable Object Store, Check for Updates.
-    await tester.tap(find.byType(Switch).at(1));
-    await tester.tap(find.byType(Switch).at(2));
-    await tester.tap(find.byType(Switch).at(3));
+    await tester.ensureVisible(find.byKey(const ValueKey('jetStreamSwitch')));
+    await tester.tap(find.byKey(const ValueKey('jetStreamSwitch')));
+    await tester.ensureVisible(find.byKey(const ValueKey('kvSwitch')));
+    await tester.tap(find.byKey(const ValueKey('kvSwitch')));
+    await tester.ensureVisible(find.byKey(const ValueKey('objectStoreSwitch')));
+    await tester.tap(find.byKey(const ValueKey('objectStoreSwitch')));
     await saveSettings(tester);
     expect(tester.takeException(), isNull);
 
@@ -74,9 +77,12 @@ void main() {
 
     // Turn all three back on and save — this is the step that used to crash.
     await openSettings(tester);
-    await tester.tap(find.byType(Switch).at(1));
-    await tester.tap(find.byType(Switch).at(2));
-    await tester.tap(find.byType(Switch).at(3));
+    await tester.ensureVisible(find.byKey(const ValueKey('jetStreamSwitch')));
+    await tester.tap(find.byKey(const ValueKey('jetStreamSwitch')));
+    await tester.ensureVisible(find.byKey(const ValueKey('kvSwitch')));
+    await tester.tap(find.byKey(const ValueKey('kvSwitch')));
+    await tester.ensureVisible(find.byKey(const ValueKey('objectStoreSwitch')));
+    await tester.tap(find.byKey(const ValueKey('objectStoreSwitch')));
     await saveSettings(tester);
     expect(tester.takeException(), isNull);
 
@@ -106,7 +112,9 @@ void main() {
     await pumpDisconnectedApp(tester);
 
     await openSettings(tester);
-    await tester.tap(find.byType(Switch).at(1)); // JetStream off
+    await tester.ensureVisible(find.byKey(const ValueKey('jetStreamSwitch')));
+    await tester
+        .tap(find.byKey(const ValueKey('jetStreamSwitch'))); // JetStream off
     await saveSettings(tester);
     expect(tester.takeException(), isNull);
     expect(find.text('JetStream'), findsNothing);
@@ -114,7 +122,9 @@ void main() {
     expect(find.text('Object Store'), findsOneWidget);
 
     await openSettings(tester);
-    await tester.tap(find.byType(Switch).at(1)); // JetStream back on
+    await tester.ensureVisible(find.byKey(const ValueKey('jetStreamSwitch')));
+    await tester.tap(
+        find.byKey(const ValueKey('jetStreamSwitch'))); // JetStream back on
     await saveSettings(tester);
     expect(tester.takeException(), isNull);
     expect(find.text('JetStream'), findsOneWidget);
@@ -122,7 +132,9 @@ void main() {
     expect(find.text('Object Store'), findsOneWidget);
 
     await openSettings(tester);
-    await tester.tap(find.byType(Switch).at(3)); // Object Store off
+    await tester.ensureVisible(find.byKey(const ValueKey('objectStoreSwitch')));
+    await tester.tap(
+        find.byKey(const ValueKey('objectStoreSwitch'))); // Object Store off
     await saveSettings(tester);
     expect(tester.takeException(), isNull);
     expect(find.text('JetStream'), findsOneWidget);
@@ -130,7 +142,9 @@ void main() {
     expect(find.text('Object Store'), findsNothing);
 
     await openSettings(tester);
-    await tester.tap(find.byType(Switch).at(3)); // Object Store back on
+    await tester.ensureVisible(find.byKey(const ValueKey('objectStoreSwitch')));
+    await tester.tap(find
+        .byKey(const ValueKey('objectStoreSwitch'))); // Object Store back on
     await saveSettings(tester);
     expect(tester.takeException(), isNull);
     expect(find.text('JetStream'), findsOneWidget);
@@ -151,7 +165,8 @@ void main() {
     // Switches, in order: Show Subscription Colors, Enable JetStream, Enable
     // Key-Value Stores, Enable Object Store, Enable Service Discovery, Check
     // for Updates.
-    final serviceDiscoverySwitchFinder = find.byType(Switch).at(4);
+    final serviceDiscoverySwitchFinder =
+        find.byKey(const ValueKey('serviceDiscoverySwitch'));
     await tester.ensureVisible(serviceDiscoverySwitchFinder);
     await tester.tap(serviceDiscoverySwitchFinder);
     await saveSettings(tester);
@@ -180,7 +195,8 @@ void main() {
 
     await openSettings(tester);
     // Index 5: right after Enable Service Discovery.
-    final serverMonitorSwitchFinder = find.byType(Switch).at(5);
+    final serverMonitorSwitchFinder =
+        find.byKey(const ValueKey('serverMonitorSwitch'));
     await tester.ensureVisible(serverMonitorSwitchFinder);
     await tester.tap(serverMonitorSwitchFinder);
     await tester.pumpAndSettle();

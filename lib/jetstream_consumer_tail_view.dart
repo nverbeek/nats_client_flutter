@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'constants.dart' as constants;
 import 'format_utils.dart';
+import 'message_font.dart';
 import 'jetstream_manager.dart';
 import 'message_detail_dialog.dart';
 import 'regex_text_highlight.dart';
@@ -340,6 +341,8 @@ class _JetStreamConsumerTailViewState extends State<JetStreamConsumerTailView> {
                       text: decodeMessageTextFor(message),
                       searchTerm: '',
                       fontSize: 14,
+                      style: messagePayloadStyle(14),
+                      strutStyle: messagePayloadStrut(14),
                       highlightStyle: TextStyle(
                         background: Paint()
                           ..color = theme.colorScheme.inversePrimary,

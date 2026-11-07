@@ -4,7 +4,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, listEquals;
+import 'package:flutter/foundation.dart'
+    show LicenseEntryWithLineBreaks, LicenseRegistry, kIsWeb, listEquals;
 import 'package:flutter/material.dart';
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:dynamic_color/dynamic_color.dart';
@@ -27,17 +28,23 @@ import 'jetstream_dashboard.dart';
 import 'jetstream_manager.dart';
 import 'kv_dashboard.dart';
 import 'kv_manager.dart';
+import 'live_message_row.dart';
 import 'message_detail_dialog.dart';
 import 'message_export.dart';
+import 'message_list_layout.dart';
+import 'message_row_metrics.dart';
 import 'object_store_dashboard.dart';
 import 'object_store_manager.dart';
 import 'paused_banner.dart';
+import 'pin_fields_dialog.dart';
+import 'pinned_fields.dart';
 import 'reconnect_detector.dart';
 import 'replay_banner.dart';
 import 'replay_config_dialog.dart';
 import 'send_message_dialog.dart';
 import 'server_monitor.dart';
 import 'server_monitor_dashboard.dart';
+import 'held_messages_pill.dart';
 import 'help_dialog.dart';
 import 'service_discovery_dashboard.dart';
 import 'service_discovery_manager.dart';
@@ -52,6 +59,14 @@ import 'update_checker.dart';
 void main() async {
   // must wait for widgets to initialize before we are able to use SharedPreferences
   WidgetsFlutterBinding.ensureInitialized();
+
+  // The bundled Roboto Mono (message payloads) is SIL OFL 1.1, which asks
+  // for its license to ship with the app.
+  LicenseRegistry.addLicense(() async* {
+    final license =
+        await rootBundle.loadString('assets/fonts/RobotoMono-OFL.txt');
+    yield LicenseEntryWithLineBreaks(const ['Roboto Mono'], license);
+  });
 
   // Only initialize window manager on non-web platforms
   if (!kIsWeb) {
@@ -529,7 +544,14 @@ class _MyHomePageState extends State<MyHomePage>
   // 0 means unlimited -- see `maxMessagesOptions` in settings_dialog.dart.
   int maxMessages = constants.defaultMaxMessages;
   bool showTimestamps = constants.defaultShowTimestamps;
+  bool showSubjectChip = constants.defaultShowSubjectChip;
+  int messageMaxLines = constants.defaultMessageMaxLines;
+  List<String> pinnedFieldSources = const [];
   OverlayEntry? _updateOverlayEntry;
+
+  // Live Messages wrapping and pinned fields (see live_message_row.dart).
+  final MessageListLayout _liveLayout =
+      MessageListLayout(subjectChipMaxWidth: MessageRowGeometry.chipMaxWidth);
 
   // authentication
   AuthMethod authMethod = AuthMethod.none;
@@ -659,6 +681,16 @@ class _MyHomePageState extends State<MyHomePage>
           constants.defaultMaxMessages;
       showTimestamps = prefs.getBool(constants.prefShowTimestamps) ??
           constants.defaultShowTimestamps;
+      showSubjectChip = prefs.getBool(constants.prefShowSubjectChip) ??
+          constants.defaultShowSubjectChip;
+      messageMaxLines = (prefs.getInt(constants.prefMessageMaxLines) ??
+              constants.defaultMessageMaxLines)
+          .clamp(1, constants.messageMaxLinesOptions.last);
+      pinnedFieldSources =
+          (prefs.getStringList(constants.prefPinnedFields) ?? const <String>[])
+              .where((source) => parsePinnedPath(source) != null)
+              .toList(growable: false);
+      _applyPinnedFields();
       loadAuthSettings(prefs);
       _ensureTabController();
       _trimToCap();
@@ -829,6 +861,9 @@ class _MyHomePageState extends State<MyHomePage>
     prefs.setBool(constants.prefShowSubscriptionColors, showSubscriptionColors);
     prefs.setInt(constants.prefMaxMessages, maxMessages);
     prefs.setBool(constants.prefShowTimestamps, showTimestamps);
+    prefs.setBool(constants.prefShowSubjectChip, showSubjectChip);
+    prefs.setInt(constants.prefMessageMaxLines, messageMaxLines);
+    prefs.setStringList(constants.prefPinnedFields, pinnedFieldSources);
   }
 
   /// Handles tap logic to distinguish between single and double taps
@@ -1845,7 +1880,13 @@ class _MyHomePageState extends State<MyHomePage>
     final newestFirst = _incomingBatch.reversed.toList(growable: false);
     _incomingBatch.clear();
 
-    if (messagesPaused) {
+    // Hold new messages while paused, and also while the user is scrolled
+    // away from the top: inserting above them would either move what
+    // they're reading, or (shifting to compensate) cancel their fling and,
+    // once the cap is full, walk them down to the bottom as the oldest
+    // messages get trimmed. They're let in at the top (see
+    // `_releaseHeldMessages`); the "N new" pill counts them meanwhile.
+    if (messagesPaused || _showJumpToTop) {
       // No `setState` here -- see `_pendingCount`'s doc comment. Nothing in
       // the widget tree reads `pendingMessages`/its length directly at
       // build time; both places that display it are `_pendingCount`
@@ -1886,27 +1927,32 @@ class _MyHomePageState extends State<MyHomePage>
     if (newestFirst.isEmpty) return;
     final hasClients = _listScrollController.hasClients;
     final atTop = !hasClients || _listScrollController.offset <= 1.0;
-    final oldOffset = hasClients ? _listScrollController.offset : 0.0;
 
-    late final int matchedCount;
+    // Grow the pinned-field columns to fit the new messages. In multi-line
+    // mode a wider column narrows every row's text and can rewrap the rows
+    // on screen, so that flush keeps the first visible message in place
+    // rather than shifting by the new rows' heights.
+    final pins = _liveLayout.pins;
+    if (!pins.isEmpty) {
+      if (!atTop && _multiLineRows && pins.wouldGrow(newestFirst)) {
+        // _keepScrollAnchor finds the anchor under the current widths, then
+        // runs this.
+        _keepScrollAnchor(() {
+          for (final message in newestFirst) {
+            pins.noteMessage(message);
+          }
+          _prependBatch(newestFirst);
+        });
+        return;
+      }
+      for (final message in newestFirst) {
+        pins.noteMessage(message);
+      }
+    }
+
+    late final List<Message<dynamic>> matched;
     setState(() {
-      items.insertAll(0, newestFirst);
-      if (identical(filteredItems, items)) {
-        // No active filter -- filteredItems already grew along with items.
-        matchedCount = newestFirst.length;
-      } else {
-        final lowerFilter = currentFilter.toLowerCase();
-        final matched = newestFirst
-            .where((m) =>
-                decodeMessageTextFor(m).toLowerCase().contains(lowerFilter))
-            .toList(growable: false);
-        filteredItems.insertAll(0, matched);
-        matchedCount = matched.length;
-      }
-      if (selectedIndex > -1) {
-        selectedIndex += matchedCount;
-      }
-      _trimToCap();
+      matched = _prependBatch(newestFirst);
     });
 
     // At the top: nothing to do — the offset stays 0 and the new newest
@@ -1915,14 +1961,41 @@ class _MyHomePageState extends State<MyHomePage>
     // (what's actually rendered), clamped to the new max so a same-frame
     // cap trim (which only removes rows below the viewport) can't overshoot
     // past the end of the now-shorter list.
-    if (!atTop && matchedCount > 0) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!_listScrollController.hasClients) return;
-        final newMax = _listScrollController.position.maxScrollExtent;
-        final target = oldOffset + matchedCount * _messageRowExtent;
-        _listScrollController.jumpTo(target > newMax ? newMax : target);
-      });
+    //
+    // The shift is relative to wherever the list is when the callback runs,
+    // not to the offset before the insert: if the user scrolled, or a second
+    // flush landed, before the frame, an absolute target would undo that
+    // movement. Pressing Jump to top cancels it (see `_jumpToTop`).
+    if (!atTop && matched.isNotEmpty) {
+      final added = _liveLayout.heightOf(matched);
+      _liveLayout.deferJump(
+          _listScrollController, () => _listScrollController.offset + added);
     }
+  }
+
+  /// Prepends [newestFirst] to `items` (and the matching ones to
+  /// `filteredItems`), shifts the selection and trims to the cap. Returns
+  /// the messages that were added to `filteredItems`. Callers wrap this in
+  /// `setState`.
+  List<Message<dynamic>> _prependBatch(List<Message<dynamic>> newestFirst) {
+    items.insertAll(0, newestFirst);
+    final List<Message<dynamic>> matched;
+    if (identical(filteredItems, items)) {
+      // No active filter -- filteredItems already grew along with items.
+      matched = newestFirst;
+    } else {
+      final lowerFilter = currentFilter.toLowerCase();
+      matched = newestFirst
+          .where((m) =>
+              decodeMessageTextFor(m).toLowerCase().contains(lowerFilter))
+          .toList(growable: false);
+      filteredItems.insertAll(0, matched);
+    }
+    if (selectedIndex > -1) {
+      selectedIndex += matched.length;
+    }
+    _trimToCap();
+    return matched;
   }
 
   /// Trims `items` (and `filteredItems`/selection state derived from it)
@@ -1970,15 +2043,32 @@ class _MyHomePageState extends State<MyHomePage>
   /// Tracks whether the list has scrolled away from the top so the "jump to
   /// top" button can be shown/hidden. No-op instant jump — nothing to
   /// animate since it's a single frame either way.
+  ///
+  /// Also where held messages are let in: arriving back at the top (by
+  /// scrolling, Jump to top or the "N new" pill) releases them.
   void _updateJumpToTopVisibility() {
     if (!_listScrollController.hasClients) return;
     final show = _listScrollController.offset > 1.0;
     if (show != _showJumpToTop) {
       setState(() => _showJumpToTop = show);
+      if (!show) _releaseHeldMessages();
     }
   }
 
+  /// Inserts the messages held while scrolled away or paused, once neither
+  /// applies any more.
+  void _releaseHeldMessages() {
+    if (messagesPaused || _showJumpToTop || pendingMessages.isEmpty) return;
+    final buffered = List<Message<dynamic>>.of(pendingMessages);
+    pendingMessages.clear();
+    _pendingCount.value = 0;
+    _insertMessages(buffered);
+  }
+
   void _jumpToTop() {
+    // Drop any keep-the-view-still jump an in-flight flush scheduled, or it
+    // would land after this one and pull the list back down.
+    _liveLayout.userJumped();
     if (_listScrollController.hasClients) {
       _listScrollController.jumpTo(0);
     }
@@ -1988,14 +2078,12 @@ class _MyHomePageState extends State<MyHomePage>
     setState(() => messagesPaused = true);
   }
 
+  /// Ends a manual pause. Buffered messages go in now if the list is at the
+  /// top; if the user is scrolled down they keep waiting (counted by the
+  /// "N new" pill) until the list is back at the top.
   void _resumeMessageList() {
-    final buffered = List<Message<dynamic>>.of(pendingMessages);
-    setState(() {
-      pendingMessages.clear();
-      messagesPaused = false;
-    });
-    _pendingCount.value = 0;
-    _insertMessages(buffered);
+    setState(() => messagesPaused = false);
+    _releaseHeldMessages();
   }
 
   void _startReplay(List<ExportedMessage> messages, Duration messageInterval,
@@ -2149,8 +2237,11 @@ class _MyHomePageState extends State<MyHomePage>
         _multiSelected.clear();
         _multiSelectActive = false;
         _selectionAnchor = null;
+        _liveLayout.pins.resetWidths(const []);
       });
       _pendingCount.value = 0;
+      // An empty list is at the top: end any hold right away.
+      _jumpToTop();
     }
   }
 
@@ -2439,6 +2530,9 @@ class _MyHomePageState extends State<MyHomePage>
             showSubscriptionColors: showSubscriptionColors,
             maxMessages: maxMessages,
             showTimestamps: showTimestamps,
+            showSubjectChip: showSubjectChip,
+            messageMaxLines: messageMaxLines,
+            pinnedFields: pinnedFieldSources,
           ),
           onSave: (values) {
             final updateCheckJustEnabled =
@@ -2446,6 +2540,18 @@ class _MyHomePageState extends State<MyHomePage>
             final serverMonitorChanged =
                 values.serverMonitorEnabled != serverMonitorEnabled ||
                     values.serverMonitorPort != serverMonitorPort;
+            final pinsChanged =
+                !listEquals(values.pinnedFields, pinnedFieldSources);
+            _keepScrollAnchor(() {
+              messageFontSize = values.fontSize;
+              showTimestamps = values.showTimestamps;
+              showSubjectChip = values.showSubjectChip;
+              messageMaxLines = values.messageMaxLines;
+              if (pinsChanged) {
+                pinnedFieldSources = values.pinnedFields;
+                _applyPinnedFields();
+              }
+            });
             setState(() {
               serverMonitorEnabled = values.serverMonitorEnabled;
               serverMonitorPort = values.serverMonitorPort;
@@ -2927,6 +3033,14 @@ class _MyHomePageState extends State<MyHomePage>
             value: 'subscribe_to_subject',
             child: Text('Subscribe to This Subject'),
           ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'pin_fields',
+          enabled:
+              decodeJsonPayload(decodeMessageTextFor(filteredItems[index])) !=
+                  null,
+          child: const Text('Pin Fields…'),
+        ),
       ];
     } catch (e) {
       // If there's an error accessing context, return empty list
@@ -2997,6 +3111,9 @@ class _MyHomePageState extends State<MyHomePage>
           if (subject != null) {
             _subscribeToExactSubject(subject);
           }
+          break;
+        case 'pin_fields':
+          _showPinFieldsDialog(filteredItems[index]);
           break;
       }
     } catch (e) {
@@ -3408,6 +3525,12 @@ class _MyHomePageState extends State<MyHomePage>
                                 ? _jetStreamManager
                                 : null,
                             reconnectSignal: _reconnectSignal,
+                            display: MessageListDisplay(
+                              maxLines: messageMaxLines,
+                              showSubject: showSubjectChip,
+                              pinnedFields: pinnedFieldSources,
+                              onPinnedFieldsChanged: _setPinnedFields,
+                            ),
                           ),
                         if (kvEnabled)
                           KvDashboard(
@@ -3515,6 +3638,127 @@ class _MyHomePageState extends State<MyHomePage>
     return withPadding > 56.0 ? withPadding : 56.0;
   }
 
+  bool get _multiLineRows => messageMaxLines > 1;
+
+  /// Pushes the current display settings into [_liveLayout]. Called from
+  /// build, so its measurements always match what's drawn.
+  void _syncLiveLayout(ThemeData theme) {
+    _liveLayout
+      ..maxLines = messageMaxLines
+      ..fontSize = messageFontSize
+      ..showSubject = showSubjectChip
+      ..showColorBar = showSubscriptionColors
+      ..singleLineExtent = _messageRowExtent
+      ..timestampsVisible = showTimestamps
+      ..hasCapturedAt = ((m) => _messageCapturedAt[m] != null)
+      ..updateStyles(theme);
+  }
+
+  /// Runs [mutate] in `setState`, keeping the first visible message in place
+  /// when the change alters row heights (settings, pin columns growing).
+  void _keepScrollAnchor(VoidCallback mutate) => _liveLayout.keepAnchor(
+      _listScrollController, () => filteredItems, setState, mutate);
+
+  /// Re-parses [pinnedFieldSources] into the Live Messages pin state.
+  void _applyPinnedFields() =>
+      _liveLayout.setPinnedSources(pinnedFieldSources, items);
+
+  Widget _buildLiveMessageRow(
+      BuildContext context,
+      int index,
+      Set<Message<dynamic>> effectiveSelection,
+      Color evenRowColor,
+      Color oddRowColor) {
+    final message = filteredItems[index];
+    final layout = _multiLineRows ? _liveLayout.layoutFor(message) : null;
+    final capturedAt = _messageCapturedAt[message];
+    return GestureDetector(
+      key: ObjectKey(message),
+      behavior: HitTestBehavior.translucent,
+      onSecondaryTapDown: (details) =>
+          _showRowContextMenu(context, index, details.globalPosition),
+      child: LiveMessageRow(
+        text: decodeMessageTextFor(message),
+        subject: message.subject ?? '',
+        findTerm: currentFind,
+        fontSize: messageFontSize,
+        extent: layout?.extent ?? _messageRowExtent,
+        // Band by distance from the oldest message (always at the bottom),
+        // not the raw index: prepending new messages shifts every existing
+        // row's index, so banding on the index would flip every stripe as
+        // messages arrive. Distance-from-oldest is fixed per message, so
+        // stripes stay put.
+        tileColor: effectiveSelection.contains(message)
+            ? Theme.of(context).colorScheme.inversePrimary
+            : (filteredItems.length - 1 - index) % 2 == 0
+                ? evenRowColor
+                : oddRowColor,
+        barColor: _colorForMessage(message, context),
+        showColorBar: showSubscriptionColors,
+        timestamp: showTimestamps && capturedAt != null
+            ? formatTimeOfDay(capturedAt)
+            : null,
+        showSubject: showSubjectChip,
+        wrap: layout?.wrap,
+        trailingWidth: layout?.trailingWidth,
+        pins: _liveLayout.rowPinsFor(message),
+        onTap: () => _handleMessageTap(index),
+        menuButton: _buildSafePopupMenuButton(index),
+        onPinTap: (pinIndex, position) =>
+            _showPinCellMenu(message, pinIndex, position),
+      ),
+    );
+  }
+
+  /// Menu for a click on a row's pinned value: copy it, open the picker, or
+  /// unpin the field.
+  Future<void> _showPinCellMenu(
+      Message<dynamic> message, int pinIndex, Offset globalPosition) async {
+    final pins = _liveLayout.pins;
+    if (pinIndex >= pins.paths.length) return;
+    final path = pins.paths[pinIndex];
+    final value = pins.valuesFor(message)?[pinIndex];
+    final selected = await showPinCellMenu(context, path,
+        hasValue: value != null, globalPosition: globalPosition);
+    if (!mounted || selected == null) return;
+    switch (selected) {
+      case 'copy':
+        await Clipboard.setData(ClipboardData(text: value!.full));
+        if (mounted) showSnackBar('Copied ${path.label} to clipboard!');
+      case 'pin':
+        _showPinFieldsDialog(message);
+      case 'unpin':
+        _setPinnedFields(
+            pinnedFieldSources.where((s) => s != path.source).toList());
+    }
+  }
+
+  /// Opens the "Pin Fields" picker over [message]'s JSON fields.
+  void _showPinFieldsDialog(Message<dynamic> message) {
+    final json = decodeJsonPayload(decodeMessageTextFor(message));
+    if (json == null) {
+      showSnackBar('This message is not JSON, so it has no fields to pin.');
+      return;
+    }
+    showDialog<void>(
+      context: context,
+      builder: (context) => PinFieldsDialog(
+        subject: message.subject ?? '',
+        json: json,
+        pinned: pinnedFieldSources,
+        onSave: _setPinnedFields,
+      ),
+    );
+  }
+
+  void _setPinnedFields(List<String> sources) {
+    _keepScrollAnchor(() {
+      pinnedFieldSources = List.unmodifiable(sources);
+      _applyPinnedFields();
+    });
+    saveMessageSettings();
+  }
+
   /// Builds the "Live Messages" tab content: the scrolling message list plus
   /// the bottom toolbar (clear/send/filter/find). Unchanged from before the
   /// JetStream tab was introduced, just extracted so it can be reused as a
@@ -3522,6 +3766,7 @@ class _MyHomePageState extends State<MyHomePage>
   Widget _buildLiveMessagesTab(Color evenRowColor, Color oddRowColor) {
     // Computed once per rebuild rather than once per row inside itemBuilder.
     final effectiveSelection = _effectiveSelection();
+    _syncLiveLayout(Theme.of(context));
     return Column(
       children: <Widget>[
         if (_isReplaying)
@@ -3540,144 +3785,36 @@ class _MyHomePageState extends State<MyHomePage>
         Expanded(
           child: Stack(
             children: [
-              Scrollbar(
-                controller: _listScrollController,
-                thumbVisibility:
-                    true, // Always show the scrollbar when scrollable
-                child: ListView.builder(
+              LayoutBuilder(builder: (context, constraints) {
+                _liveLayout.noteWidth(
+                    constraints.maxWidth, filteredItems, _listScrollController);
+                return Scrollbar(
                   controller: _listScrollController,
-                  // Newest-at-top, top-anchored (a plain, non-reversed list):
-                  // messages fill from the top down, the latest arrives at the
-                  // top, and a short list sits at the top with empty space
-                  // below rather than clinging to the bottom. Stable scrolling
-                  // when new messages are prepended above a scrolled-away
-                  // viewport is handled in `_insertMessages` by shifting the
-                  // offset, which is exact only because every row is a fixed
-                  // `_messageRowExtent` tall (see that getter's doc comment).
-                  itemExtent: _messageRowExtent,
-                  itemCount: filteredItems.length,
-                  itemBuilder: (context, index) {
-                    final message = filteredItems[index];
-                    final subColor = _colorForMessage(message, context);
-                    return GestureDetector(
-                      key: ObjectKey(message),
-                      behavior: HitTestBehavior.translucent,
-                      onSecondaryTapDown: (details) => _showRowContextMenu(
-                          context, index, details.globalPosition),
-                      child: Material(
-                        // A full-height bar (rather than a small leading dot)
-                        // reads more clearly at a glance and doesn't compete
-                        // with ListTile's own leading/minLeadingWidth slot.
-                        // CrossAxisAlignment.stretch makes the bar span the
-                        // row's full itemExtent height.
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            if (showSubscriptionColors)
-                              Container(
-                                key: const ValueKey('subscriptionColorBar'),
-                                width: 4,
-                                color: subColor ?? Colors.transparent,
-                              ),
-                            Expanded(
-                              child: ListTile(
-                                // ListTile centers its title within its own
-                                // *computed natural* height, not whatever
-                                // height it's actually given -- when the 56px
-                                // floor in _messageRowExtent kicks in (small
-                                // font sizes), that natural height is smaller
-                                // than the row's real itemExtent, and without
-                                // this the leftover space silently lands
-                                // entirely below the text instead of being
-                                // split evenly. Telling it the *real* target
-                                // height makes its own centering math correct.
-                                minTileHeight: _messageRowExtent,
-                                title: RegexTextHighlight(
-                                  text: decodeMessageTextFor(message),
-                                  searchTerm: currentFind,
-                                  fontSize: messageFontSize,
-                                  highlightStyle: TextStyle(
-                                    background: Paint()
-                                      ..color = Theme.of(context)
-                                          .colorScheme
-                                          .inversePrimary,
-                                    fontSize: messageFontSize,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                // Band by distance from the oldest message
-                                // (always at the bottom), not the raw index:
-                                // prepending new messages shifts every
-                                // existing row's index, so banding on the
-                                // index would flip every stripe as messages
-                                // arrive. Distance-from-oldest is fixed per
-                                // message, so stripes stay put.
-                                tileColor: effectiveSelection.contains(message)
-                                    ? Theme.of(context)
-                                        .colorScheme
-                                        .inversePrimary
-                                    : (filteredItems.length - 1 - index) % 2 ==
-                                            0
-                                        ? evenRowColor
-                                        : oddRowColor,
-                                onTap: () => _handleMessageTap(index),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: <Widget>[
-                                    if (showTimestamps &&
-                                        _messageCapturedAt[message] != null)
-                                      Padding(
-                                        padding:
-                                            const EdgeInsets.only(right: 6),
-                                        child: Text(
-                                          formatTimeOfDay(
-                                              _messageCapturedAt[message]!),
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onSurface
-                                                .withValues(alpha: 0.55),
-                                            fontFeatures: const [
-                                              FontFeature.tabularFigures(),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ConstrainedBox(
-                                      constraints:
-                                          const BoxConstraints(maxWidth: 450),
-                                      child: Tooltip(
-                                        message: message.subject!,
-                                        child: Padding(
-                                          padding: const EdgeInsets.fromLTRB(
-                                              0, 0, 5, 0),
-                                          child: Chip(
-                                              label: Text(message.subject!,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: TextStyle(
-                                                    fontSize: messageFontSize,
-                                                    color: Theme.of(context)
-                                                        .colorScheme
-                                                        .onSurface,
-                                                  ))),
-                                        ),
-                                      ),
-                                    ),
-                                    _buildSafePopupMenuButton(index),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
+                  thumbVisibility:
+                      true, // Always show the scrollbar when scrollable
+                  child: _liveLayout.buildList(
+                    controller: _listScrollController,
+                    items: filteredItems,
+                    // Newest-at-top, top-anchored (a plain, non-reversed
+                    // list): messages fill from the top down, the latest
+                    // arrives at the top, and a short list sits at the top
+                    // with empty space below rather than clinging to the
+                    // bottom. Stable scrolling when new messages are
+                    // prepended above a scrolled-away viewport is handled in
+                    // `_insertMessages` by shifting the offset, which is
+                    // exact only because every row's height is known up
+                    // front: a fixed `_messageRowExtent` for single-line
+                    // rows, or a pure function of the message and the list
+                    // width for multi-line rows (`MessageListLayout`).
+                    itemBuilder: (context, index) => _buildLiveMessageRow(
+                        context,
+                        index,
+                        effectiveSelection,
+                        evenRowColor,
+                        oddRowColor),
+                  ),
+                );
+              }),
               if (_showJumpToTop)
                 Positioned(
                   right: 16,
@@ -3687,6 +3824,17 @@ class _MyHomePageState extends State<MyHomePage>
                     tooltip: 'Jump to top',
                     onPressed: _jumpToTop,
                     child: const Icon(Icons.vertical_align_top),
+                  ),
+                ),
+              // While paused, the paused banner already shows the count.
+              if (_showJumpToTop && !messagesPaused)
+                Positioned(
+                  top: 8,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: HeldMessagesPill(
+                        count: _pendingCount, onPressed: _jumpToTop),
                   ),
                 ),
             ],

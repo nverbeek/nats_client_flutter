@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import 'package:nats_client_flutter/main.dart'; // For ThemeModel
 import 'format_utils.dart';
 import 'highlight_theme.dart';
+import 'message_font.dart';
+import 'protobuf_raw.dart';
 
 class MessageDetailDialog extends StatefulWidget {
   final String headerVersion;
@@ -18,8 +20,9 @@ class MessageDetailDialog extends StatefulWidget {
   final DateTime? capturedAt;
   // Raw payload bytes, if available -- `null` for the handful of existing
   // call sites/tests that only ever had [formattedJson]. When present, the
-  // Payload section gains a Text/Hex toggle, defaulting to Hex whenever the
-  // payload isn't valid UTF-8 (e.g. protobuf, compressed data).
+  // Payload section gains a Text/Hex toggle, plus Protobuf when the bytes
+  // decode as a protobuf message. A payload that isn't valid UTF-8 opens in
+  // Protobuf if it decodes, otherwise Hex.
   final Uint8List? payloadBytes;
 
   const MessageDetailDialog({
@@ -37,18 +40,26 @@ class MessageDetailDialog extends StatefulWidget {
 
 enum _CopiedSection { headers, payload }
 
+enum _PayloadView { text, hex, protobuf }
+
 class _MessageDetailDialogState extends State<MessageDetailDialog>
     with SingleTickerProviderStateMixin {
   _CopiedSection? _copiedSection;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
-  late bool _showHex;
+  late _PayloadView _view;
 
   // Computed lazily (only if the Hex view is actually opened) and only once
   // per dialog, since `payloadBytes` never changes for the lifetime of this
   // dialog instance.
   late final String _hexDump =
       widget.payloadBytes != null ? formatHexDump(widget.payloadBytes!) : '';
+
+  // The schema-less protobuf decode, or null if the payload isn't protobuf
+  // (then the Protobuf view isn't offered). Computed once, on open.
+  late final String? _protobuf = widget.payloadBytes != null
+      ? decodeProtobufRaw(widget.payloadBytes!)
+      : null;
 
   @override
   void initState() {
@@ -64,11 +75,15 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
       parent: _animationController,
       curve: Curves.easeInOut,
     ));
-    // Auto-detect: default to the Hex view whenever the payload isn't valid
-    // UTF-8 (protobuf, compressed data, etc). Always a manual toggle either
-    // way once the dialog is open.
-    _showHex =
-        widget.payloadBytes != null && !isValidUtf8(widget.payloadBytes!);
+    // Auto-detect: a payload that isn't valid UTF-8 opens as Protobuf when
+    // it decodes as one, else Hex (compressed data, etc). Always a manual
+    // toggle either way once the dialog is open.
+    final bytes = widget.payloadBytes;
+    _view = bytes == null || isValidUtf8(bytes)
+        ? _PayloadView.text
+        : _protobuf != null
+            ? _PayloadView.protobuf
+            : _PayloadView.hex;
   }
 
   @override
@@ -296,24 +311,31 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     if (widget.payloadBytes != null)
-                      SegmentedButton<bool>(
-                        segments: const [
-                          ButtonSegment(
-                            value: false,
+                      SegmentedButton<_PayloadView>(
+                        segments: [
+                          const ButtonSegment(
+                            value: _PayloadView.text,
                             label: Text('Text'),
                           ),
-                          ButtonSegment(
-                            value: true,
+                          const ButtonSegment(
+                            value: _PayloadView.hex,
                             label: Text('Hex'),
                           ),
+                          if (_protobuf != null)
+                            const ButtonSegment(
+                              value: _PayloadView.protobuf,
+                              label: Text('Protobuf'),
+                              tooltip: 'Decoded without its schema: field '
+                                  'numbers and values, no names',
+                            ),
                         ],
-                        selected: {_showHex},
+                        selected: {_view},
                         showSelectedIcon: false,
                         style: const ButtonStyle(
                           visualDensity: VisualDensity.compact,
                         ),
                         onSelectionChanged: (selection) =>
-                            setState(() => _showHex = selection.first),
+                            setState(() => _view = selection.first),
                       ),
                   ],
                 ),
@@ -324,9 +346,11 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
                   children: [
                     SizedBox(
                       width: double.infinity,
-                      child: _showHex
+                      child: _view != _PayloadView.text
                           ? Container(
-                              key: const Key('hexPayloadBackground'),
+                              key: Key(_view == _PayloadView.hex
+                                  ? 'hexPayloadBackground'
+                                  : 'protobufPayloadBackground'),
                               width: double.infinity,
                               color: Theme.of(context).colorScheme.surface,
                               child: SingleChildScrollView(
@@ -334,15 +358,16 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
                                 child: Padding(
                                   padding: const EdgeInsets.all(10),
                                   child: SelectableText(
-                                    _hexDump,
+                                    _view == _PayloadView.hex
+                                        ? _hexDump
+                                        : _protobuf!,
                                     style: TextStyle(
                                         fontSize: 14,
                                         color: Theme.of(context)
                                             .textTheme
                                             .bodyMedium
                                             ?.color,
-                                        fontFamily:
-                                            'SFMono-Regular,Consolas,Liberation Mono,Menlo,monospace'),
+                                        fontFamily: messageMonoFontFamily),
                                   ),
                                 ),
                               ),
@@ -359,8 +384,7 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
                               padding: const EdgeInsets.all(10),
                               textStyle: const TextStyle(
                                   fontSize: 14,
-                                  fontFamily:
-                                      'SFMono-Regular,Consolas,Liberation Mono,Menlo,monospace'),
+                                  fontFamily: messageMonoFontFamily),
                             ),
                     ),
                     Positioned(
@@ -374,9 +398,11 @@ class _MessageDetailDialogState extends State<MessageDetailDialog>
                           _copyButton(
                             onTap: () {
                               Clipboard.setData(ClipboardData(
-                                  text: _showHex
-                                      ? _hexDump
-                                      : widget.formattedJson));
+                                  text: switch (_view) {
+                                _PayloadView.text => widget.formattedJson,
+                                _PayloadView.hex => _hexDump,
+                                _PayloadView.protobuf => _protobuf!,
+                              }));
                               _showCopiedFeedback(_CopiedSection.payload);
                             },
                           ),

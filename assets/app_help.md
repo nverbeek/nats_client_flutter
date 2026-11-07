@@ -9,7 +9,7 @@ The application has two themes, **light** and **dark**. The theme may be changed
 # Settings
 The application provides a settings dialog (⚙️ button in the toolbar) with the following options:
 
-- **Message Font Size**: Adjusts the font size of messages in the message list.
+- **Message Font Size**: Adjusts the font size of messages in the message list. Defaults to 13. Message text uses a monospace font (Roboto Mono).
 - **Show Subscription Colors**: Shows or hides the per-subscription color indicator on subject chips and Live Messages rows. On by default; turning it off doesn't lose the assigned colors, it just stops displaying them — turn it back on and each subscription shows its original color again.
 - **Reconnect Interval**: Controls the amount of time between reconnection attempts.
 - **Heartbeat Interval**: How often the app checks that the connection is still alive. A dead connection is detected after about two missed checks, so a shorter interval notices a dropped connection sooner. Applies on the next connect.
@@ -23,6 +23,9 @@ The application provides a settings dialog (⚙️ button in the toolbar) with t
 - **Check for Updates**: Controls whether the app checks GitHub for a newer release on startup (see Update Notifications below). On by default.
 - **Max Messages Kept**: Caps how many messages the Live Messages list holds at once (1k/5k/10k/25k/50k/100k, or **Unlimited**). Once the cap is reached, the oldest messages are dropped to make room for new ones. Defaults to 10k.
 - **Show Message Timestamps**: Shows a small arrival-time stamp on each Live Messages row. Off by default.
+- **Show Message Subjects**: Shows the subject chip on each Live Messages and Browse Messages row. On by default. Turn it off to give the message text more room; the subject is still in **Detail** and the row menu's **Copy Subject**.
+- **Max Lines per Message**: How many lines a long Live Messages or Browse Messages row may wrap to (1 to 20). Defaults to 1, which keeps every message on a single line. Short messages always take a single line; a message longer than the limit ends in `…`, and **Detail** shows all of it. Scrolling, **Jump to top** and holding new messages while you're scrolled down work the same at any setting.
+- **Pinned Fields**: JSON fields shown at the start of every Live Messages and Browse Messages row (see Pinned Fields, below). Type a path and press Enter to add it; click a chip's × to remove it.
 
 # Connection
 ## Schemes
@@ -82,20 +85,33 @@ If a connection is lost or unavailable at request time, the client will indefini
 # Message List
 Incoming messages are displayed as they arrive in the message list. The list is in newest to oldest order (newest on top). Once you scroll down, a **Jump to top** button appears in the list's lower-right corner.
 
+While you're scrolled down, new messages wait instead of appearing above you, so what you're reading never moves, gets pushed out, or interrupts your scrolling. A **↑ N new** button at the top of the list counts them; click it (or **Jump to top**, or scroll back to the top) to bring them in. Waiting messages count toward **Max Messages Kept** the same way paused ones do.
+
 Each message has the following information/options:
 
-- The data of the message is displayed on a single line, clipped with an ellipsis if it doesn't fit.
+- The data of the message is displayed on a single line, clipped with an ellipsis if it doesn't fit. Raise **Max Lines per Message** in Settings to let long messages wrap.
 - On the right, in a "chip" widget is the subject of the message
 - On the right, a 3 dot menu button is available, with the following options. Right-clicking anywhere on a row opens the same menu at the click point.
 
     - **Copy**: Copies the message data to the clipboard
     - **Copy Subject**: Copies just the message's subject to the clipboard.
-    - **Detail**: Opens a dialog with the message's subject, headers (as a table) and payload. JSON payloads are formatted and highlighted. A **Text/Hex** toggle shows the raw bytes, and switches to Hex on its own when the payload isn't valid text. Each section has a copy button.
+    - **Detail**: Opens a dialog with the message's subject, headers (as a table) and payload. JSON payloads are formatted and highlighted. A **Text/Hex** toggle shows the raw bytes. When the payload is a Protocol Buffers (protobuf) message, a third **Protobuf** option decodes it without its schema, the way `protoc --decode_raw` does: field numbers and values, but no field names. Payloads that aren't valid text open in Protobuf when they decode as one, otherwise in Hex. Each section has a copy button.
     - **Replay**: Re-sends the message exactly as defined, with the same subject and data. (Not to be confused with the Tools section's file-based **Replay**, below, which re-publishes every message from a previously exported file.)
     - **Edit & Send** - Opens a dialog pre-filled with the message's subject and data, allowing you to edit prior to sending again.
     - **Reply To** - If the selected message has a replyTo subject defined, this option opens a send message box where the subject is pre-filled with the replyTo subject.
     - **Subscribe to This Subject**: Adds a subscription for exactly this message's subject. Hidden once one exists. Any wider subscription (e.g. `orders.>`) stays, so matching messages can arrive twice.
+    - **Pin Fields…**: Lists every field in this message (JSON only) with a sample value. Check the ones to pin (see below).
     - When more than one row is selected (see Multi-Select, below), this menu also offers **Copy Selected (N)** and **Export Selected (N)**.
+
+## Pinned Fields
+Pin a JSON field to see its value at the start of every Live Messages row (and Browse Messages row in the JetStream tab), even when it's near the end of a long message. Each pinned value sits in its own column, with the field name in small text above the value, so you can scan one field down the list as messages arrive.
+
+- **Pin a field**: Choose **Pin Fields…** from a row's menu (⋮ or right-click), then check fields in the list. Or add a path under **Pinned Fields** in Settings.
+- **Click a pinned value** to copy it, open **Pin Fields…**, or unpin that field.
+- **Paths**: `label`, `meta.status` (nested), `items[0].sku` (one array element), `items[*].sku` or `items.sku` (every element; the row shows the first three and a `+N` count), `["key.with.dots"]` (a key containing dots). A path that ends on an object or array shows it as compact JSON.
+- **Short names**: `fc=fulfillment_center_identifier` shows `fc` above the value instead of the field's own name.
+- A message missing one of the pinned fields shows `—` in that column. Messages with none of them (other message types, non-JSON) show no pinned values and use the full row for their text. Payloads over 256 KB aren't read for pinned fields.
+- Each column widens to fit the longest value it has seen, up to a fifth of the list's width (280 pixels at most), and shrinks back when you clear the list or change the pinned fields. Hover a value for its full text, or click it to copy it.
 
 # JetStream
 When **Enable JetStream** is on (the default) and you're connected to a server or account with JetStream enabled, a **JetStream** tab appears alongside **Live Messages**. It's a monitoring and management dashboard for streams and consumers.
@@ -105,7 +121,7 @@ The left-hand pane lists all streams on the account. The **Account info** icon a
 
 - **Add Stream**: Opens a dialog to create a new stream: name, comma-separated subjects, storage (file or memory), retention and discard policies, optional limits (max age, messages, bytes, message size, messages per subject), replica count, and the allow-rollup/deny-delete/deny-purge flags.
 - **Edit**: Opens the same dialog filled in with the stream's current settings. The name can't change, and the server rejects changes it doesn't allow in place (such as the storage type), with its reason shown.
-- **Browse Messages**: Opens a live tail of the selected stream's contents. This uses a temporary, auto-cleaning consumer under the hood — no manual consumer setup required just to look at what's in a stream. Disabled when the stream has no messages yet. Includes its own Filter/Find fields, a Pause/Resume toggle, and a Clear button, working the same way as their Live Messages tab counterparts described below. Each row's own menu offers **Copy**, **Copy Subject**, and **Detail**, same as the Live Messages tab — including opening via right-click at the click point.
+- **Browse Messages**: Opens a live tail of the selected stream's contents. This uses a temporary, auto-cleaning consumer under the hood — no manual consumer setup required just to look at what's in a stream. Disabled when the stream has no messages yet. Includes its own Filter/Find fields, a Pause/Resume toggle, and a Clear button, working the same way as their Live Messages tab counterparts described below. Each row's own menu offers **Copy**, **Copy Subject**, **Detail** and **Pin Fields…**, same as the Live Messages tab — including opening via right-click at the click point. **Max Lines per Message**, **Show Message Subjects** and **Pinned Fields** apply here too.
 - **Purge**: Deletes messages but keeps the stream and its consumers. Choose **All**, **Keep Newest** N messages, or **Up to Seq**uence, optionally limited to one subject. Asks for confirmation first.
 - **Delete Stream**: Permanently deletes the stream, its messages, and its consumers. Asks for confirmation first.
 
@@ -237,7 +253,7 @@ When the Send Message dialog is open:
 At the bottom of the window are several tools:
 
 - **Clear**: Removes all current messages from the view. This is a permanent operation.
-- **Pause**: Freezes the on-screen list — no new rows appear — while the connection stays open and messages keep arriving in the background. The button shows a small count of how many arrived while paused (e.g. `12`, `1.1k`); pressing it again (now labeled **Resume**) reveals everything that came in.
+- **Pause**: Freezes the on-screen list — no new rows appear — while the connection stays open and messages keep arriving in the background. The button shows a small count of how many arrived while paused (e.g. `12`, `1.1k`); pressing it again (now labeled **Resume**) reveals everything that came in. If you resume while scrolled down, they keep waiting until you're back at the top.
 - **Send Message**: Opens a dialog with subject and data fields, plus optional **Headers** (add as many name/value pairs as you need), allowing the user to send a custom message.
 - **Filter**: This field filters the message list upon each character typed in the box. The filter operation is a **case-insensitive contains** on the message data only.
 - **Find**: This field will highlight results found in the message data. Searches all items and highlights matches within the list.

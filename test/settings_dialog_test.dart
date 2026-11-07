@@ -55,15 +55,22 @@ void main() {
     expect(find.text('5 seconds'), findsOneWidget);
     expect(find.text('10k'), findsOneWidget);
 
-    final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
-    final showSubscriptionColorsSwitch = switches[0];
-    final jetStreamSwitch = switches[1];
-    final kvSwitch = switches[2];
-    final objectStoreSwitch = switches[3];
-    final serviceDiscoverySwitch = switches[4];
-    final serverMonitorSwitch = switches[5];
-    final updateCheckSwitch = switches[6];
-    final showTimestampsSwitch = switches[7];
+    final showSubscriptionColorsSwitch = tester.widget<Switch>(
+        find.byKey(const ValueKey('showSubscriptionColorsSwitch')));
+    final jetStreamSwitch =
+        tester.widget<Switch>(find.byKey(const ValueKey('jetStreamSwitch')));
+    final kvSwitch =
+        tester.widget<Switch>(find.byKey(const ValueKey('kvSwitch')));
+    final objectStoreSwitch =
+        tester.widget<Switch>(find.byKey(const ValueKey('objectStoreSwitch')));
+    final serviceDiscoverySwitch = tester
+        .widget<Switch>(find.byKey(const ValueKey('serviceDiscoverySwitch')));
+    final serverMonitorSwitch = tester
+        .widget<Switch>(find.byKey(const ValueKey('serverMonitorSwitch')));
+    final updateCheckSwitch =
+        tester.widget<Switch>(find.byKey(const ValueKey('updateCheckSwitch')));
+    final showTimestampsSwitch = tester
+        .widget<Switch>(find.byKey(const ValueKey('showTimestampsSwitch')));
     expect(showSubscriptionColorsSwitch.value, isTrue);
     expect(jetStreamSwitch.value, isTrue);
     expect(kvSwitch.value, isTrue);
@@ -80,7 +87,8 @@ void main() {
       (tester) async {
     await tester.pumpWidget(buildDialog(noopSave));
 
-    final serverMonitorSwitchFinder = find.byType(Switch).at(5);
+    final serverMonitorSwitchFinder =
+        find.byKey(const ValueKey('serverMonitorSwitch'));
     await tester.ensureVisible(serverMonitorSwitchFinder);
     await tester.tap(serverMonitorSwitchFinder);
     await tester.pump();
@@ -123,7 +131,8 @@ void main() {
     await tester.ensureVisible(portField);
     await tester.enterText(portField, 'abc');
     await tester.pump();
-    final serverMonitorSwitchFinder = find.byType(Switch).at(5);
+    final serverMonitorSwitchFinder =
+        find.byKey(const ValueKey('serverMonitorSwitch'));
     await tester.ensureVisible(serverMonitorSwitchFinder);
     await tester.tap(serverMonitorSwitchFinder);
     await tester.pump();
@@ -167,7 +176,10 @@ void main() {
       (tester) async {
     await tester.pumpWidget(buildDialog(noopSave));
 
-    final showSubscriptionColorsSwitchFinder = find.byType(Switch).at(0);
+    final showSubscriptionColorsSwitchFinder =
+        find.byKey(const ValueKey('showSubscriptionColorsSwitch'));
+    await tester.ensureVisible(showSubscriptionColorsSwitchFinder);
+    await tester.pumpAndSettle();
     await tester.tap(showSubscriptionColorsSwitchFinder);
     await tester.pump();
 
@@ -179,7 +191,9 @@ void main() {
   testWidgets('toggling Enable JetStream flips its switch', (tester) async {
     await tester.pumpWidget(buildDialog(noopSave));
 
-    final jetStreamSwitchFinder = find.byType(Switch).at(1);
+    final jetStreamSwitchFinder = find.byKey(const ValueKey('jetStreamSwitch'));
+    await tester.ensureVisible(jetStreamSwitchFinder);
+    await tester.pumpAndSettle();
     await tester.tap(jetStreamSwitchFinder);
     await tester.pump();
 
@@ -191,7 +205,9 @@ void main() {
       (tester) async {
     await tester.pumpWidget(buildDialog(noopSave));
 
-    final kvSwitchFinder = find.byType(Switch).at(2);
+    final kvSwitchFinder = find.byKey(const ValueKey('kvSwitch'));
+    await tester.ensureVisible(kvSwitchFinder);
+    await tester.pumpAndSettle();
     await tester.tap(kvSwitchFinder);
     await tester.pump();
 
@@ -202,7 +218,8 @@ void main() {
   testWidgets('toggling Enable Object Store flips its switch', (tester) async {
     await tester.pumpWidget(buildDialog(noopSave));
 
-    final objectStoreSwitchFinder = find.byType(Switch).at(3);
+    final objectStoreSwitchFinder =
+        find.byKey(const ValueKey('objectStoreSwitch'));
     await tester.ensureVisible(objectStoreSwitchFinder);
     await tester.tap(objectStoreSwitchFinder);
     await tester.pump();
@@ -218,7 +235,8 @@ void main() {
     // The dialog's content is scrollable once this many toggles are present
     // — scroll the switch into view before tapping it, same reasoning as
     // the Check for Updates test below.
-    final serviceDiscoverySwitchFinder = find.byType(Switch).at(4);
+    final serviceDiscoverySwitchFinder =
+        find.byKey(const ValueKey('serviceDiscoverySwitch'));
     await tester.ensureVisible(serviceDiscoverySwitchFinder);
     await tester.tap(serviceDiscoverySwitchFinder);
     await tester.pump();
@@ -231,7 +249,8 @@ void main() {
   testWidgets('toggling Check for Updates flips its switch', (tester) async {
     await tester.pumpWidget(buildDialog(noopSave));
 
-    final updateCheckSwitchFinder = find.byType(Switch).at(6);
+    final updateCheckSwitchFinder =
+        find.byKey(const ValueKey('updateCheckSwitch'));
     await tester.ensureVisible(updateCheckSwitchFinder);
     await tester.tap(updateCheckSwitchFinder);
     await tester.pump();
@@ -244,7 +263,8 @@ void main() {
       (tester) async {
     await tester.pumpWidget(buildDialog(noopSave));
 
-    final showTimestampsSwitchFinder = find.byType(Switch).at(7);
+    final showTimestampsSwitchFinder =
+        find.byKey(const ValueKey('showTimestampsSwitch'));
     await tester.ensureVisible(showTimestampsSwitchFinder);
     await tester.tap(showTimestampsSwitchFinder);
     await tester.pump();
@@ -258,6 +278,8 @@ void main() {
       (tester) async {
     await tester.pumpWidget(buildDialog(noopSave));
 
+    await tester.ensureVisible(find.text('5 seconds'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('5 seconds'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('10 seconds').last);
@@ -385,11 +407,12 @@ void main() {
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
 
-    // Index 1 is the JetStream switch now that Show Subscription Colors
-    // occupies index 0 — see the widget-order comment in settings_dialog.dart.
-    await tester.tap(find.byType(Switch).at(1));
+    await tester.ensureVisible(find.byKey(const ValueKey('jetStreamSwitch')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('jetStreamSwitch')));
     await tester.pump();
-    final showTimestampsSwitchFinder = find.byType(Switch).at(7);
+    final showTimestampsSwitchFinder =
+        find.byKey(const ValueKey('showTimestampsSwitch'));
     await tester.ensureVisible(showTimestampsSwitchFinder);
     await tester.tap(showTimestampsSwitchFinder);
     await tester.pump();
@@ -408,5 +431,135 @@ void main() {
     expect(saved!.maxMessages, 10000);
     expect(saved!.showTimestamps, isTrue);
     expect(find.byType(SettingsDialog), findsNothing);
+  });
+
+  group('message row settings', () {
+    Future<SettingsValues?> openAndSave(
+        WidgetTester tester, Future<void> Function() edit,
+        {List<String> pinned = const [], int maxLines = 1}) async {
+      SettingsValues? saved;
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: ElevatedButton(
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (context) => SettingsDialog(
+                    initial: SettingsValues(
+                      fontSize: 14,
+                      retryInterval: 5,
+                      heartbeatInterval: 120,
+                      jetStreamEnabled: true,
+                      kvEnabled: true,
+                      objectStoreEnabled: true,
+                      serviceDiscoveryEnabled: true,
+                      serverMonitorEnabled: false,
+                      serverMonitorPort: 8222,
+                      serverMonitorInterval: 2,
+                      updateCheckEnabled: true,
+                      showSubscriptionColors: true,
+                      maxMessages: 10000,
+                      showTimestamps: false,
+                      messageMaxLines: maxLines,
+                      pinnedFields: pinned,
+                    ),
+                    onSave: (values) => saved = values,
+                  ),
+                ),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      await edit();
+      final save = find.widgetWithText(TextButton, 'Save');
+      await tester.ensureVisible(save);
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+      return saved;
+    }
+
+    testWidgets('defaults round-trip unchanged', (tester) async {
+      final saved = await openAndSave(tester, () async {});
+      expect(saved!.showSubjectChip, isTrue);
+      expect(saved.messageMaxLines, 1);
+      expect(saved.pinnedFields, isEmpty);
+    });
+
+    testWidgets('hiding subjects and raising max lines are saved',
+        (tester) async {
+      final saved = await openAndSave(tester, () async {
+        final subjects = find.byKey(const ValueKey('showSubjectChipSwitch'));
+        await tester.ensureVisible(subjects);
+        await tester.tap(subjects);
+        await tester.pump();
+        final maxLines = find.byKey(const ValueKey('messageMaxLinesField'));
+        await tester.ensureVisible(maxLines);
+        await tester.tap(maxLines);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('4 lines').last);
+        await tester.pumpAndSettle();
+      });
+      expect(saved!.showSubjectChip, isFalse);
+      expect(saved.messageMaxLines, 4);
+    });
+
+    testWidgets('a persisted max-lines value outside the options still shows',
+        (tester) async {
+      final saved = await openAndSave(tester, () async {
+        expect(find.text('7 lines'), findsOneWidget);
+      }, maxLines: 7);
+      expect(saved!.messageMaxLines, 7);
+    });
+
+    testWidgets('pinned fields are added with Enter and removed with ×',
+        (tester) async {
+      final saved = await openAndSave(tester, () async {
+        final input = find.byKey(const ValueKey('pinnedFieldsInput'));
+        await tester.ensureVisible(input);
+        await tester.enterText(input, 'items[*].sku');
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pump();
+        expect(find.byKey(const ValueKey('pinnedFieldChip_items[*].sku')),
+            findsOneWidget);
+        final remove = find.byTooltip('Remove label');
+        await tester.ensureVisible(remove);
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(remove);
+        await tester.pumpAndSettle();
+        await tester.tap(remove);
+        await tester.pump();
+      }, pinned: ['label']);
+      expect(saved!.pinnedFields, ['items[*].sku']);
+    });
+
+    testWidgets('a typed path not yet added is included on Save',
+        (tester) async {
+      final saved = await openAndSave(tester, () async {
+        final input = find.byKey(const ValueKey('pinnedFieldsInput'));
+        await tester.ensureVisible(input);
+        await tester.enterText(input, 'fc=fulfillment_center_id');
+        await tester.pump();
+      });
+      expect(saved!.pinnedFields, ['fc=fulfillment_center_id']);
+    });
+
+    testWidgets('an invalid path shows an error and blocks Save',
+        (tester) async {
+      SettingsValues? saved;
+      saved = await openAndSave(tester, () async {
+        final input = find.byKey(const ValueKey('pinnedFieldsInput'));
+        await tester.ensureVisible(input);
+        await tester.enterText(input, 'a..b,');
+        await tester.pump();
+        expect(find.textContaining("Can't read"), findsOneWidget);
+      });
+      expect(saved, isNull);
+      expect(find.byType(SettingsDialog), findsOneWidget);
+    });
   });
 }

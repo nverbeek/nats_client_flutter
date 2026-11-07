@@ -1,6 +1,6 @@
-//import 'package:flutter/cupertino.dart';
-
 import 'package:flutter/material.dart';
+
+import 'message_wrap.dart';
 
 RegExp? _cachedRegex;
 String? _cachedTerm;
@@ -26,6 +26,12 @@ RegExp? _compileSearchTerm(String searchTerm) {
 
 /// Widget that applies [highlightStyle] to the provided [text] when any portion
 /// of the text matches the [searchTerm]. Text is limited to [maxLines].
+///
+/// With [wrap] set, the text is drawn as exactly those pre-computed lines
+/// (see `message_wrap.dart`) with soft wrap off, and a `…` replaces the last
+/// character when [WrapResult.truncated]. Matches are found on the original
+/// text and split at line boundaries, so a highlight that spans a break
+/// still shows on both lines.
 class RegexTextHighlight extends StatelessWidget {
   final String text;
   final String searchTerm;
@@ -33,6 +39,11 @@ class RegexTextHighlight extends StatelessWidget {
   final double fontSize;
   final int? maxLines;
   final TextOverflow? overflow;
+
+  /// Merged over the ambient text style (e.g. the monospace payload style).
+  final TextStyle? style;
+  final StrutStyle? strutStyle;
+  final WrapResult? wrap;
 
   const RegexTextHighlight({
     super.key,
@@ -42,16 +53,22 @@ class RegexTextHighlight extends StatelessWidget {
     required this.fontSize,
     this.maxLines,
     this.overflow,
+    this.style,
+    this.strutStyle,
+    this.wrap,
   });
 
   @override
   Widget build(BuildContext context) {
-    var textStyle = DefaultTextStyle.of(context).style;
+    var textStyle = DefaultTextStyle.of(context).style.merge(style);
     textStyle = textStyle.copyWith(fontSize: fontSize);
+    final wrap = this.wrap;
+    if (wrap != null) return _buildWrapped(textStyle, wrap);
     if (text.isEmpty) {
       return Text(
         "",
         style: textStyle,
+        strutStyle: strutStyle,
         maxLines: maxLines,
         overflow: overflow ?? TextOverflow.clip,
       );
@@ -59,6 +76,7 @@ class RegexTextHighlight extends StatelessWidget {
     if (searchTerm.isEmpty) {
       return Text(text,
           maxLines: maxLines,
+          strutStyle: strutStyle,
           overflow: overflow ?? TextOverflow.clip,
           style: textStyle);
     }
@@ -66,6 +84,7 @@ class RegexTextHighlight extends StatelessWidget {
     if (highlightRegex == null) {
       return Text(text,
           maxLines: maxLines,
+          strutStyle: strutStyle,
           overflow: overflow ?? TextOverflow.clip,
           style: textStyle);
     }
@@ -91,11 +110,59 @@ class RegexTextHighlight extends StatelessWidget {
     }
     return RichText(
       maxLines: maxLines,
+      strutStyle: strutStyle,
       overflow: overflow ?? TextOverflow.clip,
       text: TextSpan(
         style: textStyle,
         children: spans,
       ),
+    );
+  }
+
+  Widget _buildWrapped(TextStyle textStyle, WrapResult wrap) {
+    final segments = wrap.segments;
+    final shownEnd = segments.isEmpty ? 0 : segments.last.$2;
+    final display = displayTextForWrap(text.substring(0, shownEnd));
+
+    // Matches on the shown prefix only: a payload can be megabytes, the row
+    // shows at most a few hundred characters of it.
+    final matches = <(int, int)>[];
+    if (searchTerm.isNotEmpty) {
+      final regex = _compileSearchTerm(searchTerm);
+      if (regex != null) {
+        for (final m in regex.allMatches(text.substring(0, shownEnd))) {
+          if (m.start != m.end) matches.add((m.start, m.end));
+        }
+      }
+    }
+
+    final spans = <TextSpan>[];
+    for (var s = 0; s < segments.length; s++) {
+      var (start, end) = segments[s];
+      final isLast = s == segments.length - 1;
+      final ellipsize = isLast && wrap.truncated;
+      // Make room for the ellipsis inside the line's character budget.
+      if (ellipsize && end > start) end--;
+      var cursor = start;
+      for (final (ms, me) in matches) {
+        if (me <= cursor || ms >= end) continue;
+        final hs = ms < cursor ? cursor : ms;
+        final he = me > end ? end : me;
+        if (hs > cursor) spans.add(_normalSpan(display.substring(cursor, hs)));
+        spans.add(_highlightSpan(display.substring(hs, he)));
+        cursor = he;
+      }
+      if (cursor < end) spans.add(_normalSpan(display.substring(cursor, end)));
+      if (ellipsize) spans.add(_normalSpan('…'));
+      if (!isLast) spans.add(_normalSpan('\n'));
+    }
+
+    return RichText(
+      softWrap: false,
+      maxLines: segments.isEmpty ? 1 : segments.length,
+      strutStyle: strutStyle,
+      overflow: TextOverflow.clip,
+      text: TextSpan(style: textStyle, children: spans),
     );
   }
 

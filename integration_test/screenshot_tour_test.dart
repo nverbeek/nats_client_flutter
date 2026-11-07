@@ -39,7 +39,13 @@ void main() {
     // Server tab on (it's off by default) for screenshot 7; the earlier
     // screenshots then show it in the tab bar, as a user who turned it on
     // would see.
-    await pumpConnectedApp(tester, serverMonitorEnabled: true);
+    // Wrapping and pinned fields on, so the Messages screenshot shows them:
+    // the car payloads pin their make and model; the animal payloads have
+    // neither, so their text keeps the full row.
+    await pumpConnectedApp(tester,
+        serverMonitorEnabled: true,
+        messageMaxLines: 3,
+        pinnedFields: ['make=[0].make', 'model=[0].model']);
     addTearDown(() => disconnectApp(tester));
 
     Finder fieldWithPrefixIcon(IconData icon) => find.ancestor(
@@ -56,7 +62,10 @@ void main() {
     await signaler.requestSeedMessages();
     await pumpUntil(tester,
         () => find.textContaining('Total Messages: 20,').evaluate().isNotEmpty);
-    await tester.drag(find.byType(ListView).first, const Offset(0, -800));
+    // `w is ListView` rather than `byType`: with wrapping on, the list is an
+    // ExactExtentListView (a ListView subclass).
+    await tester.drag(find.byWidgetPredicate((w) => w is ListView).first,
+        const Offset(0, -800));
     await tester.pumpAndSettle();
     await tester.tap(find.ancestor(
         of: find.byIcon(Icons.pause), matching: find.byType(FilledButton)));

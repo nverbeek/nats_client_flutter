@@ -200,7 +200,7 @@ void main() {
     final yBefore = tester.getTopLeft(messageRowText(anchorPayload)).dy;
     final colorBefore = tileColorOf(tester, anchorPayload);
 
-    // Now a fast burst arrives above it — this is the scenario that used
+    // Now a fast burst arrives while scrolled down — the scenario that used
     // to make the list "run away" from under a fast-moving subject. An odd
     // count is deliberate: with the old sliver-index-based row-banding
     // scheme (before the `reverse: true` rework), an odd shift is exactly
@@ -209,9 +209,8 @@ void main() {
     for (var i = 0; i < 29; i++) {
       publisher.pubString(subject, 'it-burst-new-$i-$runId');
     }
-    // Give the batching flush + scroll-compensation post-frame callback
-    // time to run.
-    await tester.pump(const Duration(milliseconds: 500));
+    // Scrolled down, so the burst is held rather than inserted above.
+    await pumpUntil(tester, () => find.text('29 new').evaluate().isNotEmpty);
     await tester.pump();
 
     expect(messageRowText(anchorPayload), findsOneWidget,
@@ -224,9 +223,22 @@ void main() {
     expect(yAfter, moreOrLessEquals(yBefore, epsilon: 0.5),
         reason: 'a burst of new messages arriving while scrolled away from '
             'the top must not move the row the user was looking at');
+
+    // Let the burst in (the pill jumps to the top), then scroll back down
+    // to the anchor: an odd-sized insert must not flip its stripe color.
+    await tester.tap(find.byKey(const ValueKey('heldMessagesPill')));
+    await tester.pumpAndSettle();
+    expect(messageRowText('it-burst-new-28-$runId'), findsOneWidget);
+    for (var attempt = 0;
+        attempt < 40 && messageRowText(anchorPayload).evaluate().isEmpty;
+        attempt++) {
+      await tester.drag(find.byType(ListView), const Offset(0, -100));
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
     expect(tileColorOf(tester, anchorPayload), equals(colorBefore),
         reason: 'row banding must be tied to each message, not its current '
             'list index — an odd-sized burst shifting every index must not '
-            'flip the anchor row\'s stripe color');
+            "flip the anchor row's stripe color");
   });
 }

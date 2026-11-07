@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'message_font.dart';
+
 /// Custom syntax highlight theme for HighlightView that matches the app's theme.
 /// Call [getCustomHighlightTheme] with the current [BuildContext] and [isDark] flag.
 Map<String, TextStyle> getCustomHighlightTheme(BuildContext context,
@@ -13,7 +15,7 @@ Map<String, TextStyle> getCustomHighlightTheme(BuildContext context,
   final commentColor = isDark ? Colors.grey[400]! : Colors.grey[700]!;
   final numberColor = isDark ? Colors.orange[200]! : Colors.orange[800]!;
   final functionColor = isDark ? Colors.purple[200]! : Colors.purple[800]!;
-  const monoFont = 'monospace';
+  const monoFont = messageMonoFontFamily;
 
   return {
     'root': TextStyle(
