@@ -9,7 +9,7 @@ The application has two themes, **light** and **dark**. The theme may be changed
 # Settings
 The application provides a settings dialog (⚙️ button in the toolbar) with the following options:
 
-- **Message Font Size**: Adjusts the font size of messages in the message list.
+- **Message Font Size**: Adjusts the font size of messages in the message list. Message text uses a monospace font (Roboto Mono).
 - **Show Subscription Colors**: Shows or hides the per-subscription color indicator on subject chips and Live Messages rows. On by default; turning it off doesn't lose the assigned colors, it just stops displaying them — turn it back on and each subscription shows its original color again.
 - **Reconnect Interval**: Controls the amount of time between reconnection attempts.
 - **Heartbeat Interval**: How often the app checks that the connection is still alive. A dead connection is detected after about two missed checks, so a shorter interval notices a dropped connection sooner. Applies on the next connect.

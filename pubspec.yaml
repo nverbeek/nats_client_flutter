@@ -91,3 +91,11 @@ flutter:
 
   assets:
     - assets/app_help.md
+    - assets/fonts/RobotoMono-OFL.txt
+
+  # Message payloads render in Roboto Mono (variable weight, SIL OFL 1.1),
+  # bundled so it works offline and on web without a font fetch.
+  fonts:
+    - family: RobotoMono
+      fonts:
+        - asset: assets/fonts/RobotoMono-Variable.ttf

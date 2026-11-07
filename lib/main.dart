@@ -4,7 +4,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, listEquals;
+import 'package:flutter/foundation.dart'
+    show LicenseEntryWithLineBreaks, LicenseRegistry, kIsWeb, listEquals;
 import 'package:flutter/material.dart';
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
 import 'package:dynamic_color/dynamic_color.dart';
@@ -52,6 +53,14 @@ import 'update_checker.dart';
 void main() async {
   // must wait for widgets to initialize before we are able to use SharedPreferences
   WidgetsFlutterBinding.ensureInitialized();
+
+  // The bundled Roboto Mono (message payloads) is SIL OFL 1.1, which asks
+  // for its license to ship with the app.
+  LicenseRegistry.addLicense(() async* {
+    final license =
+        await rootBundle.loadString('assets/fonts/RobotoMono-OFL.txt');
+    yield LicenseEntryWithLineBreaks(const ['Roboto Mono'], license);
+  });
 
   // Only initialize window manager on non-web platforms
   if (!kIsWeb) {
