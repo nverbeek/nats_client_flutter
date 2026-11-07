@@ -44,6 +44,7 @@ import 'replay_config_dialog.dart';
 import 'send_message_dialog.dart';
 import 'server_monitor.dart';
 import 'server_monitor_dashboard.dart';
+import 'held_messages_pill.dart';
 import 'help_dialog.dart';
 import 'service_discovery_dashboard.dart';
 import 'service_discovery_manager.dart';
@@ -1879,7 +1880,13 @@ class _MyHomePageState extends State<MyHomePage>
     final newestFirst = _incomingBatch.reversed.toList(growable: false);
     _incomingBatch.clear();
 
-    if (messagesPaused) {
+    // Hold new messages while paused, and also while the user is scrolled
+    // away from the top: inserting above them would either move what
+    // they're reading, or (shifting to compensate) cancel their fling and,
+    // once the cap is full, walk them down to the bottom as the oldest
+    // messages get trimmed. They're let in at the top (see
+    // `_releaseHeldMessages`); the "N new" pill counts them meanwhile.
+    if (messagesPaused || _showJumpToTop) {
       // No `setState` here -- see `_pendingCount`'s doc comment. Nothing in
       // the widget tree reads `pendingMessages`/its length directly at
       // build time; both places that display it are `_pendingCount`
@@ -2036,12 +2043,26 @@ class _MyHomePageState extends State<MyHomePage>
   /// Tracks whether the list has scrolled away from the top so the "jump to
   /// top" button can be shown/hidden. No-op instant jump — nothing to
   /// animate since it's a single frame either way.
+  ///
+  /// Also where held messages are let in: arriving back at the top (by
+  /// scrolling, Jump to top or the "N new" pill) releases them.
   void _updateJumpToTopVisibility() {
     if (!_listScrollController.hasClients) return;
     final show = _listScrollController.offset > 1.0;
     if (show != _showJumpToTop) {
       setState(() => _showJumpToTop = show);
+      if (!show) _releaseHeldMessages();
     }
+  }
+
+  /// Inserts the messages held while scrolled away or paused, once neither
+  /// applies any more.
+  void _releaseHeldMessages() {
+    if (messagesPaused || _showJumpToTop || pendingMessages.isEmpty) return;
+    final buffered = List<Message<dynamic>>.of(pendingMessages);
+    pendingMessages.clear();
+    _pendingCount.value = 0;
+    _insertMessages(buffered);
   }
 
   void _jumpToTop() {
@@ -2057,14 +2078,12 @@ class _MyHomePageState extends State<MyHomePage>
     setState(() => messagesPaused = true);
   }
 
+  /// Ends a manual pause. Buffered messages go in now if the list is at the
+  /// top; if the user is scrolled down they keep waiting (counted by the
+  /// "N new" pill) until the list is back at the top.
   void _resumeMessageList() {
-    final buffered = List<Message<dynamic>>.of(pendingMessages);
-    setState(() {
-      pendingMessages.clear();
-      messagesPaused = false;
-    });
-    _pendingCount.value = 0;
-    _insertMessages(buffered);
+    setState(() => messagesPaused = false);
+    _releaseHeldMessages();
   }
 
   void _startReplay(List<ExportedMessage> messages, Duration messageInterval,
@@ -2221,6 +2240,8 @@ class _MyHomePageState extends State<MyHomePage>
         _liveLayout.pins.resetWidths(const []);
       });
       _pendingCount.value = 0;
+      // An empty list is at the top: end any hold right away.
+      _jumpToTop();
     }
   }
 
@@ -3803,6 +3824,17 @@ class _MyHomePageState extends State<MyHomePage>
                     tooltip: 'Jump to top',
                     onPressed: _jumpToTop,
                     child: const Icon(Icons.vertical_align_top),
+                  ),
+                ),
+              // While paused, the paused banner already shows the count.
+              if (_showJumpToTop && !messagesPaused)
+                Positioned(
+                  top: 8,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: HeldMessagesPill(
+                        count: _pendingCount, onPressed: _jumpToTop),
                   ),
                 ),
             ],

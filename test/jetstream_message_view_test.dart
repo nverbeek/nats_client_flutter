@@ -67,8 +67,8 @@ void main() {
   }
 
   testWidgets(
-      'prepending new messages while scrolled away keeps the viewport stable '
-      'with no filter active (scroll offset is compensated)', (tester) async {
+      'while scrolled away, new messages are held (nothing moves) and counted '
+      'by the pill; Jump to top lets them in', (tester) async {
     final manager = FakeJetStreamManager();
     await tester.pumpWidget(buildView(manager));
     await tester.pump();
@@ -89,19 +89,63 @@ void main() {
     final controller = listView.controller!;
     controller.jumpTo(112.0);
     await tester.pump();
+    expect(find.byKey(const ValueKey('heldMessagesPill')), findsNothing);
 
-    // Two new arrivals prepend above the viewport...
+    // Two new arrivals while scrolled away are held, not inserted.
     manager.incoming.add(makeMessage('orders.n1', 'new 1', manager.client));
     manager.incoming.add(makeMessage('orders.n2', 'new 2', manager.client));
     await tester.pump(const Duration(milliseconds: 50));
-    // ...and the post-frame compensation shifts the offset by exactly the
-    // two prepended rows' height, so on-screen content doesn't move.
     await tester.pump();
     await tester.pump();
 
-    expect(controller.offset, 112.0 + 2 * 56.0,
-        reason: 'The scroll offset must shift by the prepended rows\' exact '
-            'height so the messages on screen stay put');
+    expect(controller.offset, 112.0,
+        reason: 'held messages must not move the list');
+    expect(find.textContaining('30 received'), findsOneWidget);
+    expect(find.text('2 new'), findsOneWidget);
+
+    // The pill jumps to the top, which lets them in.
+    await tester.tap(find.byKey(const ValueKey('heldMessagesPill')));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+    expect(controller.offset, 0);
+    expect(find.textContaining('32 received'), findsOneWidget);
+    expect(find.byKey(const ValueKey('heldMessagesPill')), findsNothing);
+    expect(find.text('new 2'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Resume while scrolled away keeps holding until the list is back at '
+      'the top', (tester) async {
+    final manager = FakeJetStreamManager();
+    await tester.pumpWidget(buildView(manager));
+    await tester.pump();
+    for (var i = 0; i < 30; i++) {
+      manager.incoming
+          .add(makeMessage('orders.$i', 'payload $i', manager.client));
+    }
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+
+    final controller =
+        tester.widget<ListView>(find.byType(ListView)).controller!;
+    await tester.tap(find.byIcon(Icons.pause));
+    await tester.pump();
+    controller.jumpTo(112.0);
+    await tester.pump();
+    manager.incoming.add(makeMessage('orders.n1', 'new 1', manager.client));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+
+    await tester.tap(find.byIcon(Icons.play_arrow).first);
+    await tester.pump();
+    expect(find.textContaining('30 received'), findsOneWidget);
+    expect(find.text('1 new'), findsOneWidget);
+
+    // Scrolling back to the top lets it in.
+    controller.jumpTo(0);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+    expect(find.textContaining('31 received'), findsOneWidget);
   });
 
   testWidgets(
@@ -207,9 +251,8 @@ void main() {
           messageRowExtent(4, 14));
     });
 
-    testWidgets(
-        'prepending multi-line rows while scrolled away shifts by their '
-        'real heights', (tester) async {
+    testWidgets('multi-line rows that arrive while scrolled away are held too',
+        (tester) async {
       final manager = FakeJetStreamManager();
       await tester.pumpWidget(
           buildWithDisplay(manager, const MessageListDisplay(maxLines: 3)));
@@ -225,16 +268,23 @@ void main() {
           tester.widget<ListView>(find.byType(ExactExtentListView)).controller!;
       controller.jumpTo(112.0);
       await tester.pump();
+      final range = controller.position.maxScrollExtent;
 
-      // One long (3-line) and one short arrival.
       manager.incoming.add(makeMessage('orders.n1', longJson, manager.client));
       manager.incoming.add(makeMessage('orders.n2', 'short', manager.client));
       await tester.pump(const Duration(milliseconds: 50));
       await tester.pump();
-      await tester.pump();
 
-      expect(controller.offset,
-          112.0 + messageRowExtent(3, 14) + messageRowExtent(1, 14));
+      expect(controller.offset, 112.0);
+      expect(controller.position.maxScrollExtent, range);
+      expect(find.text('2 new'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('heldMessagesPill')));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump();
+      expect(controller.offset, 0);
+      expect(controller.position.maxScrollExtent,
+          range + messageRowExtent(3, 14) + messageRowExtent(1, 14));
     });
 
     testWidgets('Pin Fields… in the row menu reports the new pins',

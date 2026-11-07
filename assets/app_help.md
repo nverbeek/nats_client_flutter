@@ -24,7 +24,7 @@ The application provides a settings dialog (⚙️ button in the toolbar) with t
 - **Max Messages Kept**: Caps how many messages the Live Messages list holds at once (1k/5k/10k/25k/50k/100k, or **Unlimited**). Once the cap is reached, the oldest messages are dropped to make room for new ones. Defaults to 10k.
 - **Show Message Timestamps**: Shows a small arrival-time stamp on each Live Messages row. Off by default.
 - **Show Message Subjects**: Shows the subject chip on each Live Messages and Browse Messages row. On by default. Turn it off to give the message text more room; the subject is still in **Detail** and the row menu's **Copy Subject**.
-- **Max Lines per Message**: How many lines a long Live Messages or Browse Messages row may wrap to (1 to 20). Defaults to 1, which keeps every message on a single line. Short messages always take a single line; a message longer than the limit ends in `…`, and **Detail** shows all of it. Scrolling, **Jump to top** and the view staying put while new messages arrive work the same at any setting.
+- **Max Lines per Message**: How many lines a long Live Messages or Browse Messages row may wrap to (1 to 20). Defaults to 1, which keeps every message on a single line. Short messages always take a single line; a message longer than the limit ends in `…`, and **Detail** shows all of it. Scrolling, **Jump to top** and holding new messages while you're scrolled down work the same at any setting.
 - **Pinned Fields**: JSON fields shown at the start of every Live Messages and Browse Messages row (see Pinned Fields, below). Type a path and press Enter to add it; click a chip's × to remove it.
 
 # Connection
@@ -84,6 +84,8 @@ If a connection is lost or unavailable at request time, the client will indefini
 
 # Message List
 Incoming messages are displayed as they arrive in the message list. The list is in newest to oldest order (newest on top). Once you scroll down, a **Jump to top** button appears in the list's lower-right corner.
+
+While you're scrolled down, new messages wait instead of appearing above you, so what you're reading never moves, gets pushed out, or interrupts your scrolling. A **↑ N new** button at the top of the list counts them; click it (or **Jump to top**, or scroll back to the top) to bring them in. Waiting messages count toward **Max Messages Kept** the same way paused ones do.
 
 Each message has the following information/options:
 
@@ -251,7 +253,7 @@ When the Send Message dialog is open:
 At the bottom of the window are several tools:
 
 - **Clear**: Removes all current messages from the view. This is a permanent operation.
-- **Pause**: Freezes the on-screen list — no new rows appear — while the connection stays open and messages keep arriving in the background. The button shows a small count of how many arrived while paused (e.g. `12`, `1.1k`); pressing it again (now labeled **Resume**) reveals everything that came in.
+- **Pause**: Freezes the on-screen list — no new rows appear — while the connection stays open and messages keep arriving in the background. The button shows a small count of how many arrived while paused (e.g. `12`, `1.1k`); pressing it again (now labeled **Resume**) reveals everything that came in. If you resume while scrolled down, they keep waiting until you're back at the top.
 - **Send Message**: Opens a dialog with subject and data fields, plus optional **Headers** (add as many name/value pairs as you need), allowing the user to send a custom message.
 - **Filter**: This field filters the message list upon each character typed in the box. The filter operation is a **case-insensitive contains** on the message data only.
 - **Find**: This field will highlight results found in the message data. Searches all items and highlights matches within the list.

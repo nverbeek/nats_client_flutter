@@ -59,8 +59,8 @@ void main() {
   }
 
   testWidgets(
-      'mixed-height rows stay put under a burst, a widening pin column and '
-      'a resize', (tester) async {
+      'scrolled down, a burst is held (counted by the pill) and a resize '
+      'keeps the view anchored; Jump to top lets the burst in', (tester) async {
     await pumpConnectedApp(tester,
         messageMaxLines: 4, pinnedFields: ['label', 'items[*].sku']);
     addTearDown(() => disconnectApp(tester));
@@ -89,31 +89,24 @@ void main() {
     await scrollUntilVisible(tester, anchor);
     final yBefore = tester.getTopLeft(anchor).dy;
 
-    // 1. A burst of mixed-height rows arrives above it.
+    // 1. A burst of mixed-height rows, plus a much longer pinned value,
+    //    arrives while scrolled down: held, so nothing moves.
     for (var i = 0; i < 25; i++) {
       publisher.pubString(subject, payload('$tag-burst', i));
     }
-    await tester.pump(const Duration(milliseconds: 600));
+    final longLabel = jsonEncode({
+      'label': 'a-much-longer-label-value-than-before',
+      'note': 'z' * 300,
+    });
+    publisher.pubString(subject, longLabel);
+    await pumpUntil(tester, () => find.text('26 new').evaluate().isNotEmpty);
     await tester.pump();
     expect(anchor, findsOneWidget);
     expect(tester.getTopLeft(anchor).dy, moreOrLessEquals(yBefore, epsilon: 1),
-        reason: 'a burst must not move the row the user is looking at');
+        reason: 'held messages must not move the row the user is looking at');
+    expect(messageRowText(longLabel), findsNothing);
 
-    // 2. A message with a much longer pinned value widens a column, which
-    //    rewraps every row.
-    publisher.pubString(
-        subject,
-        jsonEncode({
-          'label': 'a-much-longer-label-value-than-before',
-          'note': 'z' * 300,
-        }));
-    await tester.pump(const Duration(milliseconds: 600));
-    await tester.pump();
-    expect(anchor, findsOneWidget);
-    expect(tester.getTopLeft(anchor).dy, moreOrLessEquals(yBefore, epsilon: 1),
-        reason: 'a widening pin column must keep the anchor row in place');
-
-    // 3. A window resize changes every row's wrap.
+    // 2. A window resize changes every row's wrap.
     final originalSize = await windowManager.getSize();
     addTearDown(() => windowManager.setSize(originalSize));
     await windowManager
@@ -124,14 +117,16 @@ void main() {
         reason: 'a resize must keep the first visible row anchored');
     expect(tester.takeException(), isNull);
 
-    // 4. Jump to top still lands exactly at the newest message.
-    await tester.tap(find.byTooltip('Jump to top'));
+    // 3. The pill jumps to the top and lets the held messages in.
+    await tester.tap(find.byKey(const ValueKey('heldMessagesPill')));
     await tester.pumpAndSettle();
     final scrollable = tester.state<ScrollableState>(find.descendant(
         of: find.byType(ExactExtentListView),
         matching: find.byType(Scrollable)));
     expect(scrollable.position.pixels, 0);
     expect(find.byTooltip('Jump to top'), findsNothing);
+    expect(find.byKey(const ValueKey('heldMessagesPill')), findsNothing);
+    expect(messageRowText(longLabel), findsOneWidget);
   });
 
   testWidgets('a hidden subject removes the chips; one line keeps 56px rows',
@@ -161,8 +156,9 @@ void main() {
   });
 
   testWidgets(
-      'under a fast stream of mixed-height rows, Jump to top always lands at '
-      'the top and the scroll range only changes when messages arrive',
+      'under a fast stream of mixed-height rows: a fling coasts to a stop '
+      'instead of running to the bottom, Jump to top always lands at the '
+      'top, and the scroll range only changes when messages arrive',
       (tester) async {
     await pumpConnectedApp(tester,
         messageMaxLines: 5, pinnedFields: ['label', 'items[*].sku']);
@@ -217,6 +213,24 @@ void main() {
 
     final streaming = stream();
     addTearDown(() => publishing = false);
+
+    // A fling while messages pour in coasts and stops on its own: nothing is
+    // inserted above (or trimmed below) a scrolled-down list.
+    await tester.fling(
+        find.byType(ExactExtentListView), const Offset(0, -600), 2500);
+    var last = position().pixels;
+    var stillFrames = 0;
+    for (var f = 0; f < 240 && stillFrames < 20; f++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      final now = position().pixels;
+      stillFrames = (now - last).abs() < 0.5 ? stillFrames + 1 : 0;
+      last = now;
+    }
+    expect(stillFrames, 20, reason: 'the fling never came to rest');
+    expect(last, greaterThan(600), reason: 'the fling was cut short');
+    expect(last, lessThan(position().maxScrollExtent),
+        reason: 'the fling ran away to the bottom');
+    expect(find.byKey(const ValueKey('heldMessagesPill')), findsOneWidget);
     for (var round = 0; round < 15; round++) {
       await tester.drag(
           find.byType(ExactExtentListView), const Offset(0, -1500));

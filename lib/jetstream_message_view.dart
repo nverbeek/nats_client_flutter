@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'constants.dart' as constants;
 import 'format_utils.dart';
+import 'held_messages_pill.dart';
 import 'jetstream_manager.dart';
 import 'live_message_row.dart';
 import 'message_detail_dialog.dart';
@@ -209,7 +210,18 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
     final show = _scrollController.offset > 1.0;
     if (show != _showJumpToTop) {
       setState(() => _showJumpToTop = show);
+      if (!show) _releaseHeldMessages();
     }
+  }
+
+  /// Inserts the messages held while scrolled away or paused, once neither
+  /// applies any more.
+  void _releaseHeldMessages() {
+    if (_paused || _showJumpToTop || _pendingMessages.isEmpty) return;
+    final buffered = List<Message>.of(_pendingMessages);
+    setState(_pendingMessages.clear);
+    _pendingCount.value = 0;
+    _insertMessages(buffered);
   }
 
   void _jumpToTop() {
@@ -250,7 +262,9 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
     final newestFirst = _incomingBatch.reversed.toList(growable: false);
     _incomingBatch.clear();
 
-    if (_paused) {
+    // Hold while paused or scrolled away from the top -- see main.dart's
+    // _flushIncomingMessages for why.
+    if (_paused || _showJumpToTop) {
       setState(() {
         _pendingMessages.insertAll(0, newestFirst);
         // Cap the buffer the same way `_trimMessagesToCap` caps `_messages`
@@ -366,14 +380,11 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
     setState(() => _paused = true);
   }
 
+  /// Ends a manual pause; buffered messages go in once the list is at the
+  /// top (see [_releaseHeldMessages]).
   void _resume() {
-    final buffered = List<Message>.of(_pendingMessages);
-    setState(() {
-      _pendingMessages.clear();
-      _paused = false;
-    });
-    _pendingCount.value = 0;
-    _insertMessages(buffered);
+    setState(() => _paused = false);
+    _releaseHeldMessages();
   }
 
   void _clearMessages() {
@@ -385,6 +396,8 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
       _incomingBatch.clear();
     });
     _pendingCount.value = 0;
+    // An empty list is at the top: end any hold right away.
+    _jumpToTop();
   }
 
   void _stopBrowsing() {
@@ -829,6 +842,16 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
                       tooltip: 'Jump to top',
                       onPressed: _jumpToTop,
                       child: const Icon(Icons.vertical_align_top),
+                    ),
+                  ),
+                if (_showJumpToTop && !_paused)
+                  Positioned(
+                    top: 8,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: HeldMessagesPill(
+                          count: _pendingCount, onPressed: _jumpToTop),
                     ),
                   ),
               ],
