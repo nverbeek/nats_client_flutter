@@ -114,7 +114,12 @@ class LiveMessageRow extends StatelessWidget {
               ),
             ),
           ),
-        menuButton,
+        // A fixed box, so the button's width matches what the row
+        // geometry reserves for it (`MessageRowGeometry.menuButtonWidth`).
+        SizedBox.square(
+          dimension: MessageRowGeometry.menuButtonWidth,
+          child: menuButton,
+        ),
       ],
     );
 

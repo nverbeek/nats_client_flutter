@@ -10,24 +10,29 @@ import 'message_wrap.dart';
 /// out without laying the row out.
 ///
 /// The row is `[color bar][pin area][ListTile(title, trailing)]`, and the
-/// ListTile's own padding and title gap are set explicitly to these values
-/// (they match the Material 3 defaults, so the single-line look is
-/// unchanged). ListTile gives its title exactly
+/// ListTile's own padding and title gap are set explicitly to these values.
+/// ListTile gives its title exactly
 /// `tileWidth - start - end - max(trailingWidth + gap, 32)`.
+///
+/// The end side is tighter than ListTile's defaults (24 end, 16 gap) to give
+/// message text more room: the ⋮ button carries 8px of its own padding
+/// around its icon, so 8 + 8 puts the icon 16px from the row's edge (the
+/// Material 3 list spec's end padding) and leaves about 16px between the
+/// text and the icon.
 class MessageRowGeometry {
   MessageRowGeometry._();
 
   static const double colorBarWidth = 4;
   static const double tileStartPadding = 16;
-  static const double tileEndPadding = 24;
-  static const double titleGap = 16;
+  static const double tileEndPadding = 8;
+  static const double titleGap = 8;
 
   /// ListTile never reserves less than this for its trailing widget + gap.
   static const double minTrailingReserve = 32;
 
-  /// The row's ⋮ button. Generous on purpose: the trailing area is a fixed
-  /// width and end-aligned, so slack only shows as a little blank space.
-  static const double menuButtonWidth = 48;
+  /// The row's ⋮ button, drawn in a box of exactly this size (Material 3's
+  /// standard icon-button size), so the reserved width is the drawn width.
+  static const double menuButtonWidth = 40;
 
   /// Height of the trailing area in a multi-line row, which sits in the first
   /// 56px of the row (see [trailingTopPadding]).
