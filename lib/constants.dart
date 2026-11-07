@@ -139,7 +139,8 @@ const bool defaultShowSubscriptionColors = true;
 // message list caps/display defaults
 const int defaultMaxMessages = 10000;
 const bool defaultShowTimestamps = false;
-const double defaultMessageFontSize = 14.0;
+// 13 suits Roboto Mono, which reads larger than proportional text at 14.
+const double defaultMessageFontSize = 13.0;
 const bool defaultShowSubjectChip = true;
 // 1 keeps the single-line rows; more lets long messages wrap.
 const int defaultMessageMaxLines = 1;

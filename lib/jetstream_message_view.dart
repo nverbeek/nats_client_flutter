@@ -75,12 +75,13 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
   // in `main.dart` for the full reasoning (a known extent lets
   // `_insertMessages` compensate the scroll offset exactly, and lets the
   // scrollbar/fling locate rows analytically). Constant here (rather than
-  // derived from a setting) since this view's rows always use font 14; 56px
-  // is the same floor `main.dart` applies so the row stays tall enough for
-  // the trailing controls' tap target (14 * 1.3 + 24 = 42.2 < 56).
-  // Multi-line rows get their heights from [_layout].
+  // derived from a setting) since this view's rows always use the default
+  // message font size; 56px is the same floor `main.dart` applies so the row
+  // stays tall enough for the trailing controls' tap target
+  // (13 * 1.3 + 24 = 40.9 < 56). Multi-line rows get their heights from
+  // [_layout].
   static const _messageRowExtent = 56.0;
-  static const _fontSize = 14.0;
+  static const _fontSize = constants.defaultMessageFontSize;
 
   final MessageListLayout _layout = MessageListLayout(
     subjectChipMaxWidth: 300,

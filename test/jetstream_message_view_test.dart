@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nats_client_flutter/jetstream_manager.dart';
+import 'package:nats_client_flutter/constants.dart' as constants;
 import 'package:nats_client_flutter/exact_extent_list.dart';
 import 'package:nats_client_flutter/jetstream_message_view.dart';
 import 'package:nats_client_flutter/live_message_row.dart';
@@ -248,7 +249,7 @@ void main() {
       expect(find.text('urgent'), findsOneWidget);
       expect(find.text('A1, B7'), findsOneWidget);
       expect(tester.getSize(find.byType(ListTile).at(1)).height,
-          messageRowExtent(4, 14));
+          messageRowExtent(4, constants.defaultMessageFontSize));
     });
 
     testWidgets('multi-line rows that arrive while scrolled away are held too',
@@ -283,8 +284,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
       await tester.pump();
       expect(controller.offset, 0);
-      expect(controller.position.maxScrollExtent,
-          range + messageRowExtent(3, 14) + messageRowExtent(1, 14));
+      expect(
+          controller.position.maxScrollExtent,
+          range +
+              messageRowExtent(3, constants.defaultMessageFontSize) +
+              messageRowExtent(1, constants.defaultMessageFontSize));
     });
 
     testWidgets('Pin Fields… in the row menu reports the new pins',
