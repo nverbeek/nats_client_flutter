@@ -29,7 +29,7 @@ This application currently supports Windows, Linux, macOS and Web platforms. Dow
 - **Connection history**: the Host field remembers up to 10 previously-used `scheme://host:port` targets, offered in a searchable dropdown as you type — pick one to fill in the scheme, host, and port at once, or delete individual entries / clear the whole history from the same dropdown. Only successful connections are remembered, so typos and unreachable hosts don't clutter the list.
 - Filter received messages
 - Find text in received messages
-- Pause the message list to freeze it while you work, without stopping arrivals in the background
+- Pause the message list to freeze it while you work, without stopping arrivals in the background. Scrolling down holds new messages too, behind a **↑ N new** button that takes you back to the top to see them
 - Multi-select messages (Shift+Click, Ctrl+Click, Ctrl+Shift+Up/Down for a range or disconnected set) and copy them to the clipboard as plain text
 - **Export & Replay**: bulk-export captured messages (a selection, or everything captured) to an NDJSON file — with a warning if the export is large — then **Replay** a previously exported file by publishing every message back onto the connected server, with configurable pacing (delay between messages, repeat count, delay between repeats) and a live progress banner with a Stop button
 - Send custom messages, with optional headers
@@ -37,7 +37,7 @@ This application currently supports Windows, Linux, macOS and Web platforms. Dow
 - Light and Dark themes
 - Most recent connection information & theme are persisted between app runs
 - **Pinned fields**: pin JSON fields (like `label` or `items[*].sku`) to show their values in columns at the start of every Live Messages and Browse Messages row, picked straight from a message with **Pin Fields…**
-- **Wrapping long messages**: let long Live Messages and Browse Messages rows wrap to a set number of lines (1–20), with scrolling that stays put while new messages arrive
+- **Wrapping long messages**: let long Live Messages and Browse Messages rows wrap to a set number of lines (1–20)
 - Message view settings: adjustable font size (messages use a monospace font), an optional per-row arrival timestamp, an option to hide the subject chip, and a configurable cap on how many messages are kept in memory (1k–100k, or unlimited)
 - **JetStream support** (optional, on by default — toggle it off in Settings if you don't need it):
   - Monitor streams and their consumers, including message/byte counts, retention, and ack/redelivery stats

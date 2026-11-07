@@ -44,13 +44,17 @@ When done: `docker rm -f nats-fixture-userpass nats-fixture-token nats-fixture-n
 
 ## Integration tests (`integration_test/`)
 
-Use `helpers/nats_test_app.dart`: `pumpConnectedApp`, `pumpDisconnectedApp`, `disconnectApp`, `pumpUntil`, `waitForSnackBarGone`. Sharp edges:
+Use `helpers/nats_test_app.dart`: `pumpConnectedApp`, `pumpDisconnectedApp`, `disconnectApp`, `pumpUntil`, `waitForSnackBarGone`. `pumpConnectedApp` takes display settings (`messageMaxLines`, `showSubjectChip`, `pinnedFields`, `messageFontSize`, ...) so they apply from the app's first frame. Sharp edges:
 
 - **Dashboard state:** `JetStreamDashboard`'s state doesn't survive switching tabs and back (no keep-alive). Re-select the stream or consumer after any trip through Live Messages.
 - **SnackBars:** a SnackBar at the bottom can absorb taps meant for the bottom toolbar, and `pumpAndSettle()` doesn't wait out its display time. Call `waitForSnackBarGone(tester)` after anything that shows one.
 - **Finders:**
   - `find.byTooltip(...)` returns the `Tooltip`, not the `IconButton`. To inspect `onPressed`, use `find.ancestor(of: ..., matching: find.byType(IconButton))`.
   - `find.text(...)` also matches `EditableText`, and every `Text` builds its own `RichText`. Match the app's own widgets (e.g. `RegexTextHighlight.text`) instead of guessing at Flutter's render tree.
+- **Message lists:**
+  - With `messageMaxLines` above 1 the list is an `ExactExtentListView`, a `ListView` subclass that `find.byType(ListView)` misses. Use `find.byType(ExactExtentListView)` or `find.byWidgetPredicate((w) => w is ListView)`.
+  - A list scrolled away from the top holds new messages instead of inserting them. To see them, tap the pill (`ValueKey('heldMessagesPill')`) or Jump to top.
+- **Settings switches** have keys (`jetStreamSwitch`, `showTimestampsSwitch`, ...). Find them by key and `ensureVisible` first; the dialog's layout depends on window width.
 - **Keyboard focus:** tapping a `ListTile` doesn't give it keyboard focus. For a bare-letter shortcut after selecting a row, call `Focus.of(tester.element(rowFinder)).requestFocus()`.
 - **Nak:** Nak causes a real redelivery, so a second row with the same payload can appear. New deliveries insert at index 0, so prefer `.last` to re-locate the row you acted on.
 - **Tests that don't fit the loop:**

@@ -23,7 +23,7 @@ CI (`.github/workflows/build.yml`) runs all of the above on every push (integrat
 - `*_manager.dart`: thin, testable wrapper around `dart_nats` calls. Tests fake these.
 - `*_dashboard.dart`: a feature tab's main widget. Each feature tab has a Settings toggle.
 - `*_dialog.dart`: a dialog that takes initial values and callbacks (e.g. `onSave`) as constructor args. The caller in `main.dart` applies the result and persists it.
-- `main.dart` (~4,000 lines): `MyHomePage` is the central state machine. `natsConnect()` handles connect/TLS/auth/reconnect, `handleIncomingMessage()` the Live Messages pipeline, and `initializePreferences()` loads settings.
+- `main.dart` (~4,200 lines): `MyHomePage` is the central state machine. `natsConnect()` handles connect/TLS/auth/reconnect, `handleIncomingMessage()` the Live Messages pipeline, and `initializePreferences()` loads settings.
 - `constants.dart`: defaults and `SharedPreferences` keys. Add new pref keys here and load them in `initializePreferences()`.
 
 Other docs (read the one that matches your task before starting):
@@ -44,6 +44,12 @@ Other docs (read the one that matches your task before starting):
 - **Keep `main.dart` from growing.** Put new logic (parsers, serialization, storage, network) in its own file in `lib/` and leave `main.dart` with state, orchestration and wiring. Example: `message_export.dart` (pure NDJSON) and `replay_config_dialog.dart` vs. `_exportMessages`/`_runReplay` in `main.dart`.
 - **Material 3 primitives only**, no extra UI frameworks. Match the existing screens (`images/`).
 - **Row menus:** every message list (Live Messages, Browse Messages, Consumer Tail) and KV key rows has a `_buildRowMenuItems`/`_handleRowMenuSelection`/`_showRowContextMenu` trio. The ⋮ button and right-click share it, so change the trio, not one trigger.
+- **Message lists** (Live Messages, Browse Messages) know every row's height before layout, so the scroll extent is exact and wrapped rows can't make the scrollbar jump:
+  - `MessageListLayout` (`message_list_layout.dart`) computes and caches each row's height and builds the list. Multi-line rows use `ExactExtentListView` (`exact_extent_list.dart`, prefix sums), not `ListView(itemExtentBuilder:)`, which only estimates its extent.
+  - Row width math lives in `message_row_metrics.dart` and must match what `LiveMessageRow` (`live_message_row.dart`) draws. Text that gets measured uses fully explicit styles, because `ListTile` adds theme letter spacing. `test/live_message_row_test.dart` checks drawn sizes against the math.
+  - Payload text wraps at a fixed character count in Roboto Mono (`message_wrap.dart`, `message_font.dart`); every weight of the font has the same advance width.
+  - While a list is scrolled away from the top, new messages go to the pause buffer, counted by `HeldMessagesPill`, and are inserted on return to the top. Don't insert above a scrolled-down list.
+  - Pinned fields: `pinned_fields.dart` (paths, extraction, column widths), `pin_fields_dialog.dart`, `pinned_fields_editor.dart`.
 - **Shared chip styling** lives in `subject_chip_style.dart`. The subscription-color setting only gates rendering: `colorIndex` assignment stays untouched, and a hidden color reserves no space.
 - **Connection history** is recorded only on `Status.connected`, never on an attempt.
 - **Dashboards don't keep state** across tab switches. They re-sync after a real reconnect through `reconnectSignal` (`reconnect_detector.dart`). Otherwise listings use explicit Refresh. Object Store and Services have no live watch.
