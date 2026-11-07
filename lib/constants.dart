@@ -93,6 +93,9 @@ const String prefUpdateCheckEnabled = "UPDATE_CHECK_ENABLED";
 const String prefShowSubscriptionColors = "SHOW_SUBSCRIPTION_COLORS";
 const String prefMaxMessages = "MAX_MESSAGES";
 const String prefShowTimestamps = "SHOW_TIMESTAMPS";
+const String prefShowSubjectChip = "SHOW_SUBJECT_CHIP";
+const String prefMessageMaxLines = "MESSAGE_MAX_LINES";
+const String prefPinnedFields = "PINNED_FIELDS";
 
 // retry interval options (in seconds)
 const int defaultRetryInterval = 10;
@@ -137,6 +140,10 @@ const bool defaultShowSubscriptionColors = true;
 const int defaultMaxMessages = 10000;
 const bool defaultShowTimestamps = false;
 const double defaultMessageFontSize = 14.0;
+const bool defaultShowSubjectChip = true;
+// 1 keeps the single-line rows; more lets long messages wrap.
+const int defaultMessageMaxLines = 1;
+const List<int> messageMaxLinesOptions = [1, 2, 3, 4, 5, 6, 8, 10, 15, 20];
 
 // authentication preference keys
 const String prefAuthMethod = "AUTH_METHOD";

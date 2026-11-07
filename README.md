@@ -36,7 +36,9 @@ This application currently supports Windows, Linux, macOS and Web platforms. Dow
 - See message details, such as headers, subject and payload. JSON payloads are automatically formatted and syntax highlighted, binary payloads can be viewed as hex, and protobuf payloads can be decoded without their schema (field numbers and values).
 - Light and Dark themes
 - Most recent connection information & theme are persisted between app runs
-- Message view settings: adjustable font size, an optional per-row arrival timestamp, and a configurable cap on how many messages are kept in memory (1k–100k, or unlimited)
+- **Pinned fields**: pin JSON fields (like `label` or `items[*].sku`) to show their values in columns at the start of every Live Messages and Browse Messages row, picked straight from a message with **Pin Fields…**
+- **Wrapping long messages**: let long Live Messages and Browse Messages rows wrap to a set number of lines (1–20), with scrolling that stays put while new messages arrive
+- Message view settings: adjustable font size (messages use a monospace font), an optional per-row arrival timestamp, an option to hide the subject chip, and a configurable cap on how many messages are kept in memory (1k–100k, or unlimited)
 - **JetStream support** (optional, on by default — toggle it off in Settings if you don't need it):
   - Monitor streams and their consumers, including message/byte counts, retention, and ack/redelivery stats
   - Create, edit, purge (all, keep newest N, or up to a sequence), and delete streams; create, pause, and delete consumers (push or pull, any ack policy)

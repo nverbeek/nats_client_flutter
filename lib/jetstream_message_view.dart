@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dart_nats/dart_nats.dart' hide Consumer;
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,9 +10,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'constants.dart' as constants;
 import 'format_utils.dart';
 import 'jetstream_manager.dart';
+import 'live_message_row.dart';
 import 'message_detail_dialog.dart';
+import 'message_list_layout.dart';
 import 'paused_banner.dart';
-import 'regex_text_highlight.dart';
+import 'pin_fields_dialog.dart';
+import 'pinned_fields.dart';
 
 /// Live "Browse Messages" panel for a single JetStream stream.
 ///
@@ -31,12 +35,16 @@ class JetStreamMessageView extends StatefulWidget {
   /// view about don't need to plumb one through.
   final Listenable? reconnectSignal;
 
+  /// Max lines, subject chip and pinned fields, shared with Live Messages.
+  final MessageListDisplay display;
+
   const JetStreamMessageView({
     super.key,
     required this.streamName,
     required this.manager,
     required this.onClose,
     this.reconnectSignal,
+    this.display = const MessageListDisplay(),
   });
 
   @override
@@ -62,14 +70,22 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
   // has scrolled away from the top of the (newest-at-top) list.
   bool _showJumpToTop = false;
 
-  // The fixed height of every message row, one line tall — see the matching
-  // `_messageRowExtent` in `main.dart` for the full reasoning (fixed extent
-  // lets `_insertMessages` compensate the scroll offset exactly, and lets
-  // the scrollbar/fling locate rows analytically). Constant here (rather
-  // than derived from a setting) since this view's rows always use font 14;
-  // 56px is the same floor `main.dart` applies so the row stays tall enough
-  // for the trailing controls' tap target (14 * 1.3 + 24 = 42.2 < 56).
+  // The height of a single-line row — see the matching `_messageRowExtent`
+  // in `main.dart` for the full reasoning (a known extent lets
+  // `_insertMessages` compensate the scroll offset exactly, and lets the
+  // scrollbar/fling locate rows analytically). Constant here (rather than
+  // derived from a setting) since this view's rows always use font 14; 56px
+  // is the same floor `main.dart` applies so the row stays tall enough for
+  // the trailing controls' tap target (14 * 1.3 + 24 = 42.2 < 56).
+  // Multi-line rows get their heights from [_layout].
   static const _messageRowExtent = 56.0;
+  static const _fontSize = 14.0;
+
+  final MessageListLayout _layout = MessageListLayout(
+    subjectChipMaxWidth: 300,
+    sequenceLabel: (m) =>
+        m.streamSequence == null ? null : '#${m.streamSequence}',
+  );
 
   // Pause: while true, incoming messages are buffered here instead of
   // touching `_messages`/the rendered list at all.
@@ -106,6 +122,7 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
   void initState() {
     super.initState();
     _scrollController.addListener(_updateJumpToTopVisibility);
+    _layout.setPinnedSources(widget.display.pinnedFields, const []);
     _loadMaxMessages();
     _startBrowsing();
     widget.reconnectSignal?.addListener(_onReconnect);
@@ -139,6 +156,22 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
   @override
   void didUpdateWidget(covariant JetStreamMessageView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final oldDisplay = oldWidget.display;
+    final display = widget.display;
+    final pinsChanged =
+        !listEquals(oldDisplay.pinnedFields, display.pinnedFields);
+    if (pinsChanged ||
+        oldDisplay.maxLines != display.maxLines ||
+        oldDisplay.showSubject != display.showSubject) {
+      // Row heights change: keep the first visible message in place. The
+      // new settings reach `_layout` in build, after the anchor is taken.
+      _layout.keepAnchor(_scrollController, () => _filteredMessages, setState,
+          () {
+        if (pinsChanged) {
+          _layout.setPinnedSources(display.pinnedFields, _messages);
+        }
+      });
+    }
     if (oldWidget.streamName != widget.streamName) {
       _stopBrowsing();
       _messages.clear();
@@ -149,6 +182,7 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
       _incomingBatch.clear();
       _incomingFlushTimer?.cancel();
       _incomingFlushTimer = null;
+      _layout.pins.resetWidths(const []);
       _startBrowsing();
     }
   }
@@ -179,6 +213,8 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
   }
 
   void _jumpToTop() {
+    // Drop pending keep-the-view-still jumps; see main.dart's _jumpToTop.
+    _layout.userJumped();
     if (_scrollController.hasClients) {
       _scrollController.jumpTo(0);
     }
@@ -235,16 +271,55 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
   /// `main.dart` for the full reasoning. In short: newest-at-top,
   /// top-anchored; at the top the new newest just appears above, and when
   /// scrolled away the offset is shifted down by exactly the height of the
-  /// prepended rows (exact because every row is a fixed `_messageRowExtent`
-  /// tall) so on-screen messages don't move.
+  /// prepended rows (exact because every row's height is known up front) so
+  /// on-screen messages don't move.
   void _insertMessages(List<Message> newestFirst) {
     if (newestFirst.isEmpty) return;
     final hasClients = _scrollController.hasClients;
     final atTop = !hasClients || _scrollController.offset <= 1.0;
-    final oldOffset = hasClients ? _scrollController.offset : 0.0;
 
-    late final int addedToFiltered;
+    // A widening pinned column rewraps multi-line rows: anchor on the first
+    // visible message instead (see main.dart's _insertMessages).
+    final pins = _layout.pins;
+    if (!pins.isEmpty) {
+      if (!atTop && _layout.multiLine && pins.wouldGrow(newestFirst)) {
+        _layout.keepAnchor(_scrollController, () => _filteredMessages, setState,
+            () {
+          for (final message in newestFirst) {
+            pins.noteMessage(message);
+          }
+          _prepend(newestFirst);
+        });
+        return;
+      }
+      for (final message in newestFirst) {
+        pins.noteMessage(message);
+      }
+    }
+
+    late final List<Message> added;
     setState(() {
+      added = _prepend(newestFirst);
+    });
+
+    // Shift down by exactly the height of the rows actually added to
+    // `_filteredMessages` (what's rendered), clamped to the new max so a
+    // same-frame cap trim (which only removes rows below the viewport)
+    // can't overshoot past the end of the now-shorter list.
+    // Relative to the offset when the callback runs -- see main.dart.
+    if (!atTop && added.isNotEmpty) {
+      final height = _layout.heightOf(added);
+      _layout.deferJump(
+          _scrollController, () => _scrollController.offset + height);
+    }
+  }
+
+  /// Prepends [newestFirst] to `_messages` (and its matches to
+  /// `_filteredMessages`) and trims to the cap. Returns what was added to
+  /// `_filteredMessages`. Callers wrap this in `setState`.
+  List<Message> _prepend(List<Message> newestFirst) {
+    late final List<Message> addedToFiltered;
+    {
       // Whether _filteredMessages IS _messages must be checked before the
       // insert: once no filter is active, _runFilter has aliased the two
       // lists, so insertAll grows "both" -- reading _filteredMessages.length
@@ -254,7 +329,7 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
       final filterAliased = identical(_filteredMessages, _messages);
       _messages.insertAll(0, newestFirst);
       if (filterAliased) {
-        addedToFiltered = newestFirst.length;
+        addedToFiltered = newestFirst;
       } else {
         // Test only the newly arrived batch and prepend its matches, rather
         // than re-running `_runFilter()` over the whole list: the filter
@@ -265,23 +340,11 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
         // incremental approach `main.dart`'s `_insertMessages` uses.
         final matches = _matching(newestFirst);
         _filteredMessages.insertAll(0, matches);
-        addedToFiltered = matches.length;
+        addedToFiltered = matches;
       }
       _trimMessagesToCap();
-    });
-
-    // Shift down by exactly the height of the rows actually added to
-    // `_filteredMessages` (what's rendered), clamped to the new max so a
-    // same-frame cap trim (which only removes rows below the viewport)
-    // can't overshoot past the end of the now-shorter list.
-    if (!atTop && addedToFiltered > 0) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!_scrollController.hasClients) return;
-        final newMax = _scrollController.position.maxScrollExtent;
-        final target = oldOffset + addedToFiltered * _messageRowExtent;
-        _scrollController.jumpTo(target > newMax ? newMax : target);
-      });
     }
+    return addedToFiltered;
   }
 
   /// Trims `_messages` (and `_filteredMessages`) back down to `_maxMessages`,
@@ -315,6 +378,7 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
 
   void _clearMessages() {
     setState(() {
+      _layout.pins.resetWidths(const []);
       _messages.clear();
       _filteredMessages = [];
       _pendingMessages.clear();
@@ -332,6 +396,7 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
 
   void _retry() {
     setState(() {
+      _layout.pins.resetWidths(const []);
       _errorMessage = null;
       _messages.clear();
       _filteredMessages = [];
@@ -368,11 +433,20 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
   /// Row action menu items, shared by the trailing overflow button and the
   /// row's right-click context menu -- mirrors the split done for the Live
   /// Messages tab in `main.dart`.
-  List<PopupMenuEntry<String>> _buildRowMenuItems(BuildContext context) {
-    return const [
-      PopupMenuItem(value: 'copy', child: Text('Copy')),
-      PopupMenuItem(value: 'copy_subject', child: Text('Copy Subject')),
-      PopupMenuItem(value: 'detail', child: Text('Detail')),
+  List<PopupMenuEntry<String>> _buildRowMenuItems(
+      BuildContext context, Message message) {
+    return [
+      const PopupMenuItem(value: 'copy', child: Text('Copy')),
+      const PopupMenuItem(value: 'copy_subject', child: Text('Copy Subject')),
+      const PopupMenuItem(value: 'detail', child: Text('Detail')),
+      if (widget.display.onPinnedFieldsChanged != null) ...[
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'pin_fields',
+          enabled: decodeJsonPayload(decodeMessageTextFor(message)) != null,
+          child: const Text('Pin Fields…'),
+        ),
+      ],
     ];
   }
 
@@ -387,6 +461,48 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
       case 'detail':
         _showDetailDialog(message);
         break;
+      case 'pin_fields':
+        _showPinFieldsDialog(message);
+        break;
+    }
+  }
+
+  /// Opens the "Pin Fields" picker over [message]'s JSON fields. Pins are
+  /// shared with Live Messages, so the change goes back to the app.
+  void _showPinFieldsDialog(Message message) {
+    final onChanged = widget.display.onPinnedFieldsChanged;
+    final json = decodeJsonPayload(decodeMessageTextFor(message));
+    if (onChanged == null || json == null) return;
+    showDialog<void>(
+      context: context,
+      builder: (context) => PinFieldsDialog(
+        subject: message.subject ?? '',
+        json: json,
+        pinned: widget.display.pinnedFields,
+        onSave: onChanged,
+      ),
+    );
+  }
+
+  /// Copy / Pin Fields… / Unpin for a click on a row's pinned value.
+  Future<void> _onPinTap(
+      Message message, int pinIndex, Offset globalPosition) async {
+    final pins = _layout.pins;
+    if (pinIndex >= pins.paths.length) return;
+    final path = pins.paths[pinIndex];
+    final value = pins.valuesFor(message)?[pinIndex];
+    final selected = await showPinCellMenu(context, path,
+        hasValue: value != null, globalPosition: globalPosition);
+    if (!mounted || selected == null) return;
+    switch (selected) {
+      case 'copy':
+        await Clipboard.setData(ClipboardData(text: value!.full));
+      case 'pin':
+        _showPinFieldsDialog(message);
+      case 'unpin':
+        widget.display.onPinnedFieldsChanged?.call(widget.display.pinnedFields
+            .where((s) => s != path.source)
+            .toList());
     }
   }
 
@@ -396,7 +512,7 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
   /// jump to the row's trailing edge).
   Future<void> _showRowContextMenu(
       BuildContext context, Message message, Offset globalPosition) async {
-    final items = _buildRowMenuItems(context);
+    final items = _buildRowMenuItems(context, message);
     if (items.isEmpty) return;
 
     final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
@@ -465,6 +581,12 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    _layout
+      ..maxLines = widget.display.maxLines
+      ..fontSize = _fontSize
+      ..showSubject = widget.display.showSubject
+      ..singleLineExtent = _messageRowExtent
+      ..updateStyles(theme);
     final isDark = theme.brightness == Brightness.dark;
     final rowEvenColor = isDark
         ? Color.alphaBlend(
@@ -634,93 +756,70 @@ class JetStreamMessageViewState extends State<JetStreamMessageView> {
           Expanded(
             child: Stack(
               children: [
-                Scrollbar(
-                  controller: _scrollController,
-                  thumbVisibility: true,
-                  child: ListView.builder(
+                LayoutBuilder(builder: (context, constraints) {
+                  _layout.noteWidth(constraints.maxWidth, _filteredMessages,
+                      _scrollController);
+                  return Scrollbar(
                     controller: _scrollController,
-                    // Newest-at-top, top-anchored — see the matching comment in
-                    // `main.dart`'s `_buildLiveMessagesTab`. Stable scrolling on
-                    // prepend is handled in `_insertMessages` via an exact
-                    // offset shift, which relies on this fixed `itemExtent`.
-                    itemExtent: _messageRowExtent,
-                    itemCount: _filteredMessages.length,
-                    itemBuilder: (context, index) {
-                      final message = _filteredMessages[index];
-                      final seq = message.streamSequence;
-                      return GestureDetector(
-                        key: ObjectKey(message),
-                        behavior: HitTestBehavior.translucent,
-                        onSecondaryTapDown: (details) => _showRowContextMenu(
-                            context, message, details.globalPosition),
-                        child: Material(
-                          child: ListTile(
-                            // Tells ListTile the row's real fixed height, not
-                            // just its own natural content height — see the
-                            // matching `minTileHeight` in `main.dart` for why
-                            // this matters for centering.
-                            minTileHeight: _messageRowExtent,
-                            // Band by distance from the oldest message (always at
-                            // the bottom), not the raw index, so stripes don't
-                            // flip every time a message is prepended at the top.
+                    thumbVisibility: true,
+                    child: _layout.buildList(
+                      controller: _scrollController,
+                      items: _filteredMessages,
+                      // Newest-at-top, top-anchored — see the matching
+                      // comment in `main.dart`'s `_buildLiveMessagesTab`.
+                      // Stable scrolling on prepend is handled in
+                      // `_insertMessages` via an exact offset shift, which
+                      // relies on every row's height being known up front.
+                      itemBuilder: (context, index) {
+                        final message = _filteredMessages[index];
+                        final layout = _layout.multiLine
+                            ? _layout.layoutFor(message)
+                            : null;
+                        return GestureDetector(
+                          key: ObjectKey(message),
+                          behavior: HitTestBehavior.translucent,
+                          onSecondaryTapDown: (details) => _showRowContextMenu(
+                              context, message, details.globalPosition),
+                          child: LiveMessageRow(
+                            text: decodeMessageTextFor(message),
+                            subject: message.subject ?? '',
+                            findTerm: _currentFind,
+                            fontSize: _fontSize,
+                            extent: layout?.extent ?? _messageRowExtent,
+                            // Band by distance from the oldest message
+                            // (always at the bottom), not the raw index, so
+                            // stripes don't flip every time a message is
+                            // prepended at the top.
                             tileColor:
                                 (_filteredMessages.length - 1 - index) % 2 == 0
                                     ? rowEvenColor
                                     : rowOddColor,
-                            title: RegexTextHighlight(
-                              text: decodeMessageTextFor(message),
-                              searchTerm: _currentFind,
-                              fontSize: 14,
-                              highlightStyle: TextStyle(
-                                background: Paint()
-                                  ..color = theme.colorScheme.inversePrimary,
-                                fontSize: 14,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                            barColor: null,
+                            showColorBar: false,
+                            timestamp: null,
+                            showSubject: widget.display.showSubject,
+                            sequenceLabel: _layout.sequenceLabel(message),
+                            subjectMaxWidth: _layout.subjectChipMaxWidth,
+                            wrap: layout?.wrap,
+                            trailingWidth: layout?.trailingWidth,
+                            pins: _layout.rowPinsFor(message),
                             onTap: () => _showDetailDialog(message),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (seq != null)
-                                  Padding(
-                                    padding:
-                                        const EdgeInsets.fromLTRB(0, 0, 5, 0),
-                                    child: Chip(label: Text('#$seq')),
-                                  ),
-                                ConstrainedBox(
-                                  constraints:
-                                      const BoxConstraints(maxWidth: 300),
-                                  child: Tooltip(
-                                    message: message.subject ?? '',
-                                    child: Padding(
-                                      padding:
-                                          const EdgeInsets.fromLTRB(0, 0, 5, 0),
-                                      child: Chip(
-                                        label: Text(
-                                          message.subject ?? '',
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                PopupMenuButton<String>(
-                                  padding: EdgeInsets.zero,
-                                  tooltip: 'More actions',
-                                  itemBuilder: _buildRowMenuItems,
-                                  onSelected: (value) =>
-                                      _handleRowMenuSelection(value, message),
-                                ),
-                              ],
+                            menuButton: PopupMenuButton<String>(
+                              padding: EdgeInsets.zero,
+                              tooltip: 'More actions',
+                              itemBuilder: (context) =>
+                                  _buildRowMenuItems(context, message),
+                              onSelected: (value) =>
+                                  _handleRowMenuSelection(value, message),
                             ),
+                            onPinTap: (pinIndex, position) =>
+                                _onPinTap(message, pinIndex, position),
                           ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
+                        );
+                      },
+                    ),
+                  );
+                }),
                 if (_showJumpToTop)
                   Positioned(
                     right: 16,

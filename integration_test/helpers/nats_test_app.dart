@@ -72,6 +72,10 @@ Future<void> pumpConnectedApp(
   // first frame, or a specific (e.g. closed) monitoring port.
   bool serverMonitorEnabled = constants.defaultServerMonitorEnabled,
   int serverMonitorPort = constants.defaultServerMonitorPort,
+  // Message row display, overridable like showTimestamps above.
+  int messageMaxLines = constants.defaultMessageMaxLines,
+  bool showSubjectChip = constants.defaultShowSubjectChip,
+  List<String> pinnedFields = const [],
 }) async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setString(constants.prefScheme, constants.defaultScheme);
@@ -111,6 +115,9 @@ Future<void> pumpConnectedApp(
   await prefs.setDouble('messageFontSize', messageFontSize);
   await prefs.setBool(constants.prefShowSubscriptionColors,
       constants.defaultShowSubscriptionColors);
+  await prefs.setInt(constants.prefMessageMaxLines, messageMaxLines);
+  await prefs.setBool(constants.prefShowSubjectChip, showSubjectChip);
+  await prefs.setStringList(constants.prefPinnedFields, pinnedFields);
   await prefs.setString(constants.prefTrustedCertificate, '');
   await prefs.setString(constants.prefTrustedCertificateName, '');
   await prefs.setString(constants.prefCertificateChain, '');
@@ -173,6 +180,11 @@ Future<void> pumpDisconnectedApp(
   await prefs.setInt(constants.prefMaxMessages, constants.defaultMaxMessages);
   await prefs.setBool(
       constants.prefShowTimestamps, constants.defaultShowTimestamps);
+  await prefs.setInt(
+      constants.prefMessageMaxLines, constants.defaultMessageMaxLines);
+  await prefs.setBool(
+      constants.prefShowSubjectChip, constants.defaultShowSubjectChip);
+  await prefs.setStringList(constants.prefPinnedFields, const []);
   await prefs.setString(constants.prefTrustedCertificate, '');
   await prefs.setString(constants.prefTrustedCertificateName, '');
   await prefs.setString(constants.prefCertificateChain, '');

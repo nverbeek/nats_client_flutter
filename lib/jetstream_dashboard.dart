@@ -8,6 +8,7 @@ import 'jetstream_consumer_dialog.dart';
 import 'jetstream_consumer_tail_view.dart';
 import 'jetstream_manager.dart';
 import 'jetstream_message_view.dart';
+import 'message_list_layout.dart';
 import 'jetstream_purge_dialog.dart';
 import 'jetstream_stream_dialog.dart';
 import 'subject_chip_style.dart';
@@ -34,8 +35,15 @@ class JetStreamDashboard extends StatefulWidget {
   /// through.
   final Listenable? reconnectSignal;
 
+  /// Message-list display settings for Browse Messages (shared with Live
+  /// Messages).
+  final MessageListDisplay display;
+
   const JetStreamDashboard(
-      {super.key, required this.manager, this.reconnectSignal});
+      {super.key,
+      required this.manager,
+      this.reconnectSignal,
+      this.display = const MessageListDisplay()});
 
   @override
   State<JetStreamDashboard> createState() => JetStreamDashboardState();
@@ -842,6 +850,7 @@ class JetStreamDashboardState extends State<JetStreamDashboard> {
         streamName: _selectedStreamName!,
         manager: widget.manager!,
         reconnectSignal: widget.reconnectSignal,
+        display: widget.display,
         onClose: () => setState(() => _browsing = false),
       );
     }

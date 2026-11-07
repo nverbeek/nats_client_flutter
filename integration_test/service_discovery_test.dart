@@ -32,7 +32,8 @@ void main() {
     // path a real user would take.
     await tester.tap(find.byIcon(Icons.settings));
     await tester.pumpAndSettle();
-    final serviceDiscoverySwitch = find.byType(Switch).at(4);
+    final serviceDiscoverySwitch =
+        find.byKey(const ValueKey('serviceDiscoverySwitch'));
     await tester.ensureVisible(serviceDiscoverySwitch);
     await tester.tap(serviceDiscoverySwitch);
     await tester.tap(find.widgetWithText(TextButton, 'Save'));

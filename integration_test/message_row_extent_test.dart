@@ -115,14 +115,8 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.settings));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Show Message Timestamps'));
-    // The Switch that sits in the same Row as the "Show Message Timestamps"
-    // label.
-    final switchFinder = find.descendant(
-        of: find.ancestor(
-            of: find.text('Show Message Timestamps'),
-            matching: find.byType(Row)),
-        matching: find.byType(Switch));
+    final switchFinder = find.byKey(const ValueKey('showTimestampsSwitch'));
+    await tester.ensureVisible(switchFinder);
     await tester.tap(switchFinder);
     await tester.tap(find.widgetWithText(TextButton, 'Save'));
     await tester.pumpAndSettle();
